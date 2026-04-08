@@ -18,6 +18,7 @@ import SettingsPage from "@/pages/SettingsPage";
 import SuperAdminPage from "@/pages/SuperAdminPage";
 import UserManagementPage from "@/pages/UserManagementPage";
 import FlowBuilderPage from "@/pages/FlowBuilderPage";
+import AutomationsPage from "@/pages/AutomationsPage";
 import LoginPage from "@/pages/LoginPage";
 import SignupPage from "@/pages/SignupPage";
 import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
