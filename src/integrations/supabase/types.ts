@@ -779,6 +779,163 @@ export type Database = {
           },
         ]
       }
+      whatsapp_message_queue: {
+        Row: {
+          attempts: number
+          content: string | null
+          conversation_id: string | null
+          created_at: string
+          error_message: string | null
+          external_message_id: string | null
+          id: string
+          last_attempt_at: string | null
+          message_type: string
+          recipient_phone: string
+          status: Database["public"]["Enums"]["wa_message_status"]
+          template_name: string | null
+          template_params: Json | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          content?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          external_message_id?: string | null
+          id?: string
+          last_attempt_at?: string | null
+          message_type?: string
+          recipient_phone: string
+          status?: Database["public"]["Enums"]["wa_message_status"]
+          template_name?: string | null
+          template_params?: Json | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          content?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          external_message_id?: string | null
+          id?: string
+          last_attempt_at?: string | null
+          message_type?: string
+          recipient_phone?: string
+          status?: Database["public"]["Enums"]["wa_message_status"]
+          template_name?: string | null
+          template_params?: Json | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_message_queue_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "chatbot_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_message_queue_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_sessions: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          last_webhook_at: string | null
+          phone_number_id: string
+          tenant_id: string
+          updated_at: string
+          verify_token: string
+          waba_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_webhook_at?: string | null
+          phone_number_id: string
+          tenant_id: string
+          updated_at?: string
+          verify_token?: string
+          waba_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_webhook_at?: string | null
+          phone_number_id?: string
+          tenant_id?: string
+          updated_at?: string
+          verify_token?: string
+          waba_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_sessions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_templates: {
+        Row: {
+          category: Database["public"]["Enums"]["wa_template_category"]
+          components: Json
+          created_at: string
+          id: string
+          language: string
+          status: Database["public"]["Enums"]["wa_template_status"]
+          template_name: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          category?: Database["public"]["Enums"]["wa_template_category"]
+          components?: Json
+          created_at?: string
+          id?: string
+          language?: string
+          status?: Database["public"]["Enums"]["wa_template_status"]
+          template_name: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["wa_template_category"]
+          components?: Json
+          created_at?: string
+          id?: string
+          language?: string
+          status?: Database["public"]["Enums"]["wa_template_status"]
+          template_name?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_templates_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -819,6 +976,15 @@ export type Database = {
         | "cancelled"
       tenant_plan: "free" | "starter" | "pro" | "enterprise"
       tenant_status: "active" | "suspended" | "cancelled"
+      wa_message_status:
+        | "queued"
+        | "sending"
+        | "sent"
+        | "failed"
+        | "delivered"
+        | "read"
+      wa_template_category: "marketing" | "utility" | "authentication"
+      wa_template_status: "pending" | "approved" | "rejected"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -964,6 +1130,16 @@ export const Constants = {
       ],
       tenant_plan: ["free", "starter", "pro", "enterprise"],
       tenant_status: ["active", "suspended", "cancelled"],
+      wa_message_status: [
+        "queued",
+        "sending",
+        "sent",
+        "failed",
+        "delivered",
+        "read",
+      ],
+      wa_template_category: ["marketing", "utility", "authentication"],
+      wa_template_status: ["pending", "approved", "rejected"],
     },
   },
 } as const
