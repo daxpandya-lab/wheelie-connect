@@ -76,6 +76,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isTenantAdmin = roles.includes("tenant_admin");
   const tenantId = profile?.tenant_id ?? null;
 
+  // Check if tenant is suspended (non-super-admins only)
+  const [tenantStatus, setTenantStatus] = useState<string | null>(null);
+  useEffect(() => {
+    if (tenantId && !isSuperAdmin) {
+      supabase.from("tenants").select("status").eq("id", tenantId).single()
+        .then(({ data }) => { if (data) setTenantStatus(data.status); });
+    }
+  }, [tenantId, isSuperAdmin]);
+
+  const isTenantSuspended = !isSuperAdmin && tenantStatus !== null && tenantStatus !== "active";
+
   return (
     <AuthContext.Provider
       value={{
