@@ -577,6 +577,36 @@ export type Database = {
           },
         ]
       }
+      rate_limits: {
+        Row: {
+          created_at: string
+          id: string
+          key: string
+          last_refill_at: string
+          max_tokens: number
+          refill_rate: number
+          tokens: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          key: string
+          last_refill_at?: string
+          max_tokens?: number
+          refill_rate?: number
+          tokens?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          key?: string
+          last_refill_at?: string
+          max_tokens?: number
+          refill_rate?: number
+          tokens?: number
+        }
+        Relationships: []
+      }
       service_bookings: {
         Row: {
           assigned_to: string | null
@@ -1068,6 +1098,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      check_rate_limit: {
+        Args: {
+          _key: string
+          _max_tokens?: number
+          _refill_rate?: number
+          _window_seconds?: number
+        }
+        Returns: boolean
+      }
       get_user_tenant_id: { Args: never; Returns: string }
       has_role: {
         Args: {
