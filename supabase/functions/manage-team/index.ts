@@ -36,8 +36,8 @@ Deno.serve(async (req) => {
 
     if (!isSuperAdmin && !tenantAdminRole) return json({ error: "Forbidden" }, 403);
 
-    const url = new URL(req.url);
-    const action = url.searchParams.get("action");
+    const body = await req.json();
+    const action = body.action;
 
     // Get caller's tenant_id
     const { data: callerProfile } = await supabaseAdmin

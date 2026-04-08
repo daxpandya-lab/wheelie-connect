@@ -83,8 +83,7 @@ export default function UserManagementPage() {
 
   const callManageTeam = async (action: string, body: Record<string, unknown>) => {
     const { data, error } = await supabase.functions.invoke("manage-team", {
-      body,
-      headers: { "Content-Type": "application/json" },
+      body: { ...body, action },
     });
     if (error) throw new Error(error.message || "Request failed");
     if (data?.error) throw new Error(data.error);
