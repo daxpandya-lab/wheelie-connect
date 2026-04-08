@@ -1,6 +1,17 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
+// Rate limit helper - calls DB token bucket
+async function checkRateLimit(supabase: any, key: string, maxTokens = 120, windowSeconds = 60): Promise<boolean> {
+  const { data } = await supabase.rpc("check_rate_limit", {
+    _key: key,
+    _max_tokens: maxTokens,
+    _refill_rate: 1,
+    _window_seconds: windowSeconds,
+  });
+  return data === true;
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -74,6 +85,13 @@ Deno.serve(async (req) => {
           if (change.field !== "messages") continue;
           const value = change.value;
           const phoneNumberId = value.metadata.phone_number_id;
+
+          // ===== Rate limit per phone_number_id (120 req/min) =====
+          const allowed = await checkRateLimit(supabase, `webhook:${phoneNumberId}`, 120, 60);
+          if (!allowed) {
+            console.warn(`Rate limited: ${phoneNumberId}`);
+            continue;
+          }
 
           // ===== Route to tenant by phone_number_id =====
           const { data: session } = await supabase
