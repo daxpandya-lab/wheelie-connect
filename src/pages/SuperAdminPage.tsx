@@ -342,6 +342,9 @@ export default function SuperAdminPage() {
                               <CheckCircle className="w-4 h-4 text-success" />
                             )}
                           </Button>
+                          <Button variant="ghost" size="icon" title="Delete" onClick={() => handleDelete(t)}>
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
