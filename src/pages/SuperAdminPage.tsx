@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Loader2, Pencil, KeyRound, Ban, CheckCircle } from "lucide-react";
+import { Plus, Loader2, Pencil, KeyRound, Ban, CheckCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -218,6 +218,16 @@ export default function SuperAdminPage() {
     }
   };
 
+  const handleDelete = async (tenant: Tenant) => {
+    if (!window.confirm(`Are you sure you want to delete "${tenant.name}"? This action cannot be undone.`)) return;
+    const { error } = await supabase.from("tenants").delete().eq("id", tenant.id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Dealer deleted");
+      fetchTenants();
+    }
+  };
+
   const openEdit = (t: Tenant) => {
     setEditForm({
       id: t.id,
@@ -331,6 +341,9 @@ export default function SuperAdminPage() {
                             ) : (
                               <CheckCircle className="w-4 h-4 text-success" />
                             )}
+                          </Button>
+                          <Button variant="ghost" size="icon" title="Delete" onClick={() => handleDelete(t)}>
+                            <Trash2 className="w-4 h-4 text-destructive" />
                           </Button>
                         </div>
                       </TableCell>
