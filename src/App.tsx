@@ -17,6 +17,7 @@ import AnalyticsPage from "@/pages/AnalyticsPage";
 import SettingsPage from "@/pages/SettingsPage";
 import SuperAdminPage from "@/pages/SuperAdminPage";
 import UserManagementPage from "@/pages/UserManagementPage";
+import FlowBuilderPage from "@/pages/FlowBuilderPage";
 import LoginPage from "@/pages/LoginPage";
 import SignupPage from "@/pages/SignupPage";
 import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
@@ -52,6 +53,7 @@ const App = () => (
                 <Route path="/analytics" element={<AnalyticsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/team" element={<UserManagementPage />} />
+                <Route path="/flow-builder" element={<FlowBuilderPage />} />
                 <Route path="/super-admin" element={
                   <ProtectedRoute requiredRoles={["super_admin"]}>
                     <SuperAdminPage />

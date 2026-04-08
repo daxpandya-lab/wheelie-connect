@@ -1,0 +1,271 @@
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import TopBar from "@/components/TopBar";
+import FlowCanvas from "@/components/chatbot/FlowCanvas";
+import NodeProperties from "@/components/chatbot/NodeProperties";
+import ChatPreview from "@/components/chatbot/ChatPreview";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Save, Play, ZoomIn, ZoomOut, Maximize2,
+  MessageSquare, Car, Loader2, Plus, ChevronLeft,
+} from "lucide-react";
+import { toast } from "sonner";
+import type { FlowData, FlowNode } from "@/types/chatbot-flow";
+import { SERVICE_BOOKING_FLOW, TEST_DRIVE_FLOW } from "@/types/chatbot-flow";
+
+type FlowRecord = {
+  id: string;
+  name: string;
+  description: string | null;
+  flow_data: FlowData;
+  is_active: boolean;
+  language: string;
+  channel: string;
+};
+
+export default function FlowBuilderPage() {
+  const { tenantId } = useAuth();
+  const navigate = useNavigate();
+
+  const [flows, setFlows] = useState<FlowRecord[]>([]);
+  const [activeFlowId, setActiveFlowId] = useState<string | null>(null);
+  const [flowData, setFlowData] = useState<FlowData>(SERVICE_BOOKING_FLOW);
+  const [flowName, setFlowName] = useState("Service Booking");
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [language, setLanguage] = useState("en");
+  const [zoom, setZoom] = useState(0.85);
+  const [pan, setPan] = useState({ x: 50, y: 20 });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [listView, setListView] = useState(true);
+
+  // Fetch flows
+  const fetchFlows = async () => {
+    if (!tenantId) { setLoading(false); return; }
+    const { data } = await supabase
+      .from("chatbot_flows")
+      .select("id, name, description, flow_data, is_active, language, channel")
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: false });
+
+    if (data) setFlows(data.map((f) => ({ ...f, flow_data: f.flow_data as unknown as FlowData })));
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchFlows(); }, [tenantId]);
+
+  // Seed default flows
+  const seedFlows = async () => {
+    if (!tenantId) return;
+    setSaving(true);
+    const seeds = [
+      { name: "Service Booking", description: "14-step vehicle service booking chatbot", flow_data: SERVICE_BOOKING_FLOW, channel: "both" as const, language: "en" },
+      { name: "Test Drive", description: "Test drive booking chatbot with lead capture", flow_data: TEST_DRIVE_FLOW, channel: "both" as const, language: "en" },
+    ];
+    for (const s of seeds) {
+      await supabase.from("chatbot_flows").insert({
+        tenant_id: tenantId,
+        name: s.name,
+        description: s.description,
+        flow_data: JSON.parse(JSON.stringify(s.flow_data)),
+        is_active: false,
+        language: s.language,
+        channel: s.channel,
+      } as any);
+    }
+    setSaving(false);
+    toast.success("Default flows created!");
+    fetchFlows();
+  };
+
+  const openFlow = (flow: FlowRecord) => {
+    setActiveFlowId(flow.id);
+    setFlowData(flow.flow_data);
+    setFlowName(flow.name);
+    setListView(false);
+    setSelectedNodeId(null);
+  };
+
+  const saveFlow = async () => {
+    if (!activeFlowId) return;
+    setSaving(true);
+    const { error } = await supabase.from("chatbot_flows")
+      .update({ flow_data: JSON.parse(JSON.stringify(flowData)), name: flowName } as any)
+      .eq("id", activeFlowId);
+    setSaving(false);
+    if (error) toast.error(error.message);
+    else { toast.success("Flow saved!"); fetchFlows(); }
+  };
+
+  const toggleActive = async (flowId: string, isActive: boolean) => {
+    await supabase.from("chatbot_flows").update({ is_active: !isActive }).eq("id", flowId);
+    fetchFlows();
+  };
+
+  const handleNodeChange = (updated: FlowNode) => {
+    setFlowData((prev) => ({
+      ...prev,
+      nodes: prev.nodes.map((n) => (n.id === updated.id ? updated : n)),
+    }));
+  };
+
+  const selectedNode = flowData.nodes.find((n) => n.id === selectedNodeId);
+
+  // LIST VIEW
+  if (listView) {
+    return (
+      <>
+        <TopBar title="Chatbot Flow Builder" />
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-3xl mx-auto">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Chatbot Flows</h2>
+                <p className="text-sm text-muted-foreground">Build and manage your automated conversation flows</p>
+              </div>
+              {flows.length === 0 && !loading && (
+                <Button onClick={seedFlows} disabled={saving}>
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  Create Default Flows
+                </Button>
+              )}
+            </div>
+
+            {loading ? (
+              <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+            ) : flows.length === 0 ? (
+              <div className="text-center py-16 glass-card rounded-xl">
+                <MessageSquare className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                <p className="text-muted-foreground">No flows yet. Create default flows to get started.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {flows.map((f) => (
+                  <div key={f.id} className="glass-card rounded-xl p-5 flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                      {f.name.includes("Test") ? <Car className="w-5 h-5 text-primary" /> : <MessageSquare className="w-5 h-5 text-primary" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-foreground">{f.name}</p>
+                        <Badge variant={f.is_active ? "default" : "secondary"} className="text-xs">
+                          {f.is_active ? "Active" : "Inactive"}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">{f.channel}</Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{f.description}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {(f.flow_data as FlowData).nodes?.length || 0} nodes
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" onClick={() => toggleActive(f.id, f.is_active)}>
+                        {f.is_active ? "Deactivate" : "Activate"}
+                      </Button>
+                      <Button size="sm" onClick={() => openFlow(f)}>
+                        Edit Flow
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // BUILDER VIEW
+  return (
+    <>
+      <TopBar title={`Flow Builder — ${flowName}`} />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Toolbar */}
+        <div className="h-12 border-b border-border bg-card flex items-center justify-between px-4 shrink-0">
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setListView(true)} className="h-8">
+              <ChevronLeft className="w-4 h-4" /> Flows
+            </Button>
+            <div className="w-px h-5 bg-border" />
+            <Select value={language} onValueChange={setLanguage}>
+              <SelectTrigger className="h-8 w-24 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="en">English</SelectItem>
+                <SelectItem value="hi">Hindi</SelectItem>
+                <SelectItem value="ar">Arabic</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <Button variant="ghost" size="sm" onClick={() => setZoom((z) => Math.max(0.3, z - 0.1))} className="h-8 w-8 p-0">
+              <ZoomOut className="w-4 h-4" />
+            </Button>
+            <span className="text-xs text-muted-foreground w-10 text-center">{Math.round(zoom * 100)}%</span>
+            <Button variant="ghost" size="sm" onClick={() => setZoom((z) => Math.min(2, z + 0.1))} className="h-8 w-8 p-0">
+              <ZoomIn className="w-4 h-4" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => { setZoom(0.85); setPan({ x: 50, y: 20 }); }} className="h-8 w-8 p-0">
+              <Maximize2 className="w-4 h-4" />
+            </Button>
+            <div className="w-px h-5 bg-border mx-1" />
+            <Button
+              variant={showPreview ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowPreview(!showPreview)}
+              className="h-8"
+            >
+              <Play className="w-3.5 h-3.5" /> Preview
+            </Button>
+            <Button size="sm" onClick={saveFlow} disabled={saving} className="h-8">
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              Save
+            </Button>
+          </div>
+        </div>
+
+        {/* Canvas + Panels */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Canvas */}
+          <div className="flex-1 relative">
+            <FlowCanvas
+              flow={flowData}
+              selectedNodeId={selectedNodeId}
+              onSelectNode={setSelectedNodeId}
+              zoom={zoom}
+              pan={pan}
+            />
+            {/* Node count badge */}
+            <div className="absolute bottom-3 left-3 bg-card/90 backdrop-blur-sm border border-border rounded-lg px-3 py-1.5 text-xs text-muted-foreground">
+              {flowData.nodes.length} nodes · {flowData.connections.length} connections
+            </div>
+          </div>
+
+          {/* Properties Panel */}
+          {selectedNode && !showPreview && (
+            <NodeProperties
+              node={selectedNode}
+              onChange={handleNodeChange}
+              onClose={() => setSelectedNodeId(null)}
+              language={language}
+            />
+          )}
+
+          {/* Chat Preview */}
+          {showPreview && (
+            <div className="w-80 shrink-0">
+              <ChatPreview flow={flowData} language={language} />
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
