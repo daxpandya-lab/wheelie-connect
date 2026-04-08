@@ -49,7 +49,6 @@ Deno.serve(async (req) => {
     const callerTenantId = callerProfile?.tenant_id;
 
     if (action === "create") {
-      const body = await req.json();
       const { name, phone, email, password, role, tenant_id } = body;
 
       const targetTenantId = isSuperAdmin && tenant_id ? tenant_id : callerTenantId;
@@ -88,7 +87,6 @@ Deno.serve(async (req) => {
     }
 
     if (action === "update") {
-      const body = await req.json();
       const { user_id, name, phone, role } = body;
       if (!user_id) return json({ error: "user_id required" }, 400);
 
@@ -124,7 +122,6 @@ Deno.serve(async (req) => {
     }
 
     if (action === "delete") {
-      const body = await req.json();
       const { user_id } = body;
       if (!user_id) return json({ error: "user_id required" }, 400);
 
@@ -150,7 +147,6 @@ Deno.serve(async (req) => {
     }
 
     if (action === "reset-password") {
-      const body = await req.json();
       const { user_id, new_password } = body;
       if (!user_id || !new_password) return json({ error: "user_id and new_password required" }, 400);
       if (new_password.length < 6) return json({ error: "Password must be at least 6 characters" }, 400);
