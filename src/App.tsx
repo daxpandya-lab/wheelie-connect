@@ -3,6 +3,8 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AuthProvider } from "@/contexts/AuthContext";
+import ProtectedRoute from "@/components/ProtectedRoute";
 import DashboardLayout from "@/components/DashboardLayout";
 import DashboardPage from "@/pages/DashboardPage";
 import CustomersPage from "@/pages/CustomersPage";
@@ -13,6 +15,12 @@ import ConversationsPage from "@/pages/ConversationsPage";
 import CampaignsPage from "@/pages/CampaignsPage";
 import AnalyticsPage from "@/pages/AnalyticsPage";
 import SettingsPage from "@/pages/SettingsPage";
+import SuperAdminPage from "@/pages/SuperAdminPage";
+import UserManagementPage from "@/pages/UserManagementPage";
+import LoginPage from "@/pages/LoginPage";
+import SignupPage from "@/pages/SignupPage";
+import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
+import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -23,20 +31,38 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route element={<DashboardLayout />}>
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/customers" element={<CustomersPage />} />
-            <Route path="/leads" element={<LeadsPage />} />
-            <Route path="/service-bookings" element={<ServiceBookingsPage />} />
-            <Route path="/test-drives" element={<TestDrivesPage />} />
-            <Route path="/conversations" element={<ConversationsPage />} />
-            <Route path="/campaigns" element={<CampaignsPage />} />
-            <Route path="/analytics" element={<AnalyticsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-          </Route>
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <AuthProvider>
+          <Routes>
+            {/* Public auth routes */}
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/signup" element={<SignupPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
+
+            {/* Protected routes */}
+            <Route element={<ProtectedRoute />}>
+              <Route element={<DashboardLayout />}>
+                <Route path="/" element={<DashboardPage />} />
+                <Route path="/customers" element={<CustomersPage />} />
+                <Route path="/leads" element={<LeadsPage />} />
+                <Route path="/service-bookings" element={<ServiceBookingsPage />} />
+                <Route path="/test-drives" element={<TestDrivesPage />} />
+                <Route path="/conversations" element={<ConversationsPage />} />
+                <Route path="/campaigns" element={<CampaignsPage />} />
+                <Route path="/analytics" element={<AnalyticsPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/team" element={<UserManagementPage />} />
+                <Route path="/super-admin" element={
+                  <ProtectedRoute requiredRoles={["super_admin"]}>
+                    <SuperAdminPage />
+                  </ProtectedRoute>
+                } />
+              </Route>
+            </Route>
+
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

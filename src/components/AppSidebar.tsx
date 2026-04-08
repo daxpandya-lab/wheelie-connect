@@ -1,27 +1,31 @@
 import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
-  LayoutDashboard, Users, Car, Calendar, MessageSquare,
+  LayoutDashboard, Users, Car, MessageSquare,
   BarChart3, Megaphone, Settings, ChevronLeft, ChevronRight,
-  Wrench, TestTube2, UserPlus
+  Wrench, TestTube2, UserPlus, Shield, UsersRound, LogOut
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-const navItems = [
-  { to: "/", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/customers", icon: Users, label: "Customers" },
-  { to: "/leads", icon: UserPlus, label: "Leads" },
-  { to: "/service-bookings", icon: Wrench, label: "Service Bookings" },
-  { to: "/test-drives", icon: TestTube2, label: "Test Drives" },
-  { to: "/conversations", icon: MessageSquare, label: "Conversations" },
-  { to: "/campaigns", icon: Megaphone, label: "Campaigns" },
-  { to: "/analytics", icon: BarChart3, label: "Analytics" },
-  { to: "/settings", icon: Settings, label: "Settings" },
-];
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const { isSuperAdmin, isTenantAdmin, signOut, profile } = useAuth();
+
+  const navItems = [
+    { to: "/", icon: LayoutDashboard, label: "Dashboard" },
+    { to: "/customers", icon: Users, label: "Customers" },
+    { to: "/leads", icon: UserPlus, label: "Leads" },
+    { to: "/service-bookings", icon: Wrench, label: "Service Bookings" },
+    { to: "/test-drives", icon: TestTube2, label: "Test Drives" },
+    { to: "/conversations", icon: MessageSquare, label: "Conversations" },
+    { to: "/campaigns", icon: Megaphone, label: "Campaigns" },
+    { to: "/analytics", icon: BarChart3, label: "Analytics" },
+    ...(isTenantAdmin || isSuperAdmin ? [{ to: "/team", icon: UsersRound, label: "Team" }] : []),
+    ...(isSuperAdmin ? [{ to: "/super-admin", icon: Shield, label: "Super Admin" }] : []),
+    { to: "/settings", icon: Settings, label: "Settings" },
+  ];
 
   return (
     <aside
@@ -40,6 +44,16 @@ export default function AppSidebar() {
           </span>
         )}
       </div>
+
+      {/* User info */}
+      {!collapsed && profile && (
+        <div className="px-4 py-3 border-b border-sidebar-border">
+          <p className="text-sm font-medium text-sidebar-accent-foreground truncate">{profile.full_name}</p>
+          <p className="text-xs text-sidebar-muted truncate">
+            {isSuperAdmin ? "Super Admin" : isTenantAdmin ? "Admin" : "Staff"}
+          </p>
+        </div>
+      )}
 
       <nav className="flex-1 py-4 space-y-1 px-2 overflow-y-auto">
         {navItems.map((item) => {
@@ -62,12 +76,24 @@ export default function AppSidebar() {
         })}
       </nav>
 
-      <button
-        onClick={() => setCollapsed(!collapsed)}
-        className="flex items-center justify-center h-12 border-t border-sidebar-border text-sidebar-muted hover:text-sidebar-accent-foreground transition-colors"
-      >
-        {collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
-      </button>
+      <div className="border-t border-sidebar-border">
+        <button
+          onClick={signOut}
+          className={cn(
+            "flex items-center gap-3 w-full px-4 py-3 text-sm text-sidebar-muted hover:text-destructive transition-colors",
+            collapsed && "justify-center px-0"
+          )}
+        >
+          <LogOut className="w-5 h-5 shrink-0" />
+          {!collapsed && <span>Sign Out</span>}
+        </button>
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className="flex items-center justify-center w-full h-10 text-sidebar-muted hover:text-sidebar-accent-foreground transition-colors"
+        >
+          {collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+        </button>
+      </div>
     </aside>
   );
 }
