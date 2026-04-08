@@ -3,7 +3,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Users, Car, MessageSquare,
   BarChart3, Megaphone, Settings, ChevronLeft, ChevronRight,
-  Wrench, TestTube2, UserPlus, Shield, UsersRound, LogOut, Bot
+  Wrench, TestTube2, UserPlus, Shield, UsersRound, LogOut, Bot, Zap
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -23,6 +23,7 @@ export default function AppSidebar() {
     { to: "/campaigns", icon: Megaphone, label: "Campaigns" },
     { to: "/analytics", icon: BarChart3, label: "Analytics" },
     { to: "/flow-builder", icon: Bot, label: "Flow Builder" },
+    { to: "/automations", icon: Zap, label: "Automations" },
     ...(isTenantAdmin || isSuperAdmin ? [{ to: "/team", icon: UsersRound, label: "Team" }] : []),
     ...(isSuperAdmin ? [{ to: "/super-admin", icon: Shield, label: "Super Admin" }] : []),
     { to: "/settings", icon: Settings, label: "Settings" },
