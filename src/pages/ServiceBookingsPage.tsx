@@ -59,7 +59,7 @@ export default function ServiceBookingsPage() {
     if (!tenantId) return;
     setLoading(true);
     let query = supabase.from("service_bookings").select("*").eq("tenant_id", tenantId).order("booking_date", { ascending: false });
-    if (statusFilter !== "all") query = query.eq("status", statusFilter);
+    if (statusFilter !== "all") query = query.eq("status", statusFilter as any);
     if (serviceTypeFilter !== "all") query = query.eq("service_type", serviceTypeFilter);
     if (dateFrom) query = query.gte("booking_date", format(dateFrom, "yyyy-MM-dd"));
     if (dateTo) query = query.lte("booking_date", format(dateTo, "yyyy-MM-dd"));
