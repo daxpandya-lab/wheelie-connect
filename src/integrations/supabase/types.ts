@@ -14,6 +14,401 @@ export type Database = {
   }
   public: {
     Tables: {
+      campaigns: {
+        Row: {
+          audience_filter: Json | null
+          created_at: string
+          delivered_count: number | null
+          id: string
+          name: string
+          read_count: number | null
+          replied_count: number | null
+          scheduled_at: string | null
+          sent_count: number | null
+          status: Database["public"]["Enums"]["campaign_status"]
+          template_id: string | null
+          tenant_id: string
+          type: Database["public"]["Enums"]["campaign_type"]
+          updated_at: string
+        }
+        Insert: {
+          audience_filter?: Json | null
+          created_at?: string
+          delivered_count?: number | null
+          id?: string
+          name: string
+          read_count?: number | null
+          replied_count?: number | null
+          scheduled_at?: string | null
+          sent_count?: number | null
+          status?: Database["public"]["Enums"]["campaign_status"]
+          template_id?: string | null
+          tenant_id: string
+          type?: Database["public"]["Enums"]["campaign_type"]
+          updated_at?: string
+        }
+        Update: {
+          audience_filter?: Json | null
+          created_at?: string
+          delivered_count?: number | null
+          id?: string
+          name?: string
+          read_count?: number | null
+          replied_count?: number | null
+          scheduled_at?: string | null
+          sent_count?: number | null
+          status?: Database["public"]["Enums"]["campaign_status"]
+          template_id?: string | null
+          tenant_id?: string
+          type?: Database["public"]["Enums"]["campaign_type"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaigns_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chatbot_conversations: {
+        Row: {
+          assigned_agent: string | null
+          channel: Database["public"]["Enums"]["conversation_channel"]
+          customer_id: string | null
+          ended_at: string | null
+          id: string
+          metadata: Json | null
+          phone_number: string | null
+          started_at: string
+          status: Database["public"]["Enums"]["conversation_status"]
+          tenant_id: string
+        }
+        Insert: {
+          assigned_agent?: string | null
+          channel?: Database["public"]["Enums"]["conversation_channel"]
+          customer_id?: string | null
+          ended_at?: string | null
+          id?: string
+          metadata?: Json | null
+          phone_number?: string | null
+          started_at?: string
+          status?: Database["public"]["Enums"]["conversation_status"]
+          tenant_id: string
+        }
+        Update: {
+          assigned_agent?: string | null
+          channel?: Database["public"]["Enums"]["conversation_channel"]
+          customer_id?: string | null
+          ended_at?: string | null
+          id?: string
+          metadata?: Json | null
+          phone_number?: string | null
+          started_at?: string
+          status?: Database["public"]["Enums"]["conversation_status"]
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chatbot_conversations_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chatbot_conversations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chatbot_flows: {
+        Row: {
+          channel: Database["public"]["Enums"]["conversation_channel"]
+          created_at: string
+          description: string | null
+          flow_data: Json
+          id: string
+          is_active: boolean
+          language: string
+          name: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          channel?: Database["public"]["Enums"]["conversation_channel"]
+          created_at?: string
+          description?: string | null
+          flow_data?: Json
+          id?: string
+          is_active?: boolean
+          language?: string
+          name: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          channel?: Database["public"]["Enums"]["conversation_channel"]
+          created_at?: string
+          description?: string | null
+          flow_data?: Json
+          id?: string
+          is_active?: boolean
+          language?: string
+          name?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chatbot_flows_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chatbot_messages: {
+        Row: {
+          content: string
+          conversation_id: string
+          id: string
+          message_type: Database["public"]["Enums"]["message_type"]
+          metadata: Json | null
+          sender_type: Database["public"]["Enums"]["message_sender"]
+          sent_at: string
+          tenant_id: string
+        }
+        Insert: {
+          content: string
+          conversation_id: string
+          id?: string
+          message_type?: Database["public"]["Enums"]["message_type"]
+          metadata?: Json | null
+          sender_type: Database["public"]["Enums"]["message_sender"]
+          sent_at?: string
+          tenant_id: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          id?: string
+          message_type?: Database["public"]["Enums"]["message_type"]
+          metadata?: Json | null
+          sender_type?: Database["public"]["Enums"]["message_sender"]
+          sent_at?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chatbot_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "chatbot_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chatbot_messages_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chatbot_responses: {
+        Row: {
+          confidence_score: number | null
+          conversation_id: string
+          created_at: string
+          feedback: string | null
+          flow_id: string | null
+          id: string
+          intent_detected: string | null
+          message_id: string | null
+          response_text: string | null
+          response_time_ms: number | null
+          tenant_id: string
+          was_helpful: boolean | null
+        }
+        Insert: {
+          confidence_score?: number | null
+          conversation_id: string
+          created_at?: string
+          feedback?: string | null
+          flow_id?: string | null
+          id?: string
+          intent_detected?: string | null
+          message_id?: string | null
+          response_text?: string | null
+          response_time_ms?: number | null
+          tenant_id: string
+          was_helpful?: boolean | null
+        }
+        Update: {
+          confidence_score?: number | null
+          conversation_id?: string
+          created_at?: string
+          feedback?: string | null
+          flow_id?: string | null
+          id?: string
+          intent_detected?: string | null
+          message_id?: string | null
+          response_text?: string | null
+          response_time_ms?: number | null
+          tenant_id?: string
+          was_helpful?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chatbot_responses_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "chatbot_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chatbot_responses_flow_id_fkey"
+            columns: ["flow_id"]
+            isOneToOne: false
+            referencedRelation: "chatbot_flows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chatbot_responses_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "chatbot_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chatbot_responses_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customers: {
+        Row: {
+          address: string | null
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          phone?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leads: {
+        Row: {
+          assigned_to: string | null
+          created_at: string
+          customer_id: string | null
+          customer_name: string
+          email: string | null
+          follow_up_date: string | null
+          id: string
+          notes: string | null
+          phone_number: string | null
+          score: number | null
+          source: Database["public"]["Enums"]["lead_source"]
+          status: Database["public"]["Enums"]["lead_status"]
+          tenant_id: string
+          updated_at: string
+          vehicle_interest: string | null
+        }
+        Insert: {
+          assigned_to?: string | null
+          created_at?: string
+          customer_id?: string | null
+          customer_name: string
+          email?: string | null
+          follow_up_date?: string | null
+          id?: string
+          notes?: string | null
+          phone_number?: string | null
+          score?: number | null
+          source?: Database["public"]["Enums"]["lead_source"]
+          status?: Database["public"]["Enums"]["lead_status"]
+          tenant_id: string
+          updated_at?: string
+          vehicle_interest?: string | null
+        }
+        Update: {
+          assigned_to?: string | null
+          created_at?: string
+          customer_id?: string | null
+          customer_name?: string
+          email?: string | null
+          follow_up_date?: string | null
+          id?: string
+          notes?: string | null
+          phone_number?: string | null
+          score?: number | null
+          source?: Database["public"]["Enums"]["lead_source"]
+          status?: Database["public"]["Enums"]["lead_status"]
+          tenant_id?: string
+          updated_at?: string
+          vehicle_interest?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leads_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -51,6 +446,94 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      service_bookings: {
+        Row: {
+          assigned_to: string | null
+          booking_date: string
+          created_at: string
+          customer_id: string | null
+          customer_name: string
+          drop_required: boolean | null
+          id: string
+          kms_driven: number | null
+          notes: string | null
+          phone_number: string
+          pickup_required: boolean | null
+          preferred_time: string | null
+          service_type: string
+          status: Database["public"]["Enums"]["service_status"]
+          tenant_id: string
+          total_amount: number | null
+          updated_at: string
+          vehicle_id: string | null
+          vehicle_model: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          booking_date: string
+          created_at?: string
+          customer_id?: string | null
+          customer_name: string
+          drop_required?: boolean | null
+          id?: string
+          kms_driven?: number | null
+          notes?: string | null
+          phone_number: string
+          pickup_required?: boolean | null
+          preferred_time?: string | null
+          service_type: string
+          status?: Database["public"]["Enums"]["service_status"]
+          tenant_id: string
+          total_amount?: number | null
+          updated_at?: string
+          vehicle_id?: string | null
+          vehicle_model: string
+        }
+        Update: {
+          assigned_to?: string | null
+          booking_date?: string
+          created_at?: string
+          customer_id?: string | null
+          customer_name?: string
+          drop_required?: boolean | null
+          id?: string
+          kms_driven?: number | null
+          notes?: string | null
+          phone_number?: string
+          pickup_required?: boolean | null
+          preferred_time?: string | null
+          service_type?: string
+          status?: Database["public"]["Enums"]["service_status"]
+          tenant_id?: string
+          total_amount?: number | null
+          updated_at?: string
+          vehicle_id?: string | null
+          vehicle_model?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_bookings_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_bookings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_bookings_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
             referencedColumns: ["id"]
           },
         ]
@@ -96,6 +579,72 @@ export type Database = {
           whatsapp_config?: Json | null
         }
         Relationships: []
+      }
+      test_drive_bookings: {
+        Row: {
+          assigned_to: string | null
+          created_at: string
+          customer_id: string | null
+          customer_name: string
+          follow_up_date: string | null
+          id: string
+          notes: string | null
+          phone_number: string
+          preferred_date: string
+          preferred_time: string | null
+          status: Database["public"]["Enums"]["service_status"]
+          tenant_id: string
+          updated_at: string
+          vehicle_model: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          created_at?: string
+          customer_id?: string | null
+          customer_name: string
+          follow_up_date?: string | null
+          id?: string
+          notes?: string | null
+          phone_number: string
+          preferred_date: string
+          preferred_time?: string | null
+          status?: Database["public"]["Enums"]["service_status"]
+          tenant_id: string
+          updated_at?: string
+          vehicle_model: string
+        }
+        Update: {
+          assigned_to?: string | null
+          created_at?: string
+          customer_id?: string | null
+          customer_name?: string
+          follow_up_date?: string | null
+          id?: string
+          notes?: string | null
+          phone_number?: string
+          preferred_date?: string
+          preferred_time?: string | null
+          status?: Database["public"]["Enums"]["service_status"]
+          tenant_id?: string
+          updated_at?: string
+          vehicle_model?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "test_drive_bookings_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "test_drive_bookings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_invitations: {
         Row: {
@@ -173,6 +722,63 @@ export type Database = {
           },
         ]
       }
+      vehicles: {
+        Row: {
+          created_at: string
+          customer_id: string
+          id: string
+          kms_driven: number | null
+          license_plate: string | null
+          make: string | null
+          model: string
+          tenant_id: string
+          updated_at: string
+          vin: string | null
+          year: number | null
+        }
+        Insert: {
+          created_at?: string
+          customer_id: string
+          id?: string
+          kms_driven?: number | null
+          license_plate?: string | null
+          make?: string | null
+          model: string
+          tenant_id: string
+          updated_at?: string
+          vin?: string | null
+          year?: number | null
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string
+          id?: string
+          kms_driven?: number | null
+          license_plate?: string | null
+          make?: string | null
+          model?: string
+          tenant_id?: string
+          updated_at?: string
+          vin?: string | null
+          year?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicles_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -187,9 +793,30 @@ export type Database = {
         Returns: boolean
       }
       is_super_admin: { Args: never; Returns: boolean }
+      is_user_tenant: { Args: { _tenant_id: string }; Returns: boolean }
     }
     Enums: {
       app_role: "super_admin" | "tenant_admin" | "staff"
+      campaign_status: "draft" | "scheduled" | "sending" | "sent" | "cancelled"
+      campaign_type: "whatsapp" | "sms" | "email"
+      conversation_channel: "whatsapp" | "web" | "both"
+      conversation_status: "active" | "closed" | "escalated"
+      lead_source: "whatsapp" | "web" | "walkin" | "referral" | "campaign"
+      lead_status:
+        | "new"
+        | "contacted"
+        | "qualified"
+        | "proposal"
+        | "won"
+        | "lost"
+      message_sender: "customer" | "bot" | "agent"
+      message_type: "text" | "image" | "document" | "template"
+      service_status:
+        | "pending"
+        | "confirmed"
+        | "in_progress"
+        | "completed"
+        | "cancelled"
       tenant_plan: "free" | "starter" | "pro" | "enterprise"
       tenant_status: "active" | "suspended" | "cancelled"
     }
@@ -320,6 +947,21 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["super_admin", "tenant_admin", "staff"],
+      campaign_status: ["draft", "scheduled", "sending", "sent", "cancelled"],
+      campaign_type: ["whatsapp", "sms", "email"],
+      conversation_channel: ["whatsapp", "web", "both"],
+      conversation_status: ["active", "closed", "escalated"],
+      lead_source: ["whatsapp", "web", "walkin", "referral", "campaign"],
+      lead_status: ["new", "contacted", "qualified", "proposal", "won", "lost"],
+      message_sender: ["customer", "bot", "agent"],
+      message_type: ["text", "image", "document", "template"],
+      service_status: [
+        "pending",
+        "confirmed",
+        "in_progress",
+        "completed",
+        "cancelled",
+      ],
       tenant_plan: ["free", "starter", "pro", "enterprise"],
       tenant_status: ["active", "suspended", "cancelled"],
     },
