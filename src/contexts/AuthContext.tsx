@@ -13,6 +13,7 @@ interface AuthContextType {
   tenantId: string | null;
   isSuperAdmin: boolean;
   isTenantAdmin: boolean;
+  isTenantSuspended: boolean;
   isLoading: boolean;
   signOut: () => Promise<void>;
 }
