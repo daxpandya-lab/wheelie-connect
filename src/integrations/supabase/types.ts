@@ -539,6 +539,8 @@ export type Database = {
       customers: {
         Row: {
           address: string | null
+          area: string | null
+          city: string | null
           created_at: string
           email: string | null
           id: string
@@ -550,6 +552,8 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          area?: string | null
+          city?: string | null
           created_at?: string
           email?: string | null
           id?: string
@@ -561,6 +565,8 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          area?: string | null
+          city?: string | null
           created_at?: string
           email?: string | null
           id?: string
@@ -769,18 +775,22 @@ export type Database = {
       }
       service_bookings: {
         Row: {
+          approval_status: string | null
           assigned_to: string | null
           booking_date: string
           created_at: string
           customer_id: string | null
           customer_name: string
           drop_required: boolean | null
+          estimated_cost: number | null
           id: string
+          issue_description: string | null
           kms_driven: number | null
           notes: string | null
           phone_number: string
           pickup_required: boolean | null
           preferred_time: string | null
+          quotation_notes: string | null
           service_type: string
           status: Database["public"]["Enums"]["service_status"]
           tenant_id: string
@@ -790,18 +800,22 @@ export type Database = {
           vehicle_model: string
         }
         Insert: {
+          approval_status?: string | null
           assigned_to?: string | null
           booking_date: string
           created_at?: string
           customer_id?: string | null
           customer_name: string
           drop_required?: boolean | null
+          estimated_cost?: number | null
           id?: string
+          issue_description?: string | null
           kms_driven?: number | null
           notes?: string | null
           phone_number: string
           pickup_required?: boolean | null
           preferred_time?: string | null
+          quotation_notes?: string | null
           service_type: string
           status?: Database["public"]["Enums"]["service_status"]
           tenant_id: string
@@ -811,18 +825,22 @@ export type Database = {
           vehicle_model: string
         }
         Update: {
+          approval_status?: string | null
           assigned_to?: string | null
           booking_date?: string
           created_at?: string
           customer_id?: string | null
           customer_name?: string
           drop_required?: boolean | null
+          estimated_cost?: number | null
           id?: string
+          issue_description?: string | null
           kms_driven?: number | null
           notes?: string | null
           phone_number?: string
           pickup_required?: boolean | null
           preferred_time?: string | null
+          quotation_notes?: string | null
           service_type?: string
           status?: Database["public"]["Enums"]["service_status"]
           tenant_id?: string
@@ -1062,6 +1080,7 @@ export type Database = {
           model: string
           tenant_id: string
           updated_at: string
+          vehicle_type: string | null
           vin: string | null
           year: number | null
         }
@@ -1075,6 +1094,7 @@ export type Database = {
           model: string
           tenant_id: string
           updated_at?: string
+          vehicle_type?: string | null
           vin?: string | null
           year?: number | null
         }
@@ -1088,6 +1108,7 @@ export type Database = {
           model?: string
           tenant_id?: string
           updated_at?: string
+          vehicle_type?: string | null
           vin?: string | null
           year?: number | null
         }
