@@ -93,7 +93,7 @@ export default function ServiceBookingsPage() {
   const completedCount = bookings.filter((b) => b.status === "completed").length;
 
   const handleStatusUpdate = async (id: string, newStatus: string) => {
-    await supabase.from("service_bookings").update({ status: newStatus }).eq("id", id);
+    await supabase.from("service_bookings").update({ status: newStatus as any }).eq("id", id);
   };
 
   return (
