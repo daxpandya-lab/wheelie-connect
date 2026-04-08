@@ -277,9 +277,9 @@ Deno.serve(async (req) => {
         if (profile) userId = profile.user_id;
       }
 
-      if (!profile) {
+      if (!userId) {
         return new Response(
-          JSON.stringify({ error: "No user found for this tenant" }),
+          JSON.stringify({ error: "No admin user found for this dealer. The dealer may have been created without login credentials. Please edit the dealer and ensure an email is set, then re-create credentials." }),
           {
             status: 404,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -288,7 +288,7 @@ Deno.serve(async (req) => {
       }
 
       const { error } = await supabaseAdmin.auth.admin.updateUserById(
-        profile.user_id,
+        userId,
         { password: new_password }
       );
 
