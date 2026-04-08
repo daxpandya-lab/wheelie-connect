@@ -254,13 +254,28 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Find tenant admin user
-      const { data: profile } = await supabaseAdmin
-        .from("profiles")
+      // Find tenant admin user - check user_roles first, then profiles
+      let userId: string | null = null;
+
+      const { data: roleData } = await supabaseAdmin
+        .from("user_roles")
         .select("user_id")
         .eq("tenant_id", tenant_id)
+        .eq("role", "tenant_admin")
         .limit(1)
-        .single();
+        .maybeSingle();
+
+      if (roleData) {
+        userId = roleData.user_id;
+      } else {
+        const { data: profile } = await supabaseAdmin
+          .from("profiles")
+          .select("user_id")
+          .eq("tenant_id", tenant_id)
+          .limit(1)
+          .maybeSingle();
+        if (profile) userId = profile.user_id;
+      }
 
       if (!profile) {
         return new Response(
