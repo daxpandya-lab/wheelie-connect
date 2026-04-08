@@ -86,6 +86,13 @@ Deno.serve(async (req) => {
           const value = change.value;
           const phoneNumberId = value.metadata.phone_number_id;
 
+          // ===== Rate limit per phone_number_id (120 req/min) =====
+          const allowed = await checkRateLimit(supabase, `webhook:${phoneNumberId}`, 120, 60);
+          if (!allowed) {
+            console.warn(`Rate limited: ${phoneNumberId}`);
+            continue;
+          }
+
           // ===== Route to tenant by phone_number_id =====
           const { data: session } = await supabase
             .from("whatsapp_sessions")
