@@ -1116,6 +1116,8 @@ export type Database = {
         Returns: boolean
       }
       is_super_admin: { Args: never; Returns: boolean }
+      is_tenant_active: { Args: never; Returns: boolean }
+      is_tenant_id_active: { Args: { _tenant_id: string }; Returns: boolean }
       is_user_tenant: { Args: { _tenant_id: string }; Returns: boolean }
     }
     Enums: {
