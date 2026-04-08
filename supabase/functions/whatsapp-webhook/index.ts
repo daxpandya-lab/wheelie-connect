@@ -1,6 +1,17 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
+// Rate limit helper - calls DB token bucket
+async function checkRateLimit(supabase: any, key: string, maxTokens = 120, windowSeconds = 60): Promise<boolean> {
+  const { data } = await supabase.rpc("check_rate_limit", {
+    _key: key,
+    _max_tokens: maxTokens,
+    _refill_rate: 1,
+    _window_seconds: windowSeconds,
+  });
+  return data === true;
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
