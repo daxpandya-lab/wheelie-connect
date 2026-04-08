@@ -14,6 +14,79 @@ export type Database = {
   }
   public: {
     Tables: {
+      campaign_recipients: {
+        Row: {
+          campaign_id: string
+          created_at: string
+          customer_id: string | null
+          customer_name: string | null
+          delivered_at: string | null
+          error_message: string | null
+          id: string
+          phone_number: string
+          read_at: string | null
+          replied_at: string | null
+          reply_text: string | null
+          sent_at: string | null
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          campaign_id: string
+          created_at?: string
+          customer_id?: string | null
+          customer_name?: string | null
+          delivered_at?: string | null
+          error_message?: string | null
+          id?: string
+          phone_number: string
+          read_at?: string | null
+          replied_at?: string | null
+          reply_text?: string | null
+          sent_at?: string | null
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          campaign_id?: string
+          created_at?: string
+          customer_id?: string | null
+          customer_name?: string | null
+          delivered_at?: string | null
+          error_message?: string | null
+          id?: string
+          phone_number?: string
+          read_at?: string | null
+          replied_at?: string | null
+          reply_text?: string | null
+          sent_at?: string | null
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_recipients_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_recipients_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_recipients_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaigns: {
         Row: {
           audience_filter: Json | null
@@ -22,8 +95,10 @@ export type Database = {
           id: string
           name: string
           read_count: number | null
+          recipient_count: number | null
           replied_count: number | null
           scheduled_at: string | null
+          segment_id: string | null
           sent_count: number | null
           status: Database["public"]["Enums"]["campaign_status"]
           template_id: string | null
@@ -38,8 +113,10 @@ export type Database = {
           id?: string
           name: string
           read_count?: number | null
+          recipient_count?: number | null
           replied_count?: number | null
           scheduled_at?: string | null
+          segment_id?: string | null
           sent_count?: number | null
           status?: Database["public"]["Enums"]["campaign_status"]
           template_id?: string | null
@@ -54,8 +131,10 @@ export type Database = {
           id?: string
           name?: string
           read_count?: number | null
+          recipient_count?: number | null
           replied_count?: number | null
           scheduled_at?: string | null
+          segment_id?: string | null
           sent_count?: number | null
           status?: Database["public"]["Enums"]["campaign_status"]
           template_id?: string | null
@@ -64,6 +143,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "campaigns_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "contact_segments"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "campaigns_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -289,6 +375,47 @@ export type Database = {
           },
           {
             foreignKeyName: "chatbot_responses_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contact_segments: {
+        Row: {
+          created_at: string
+          customer_count: number | null
+          description: string | null
+          filter_criteria: Json
+          id: string
+          name: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_count?: number | null
+          description?: string | null
+          filter_criteria?: Json
+          id?: string
+          name: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_count?: number | null
+          description?: string | null
+          filter_criteria?: Json
+          id?: string
+          name?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_segments_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
