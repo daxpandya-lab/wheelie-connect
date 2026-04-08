@@ -1,11 +1,11 @@
 import { cn } from "@/lib/utils";
 import { LucideIcon } from "lucide-react";
 
-interface KpiCardProps {
+export interface KpiCardProps {
   title: string;
   value: string;
-  change: string;
-  changeType: "positive" | "negative" | "neutral";
+  change?: string;
+  changeType?: "positive" | "negative" | "neutral";
   icon: LucideIcon;
   delay?: number;
 }
