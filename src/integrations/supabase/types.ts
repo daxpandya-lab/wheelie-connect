@@ -787,6 +787,7 @@ export type Database = {
           issue_description: string | null
           kms_driven: number | null
           notes: string | null
+          parts_required: string | null
           phone_number: string
           pickup_required: boolean | null
           preferred_time: string | null
@@ -798,6 +799,7 @@ export type Database = {
           updated_at: string
           vehicle_id: string | null
           vehicle_model: string
+          work_notes: string | null
         }
         Insert: {
           approval_status?: string | null
@@ -812,6 +814,7 @@ export type Database = {
           issue_description?: string | null
           kms_driven?: number | null
           notes?: string | null
+          parts_required?: string | null
           phone_number: string
           pickup_required?: boolean | null
           preferred_time?: string | null
@@ -823,6 +826,7 @@ export type Database = {
           updated_at?: string
           vehicle_id?: string | null
           vehicle_model: string
+          work_notes?: string | null
         }
         Update: {
           approval_status?: string | null
@@ -837,6 +841,7 @@ export type Database = {
           issue_description?: string | null
           kms_driven?: number | null
           notes?: string | null
+          parts_required?: string | null
           phone_number?: string
           pickup_required?: boolean | null
           preferred_time?: string | null
@@ -848,6 +853,7 @@ export type Database = {
           updated_at?: string
           vehicle_id?: string | null
           vehicle_model?: string
+          work_notes?: string | null
         }
         Relationships: [
           {

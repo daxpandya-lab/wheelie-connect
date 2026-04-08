@@ -4,17 +4,20 @@ import { useAuth } from "@/contexts/AuthContext";
 import TopBar from "@/components/TopBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { cn } from "@/lib/utils";
-import { format, isToday, isFuture, startOfDay } from "date-fns";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { format, isToday, isFuture } from "date-fns";
 import {
   Search, CalendarIcon, Loader2, RefreshCw, Phone, Wrench,
-  Clock, CheckCircle, XCircle, Play, AlertCircle,
+  Clock, CheckCircle, XCircle, Play, AlertCircle, Eye, ClipboardList,
 } from "lucide-react";
+import { toast } from "sonner";
 
 type ServiceBooking = {
   id: string;
@@ -30,22 +33,34 @@ type ServiceBooking = {
   drop_required: boolean | null;
   notes: string | null;
   total_amount: number | null;
+  assigned_to: string | null;
+  issue_description: string | null;
+  estimated_cost: number | null;
+  approval_status: string | null;
+  quotation_notes: string | null;
+  work_notes: string | null;
+  parts_required: string | null;
   created_at: string;
 };
 
-const STATUS_CONFIG: Record<string, { icon: typeof Clock; class: string }> = {
-  pending: { icon: Clock, class: "bg-warning/10 text-warning" },
-  confirmed: { icon: CheckCircle, class: "bg-info/10 text-info" },
-  in_progress: { icon: Play, class: "bg-primary/10 text-primary" },
-  completed: { icon: CheckCircle, class: "bg-success/10 text-success" },
-  cancelled: { icon: XCircle, class: "bg-destructive/10 text-destructive" },
-};
+type Profile = { user_id: string; full_name: string | null };
 
-const SERVICE_TYPES = ["regular", "oil_change", "brake", "ac", "body_repair", "other"];
+const STATUS_FLOW = [
+  { value: "pending", label: "Pending", icon: Clock, class: "bg-warning/10 text-warning" },
+  { value: "confirmed", label: "Confirmed", icon: CheckCircle, class: "bg-info/10 text-info" },
+  { value: "in_progress", label: "Inspection Done", icon: Eye, class: "bg-accent/10 text-accent-foreground" },
+  { value: "completed", label: "Completed", icon: CheckCircle, class: "bg-success/10 text-success" },
+  { value: "cancelled", label: "Cancelled", icon: XCircle, class: "bg-destructive/10 text-destructive" },
+];
+
+const SERVICE_TYPES = ["Oil Change", "General Service", "Repair", "Inspection", "Custom"];
 
 export default function ServiceBookingsPage() {
-  const { tenantId } = useAuth();
+  const { tenantId, roles } = useAuth();
+  const isExecutive = roles.includes("staff") && !roles.includes("tenant_admin") && !roles.includes("super_admin");
+
   const [bookings, setBookings] = useState<ServiceBooking[]>([]);
+  const [teamMembers, setTeamMembers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [phoneSearch, setPhoneSearch] = useState("");
@@ -55,18 +70,30 @@ export default function ServiceBookingsPage() {
   const [dateTo, setDateTo] = useState<Date | undefined>();
   const [tab, setTab] = useState("all");
 
+  // Job detail dialog
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedJob, setSelectedJob] = useState<ServiceBooking | null>(null);
+  const [jobForm, setJobForm] = useState({ work_notes: "", parts_required: "", estimated_cost: "", approval_status: "pending", status: "pending" });
+  const [saving, setSaving] = useState(false);
+
   const fetchBookings = useCallback(async () => {
     if (!tenantId) return;
     setLoading(true);
-    let query = supabase.from("service_bookings").select("*").eq("tenant_id", tenantId).order("booking_date", { ascending: false });
-    if (statusFilter !== "all") query = query.eq("status", statusFilter as any);
-    if (serviceTypeFilter !== "all") query = query.eq("service_type", serviceTypeFilter);
-    if (dateFrom) query = query.gte("booking_date", format(dateFrom, "yyyy-MM-dd"));
-    if (dateTo) query = query.lte("booking_date", format(dateTo, "yyyy-MM-dd"));
-    if (search.trim()) query = query.ilike("customer_name", `%${search.trim()}%`);
-    if (phoneSearch.trim()) query = query.ilike("phone_number", `%${phoneSearch.trim()}%`);
-    const { data } = await query;
-    if (data) setBookings(data);
+    const [bookRes, teamRes] = await Promise.all([
+      (() => {
+        let query = supabase.from("service_bookings").select("*").eq("tenant_id", tenantId).order("booking_date", { ascending: false });
+        if (statusFilter !== "all") query = query.eq("status", statusFilter as any);
+        if (serviceTypeFilter !== "all") query = query.ilike("service_type", `%${serviceTypeFilter}%`);
+        if (dateFrom) query = query.gte("booking_date", format(dateFrom, "yyyy-MM-dd"));
+        if (dateTo) query = query.lte("booking_date", format(dateTo, "yyyy-MM-dd"));
+        if (search.trim()) query = query.ilike("customer_name", `%${search.trim()}%`);
+        if (phoneSearch.trim()) query = query.ilike("phone_number", `%${phoneSearch.trim()}%`);
+        return query;
+      })(),
+      supabase.from("profiles").select("user_id, full_name").eq("tenant_id", tenantId),
+    ]);
+    if (bookRes.data) setBookings(bookRes.data as ServiceBooking[]);
+    if (teamRes.data) setTeamMembers(teamRes.data);
     setLoading(false);
   }, [tenantId, statusFilter, serviceTypeFilter, dateFrom, dateTo, search, phoneSearch]);
 
@@ -80,33 +107,76 @@ export default function ServiceBookingsPage() {
 
   const filterByTab = (list: ServiceBooking[]) => {
     switch (tab) {
-      case "today": return list.filter((b) => isToday(new Date(b.booking_date)));
-      case "upcoming": return list.filter((b) => isFuture(new Date(b.booking_date)) && !isToday(new Date(b.booking_date)));
-      case "completed": return list.filter((b) => b.status === "completed");
+      case "today": return list.filter(b => isToday(new Date(b.booking_date)));
+      case "upcoming": return list.filter(b => isFuture(new Date(b.booking_date)) && !isToday(new Date(b.booking_date)));
+      case "completed": return list.filter(b => b.status === "completed");
       default: return list;
     }
   };
 
   const filtered = filterByTab(bookings);
-  const todayCount = bookings.filter((b) => isToday(new Date(b.booking_date))).length;
-  const upcomingCount = bookings.filter((b) => isFuture(new Date(b.booking_date)) && !isToday(new Date(b.booking_date))).length;
-  const completedCount = bookings.filter((b) => b.status === "completed").length;
+  const todayCount = bookings.filter(b => isToday(new Date(b.booking_date))).length;
+  const upcomingCount = bookings.filter(b => isFuture(new Date(b.booking_date)) && !isToday(new Date(b.booking_date))).length;
+  const completedCount = bookings.filter(b => b.status === "completed").length;
 
-  const handleStatusUpdate = async (id: string, newStatus: string) => {
-    await supabase.from("service_bookings").update({ status: newStatus as any }).eq("id", id);
+  const getTeamName = (id: string | null) => {
+    if (!id) return "—";
+    return teamMembers.find(t => t.user_id === id)?.full_name || "Unknown";
   };
+
+  const openJobDetail = (b: ServiceBooking) => {
+    setSelectedJob(b);
+    setJobForm({
+      work_notes: b.work_notes || "",
+      parts_required: b.parts_required || "",
+      estimated_cost: b.estimated_cost?.toString() || "",
+      approval_status: b.approval_status || "pending",
+      status: b.status,
+    });
+    setDetailOpen(true);
+  };
+
+  const saveJobDetail = async () => {
+    if (!selectedJob) return;
+    setSaving(true);
+    const { error } = await supabase
+      .from("service_bookings")
+      .update({
+        work_notes: jobForm.work_notes || null,
+        parts_required: jobForm.parts_required || null,
+        estimated_cost: jobForm.estimated_cost ? parseFloat(jobForm.estimated_cost) : null,
+        approval_status: jobForm.approval_status,
+        status: jobForm.status as any,
+      } as any)
+      .eq("id", selectedJob.id);
+    if (error) toast.error(error.message);
+    else { toast.success("Job updated"); setDetailOpen(false); fetchBookings(); }
+    setSaving(false);
+  };
+
+  const handleAssign = async (bookingId: string, userId: string) => {
+    const { error } = await supabase
+      .from("service_bookings")
+      .update({ assigned_to: userId || null } as any)
+      .eq("id", bookingId);
+    if (error) toast.error(error.message);
+    else { toast.success("Assigned"); fetchBookings(); }
+  };
+
+  const getStatusConfig = (status: string) => STATUS_FLOW.find(s => s.value === status) || STATUS_FLOW[0];
 
   return (
     <>
-      <TopBar title="Service Bookings" />
+      <TopBar title={isExecutive ? "My Jobs" : "Service Bookings"} />
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        {/* KPIs */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { label: "Total", value: bookings.length, icon: Wrench, color: "text-primary" },
             { label: "Today", value: todayCount, icon: CalendarIcon, color: "text-info" },
             { label: "Upcoming", value: upcomingCount, icon: Clock, color: "text-warning" },
             { label: "Completed", value: completedCount, icon: CheckCircle, color: "text-success" },
-          ].map((kpi) => (
+          ].map(kpi => (
             <div key={kpi.label} className="glass-card rounded-xl p-4 flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center">
                 <kpi.icon className={`w-4 h-4 ${kpi.color}`} />
@@ -119,32 +189,29 @@ export default function ServiceBookingsPage() {
           ))}
         </div>
 
+        {/* Filters */}
         <div className="glass-card rounded-xl p-4">
           <div className="flex flex-wrap gap-3">
             <div className="relative flex-1 min-w-[180px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Search customer..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9 text-sm" />
+              <Input placeholder="Search customer..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9 text-sm" />
             </div>
             <div className="relative min-w-[160px]">
               <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Search phone..." value={phoneSearch} onChange={(e) => setPhoneSearch(e.target.value)} className="pl-9 h-9 text-sm" />
+              <Input placeholder="Search phone..." value={phoneSearch} onChange={e => setPhoneSearch(e.target.value)} className="pl-9 h-9 text-sm" />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="h-9 w-[130px] text-sm"><SelectValue placeholder="Status" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="confirmed">Confirmed</SelectItem>
-                <SelectItem value="in_progress">In Progress</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
+                {STATUS_FLOW.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={serviceTypeFilter} onValueChange={setServiceTypeFilter}>
               <SelectTrigger className="h-9 w-[140px] text-sm"><SelectValue placeholder="Service Type" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
-                {SERVICE_TYPES.map((t) => <SelectItem key={t} value={t}>{t.replace("_", " ")}</SelectItem>)}
+                {SERVICE_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
               </SelectContent>
             </Select>
             <Popover>
@@ -176,6 +243,7 @@ export default function ServiceBookingsPage() {
           </div>
         </div>
 
+        {/* Tabs */}
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
             <TabsTrigger value="all">All ({bookings.length})</TabsTrigger>
@@ -198,39 +266,60 @@ export default function ServiceBookingsPage() {
                     <thead>
                       <tr className="border-b border-border bg-muted/30">
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Customer</th>
-                        <th className="text-left py-3 px-4 text-muted-foreground font-medium">Phone</th>
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium hidden lg:table-cell">Vehicle</th>
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Service</th>
-                        <th className="text-left py-3 px-4 text-muted-foreground font-medium">Date</th>
+                        <th className="text-left py-3 px-4 text-muted-foreground font-medium hidden md:table-cell">Assigned</th>
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Status</th>
-                        <th className="text-left py-3 px-4 text-muted-foreground font-medium hidden md:table-cell">KMs</th>
+                        <th className="text-left py-3 px-4 text-muted-foreground font-medium hidden md:table-cell">Approval</th>
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filtered.map((b) => {
-                        const sc = STATUS_CONFIG[b.status] || STATUS_CONFIG.pending;
+                      {filtered.map(b => {
+                        const sc = getStatusConfig(b.status);
                         const StatusIcon = sc.icon;
                         return (
                           <tr key={b.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors">
-                            <td className="py-3 px-4 font-medium text-foreground">{b.customer_name}</td>
-                            <td className="py-3 px-4 text-muted-foreground font-mono text-xs">{b.phone_number}</td>
-                            <td className="py-3 px-4 text-foreground hidden lg:table-cell">{b.vehicle_model}</td>
-                            <td className="py-3 px-4"><Badge variant="outline" className="text-xs capitalize">{b.service_type.replace("_", " ")}</Badge></td>
-                            <td className="py-3 px-4 text-foreground">{format(new Date(b.booking_date), "MMM d, yyyy")}{b.preferred_time && <span className="text-xs text-muted-foreground block">{b.preferred_time}</span>}</td>
-                            <td className="py-3 px-4"><span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${sc.class}`}><StatusIcon className="w-3 h-3" />{b.status.replace("_", " ")}</span></td>
-                            <td className="py-3 px-4 text-muted-foreground hidden md:table-cell">{b.kms_driven ? `${b.kms_driven.toLocaleString()} km` : "—"}</td>
                             <td className="py-3 px-4">
-                              <Select value={b.status} onValueChange={(v) => handleStatusUpdate(b.id, v)}>
-                                <SelectTrigger className="h-7 w-[110px] text-xs"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="pending">Pending</SelectItem>
-                                  <SelectItem value="confirmed">Confirmed</SelectItem>
-                                  <SelectItem value="in_progress">In Progress</SelectItem>
-                                  <SelectItem value="completed">Completed</SelectItem>
-                                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                                </SelectContent>
-                              </Select>
+                              <p className="font-medium text-foreground">{b.customer_name}</p>
+                              <p className="text-xs text-muted-foreground font-mono">{b.phone_number}</p>
+                            </td>
+                            <td className="py-3 px-4 text-foreground hidden lg:table-cell">{b.vehicle_model}</td>
+                            <td className="py-3 px-4">
+                              <Badge variant="outline" className="text-xs capitalize">{b.service_type}</Badge>
+                            </td>
+                            <td className="py-3 px-4 hidden md:table-cell">
+                              {!isExecutive ? (
+                                <Select value={b.assigned_to || ""} onValueChange={v => handleAssign(b.id, v)}>
+                                  <SelectTrigger className="h-7 w-[120px] text-xs"><SelectValue placeholder="Assign" /></SelectTrigger>
+                                  <SelectContent>
+                                    {teamMembers.map(t => (
+                                      <SelectItem key={t.user_id} value={t.user_id}>{t.full_name || "Unnamed"}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">{getTeamName(b.assigned_to)}</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${sc.class}`}>
+                                <StatusIcon className="w-3 h-3" />{sc.label}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 hidden md:table-cell">
+                              <Badge variant="outline" className={`text-xs ${
+                                b.approval_status === "approved" ? "bg-success/10 text-success border-success/20" :
+                                b.approval_status === "rejected" ? "bg-destructive/10 text-destructive border-destructive/20" :
+                                "bg-warning/10 text-warning border-warning/20"
+                              }`}>
+                                {b.approval_status || "pending"}
+                              </Badge>
+                            </td>
+                            <td className="py-3 px-4">
+                              <Button variant="ghost" size="sm" onClick={() => openJobDetail(b)}>
+                                <ClipboardList className="w-4 h-4 mr-1" /> Details
+                              </Button>
                             </td>
                           </tr>
                         );
@@ -243,6 +332,82 @@ export default function ServiceBookingsPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Job Detail / Update Dialog */}
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Job Details — {selectedJob?.customer_name}</DialogTitle>
+          </DialogHeader>
+          {selectedJob && (
+            <div className="space-y-4">
+              {/* Info */}
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div><span className="text-muted-foreground">Vehicle:</span> <span className="text-foreground font-medium">{selectedJob.vehicle_model}</span></div>
+                <div><span className="text-muted-foreground">Service:</span> <span className="text-foreground font-medium">{selectedJob.service_type}</span></div>
+                <div><span className="text-muted-foreground">Date:</span> <span className="text-foreground">{format(new Date(selectedJob.booking_date), "MMM d, yyyy")}</span></div>
+                <div><span className="text-muted-foreground">Phone:</span> <span className="text-foreground font-mono text-xs">{selectedJob.phone_number}</span></div>
+              </div>
+              {selectedJob.issue_description && (
+                <div className="text-sm">
+                  <span className="text-muted-foreground">Issue:</span>
+                  <p className="text-foreground mt-1">{selectedJob.issue_description}</p>
+                </div>
+              )}
+
+              <hr className="border-border" />
+
+              {/* Status */}
+              <div className="space-y-2">
+                <Label className="text-xs">Job Status</Label>
+                <Select value={jobForm.status} onValueChange={v => setJobForm(f => ({ ...f, status: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {STATUS_FLOW.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Work Notes */}
+              <div className="space-y-2">
+                <Label className="text-xs">Work Done / Issues Found</Label>
+                <Textarea value={jobForm.work_notes} onChange={e => setJobForm(f => ({ ...f, work_notes: e.target.value }))} rows={3} placeholder="Describe work done, issues found..." />
+              </div>
+
+              {/* Parts Required */}
+              <div className="space-y-2">
+                <Label className="text-xs">Parts Required</Label>
+                <Textarea value={jobForm.parts_required} onChange={e => setJobForm(f => ({ ...f, parts_required: e.target.value }))} rows={2} placeholder="List required parts..." />
+              </div>
+
+              {/* Quotation */}
+              <div className="space-y-2">
+                <Label className="text-xs">Estimated Cost (₹)</Label>
+                <Input type="number" value={jobForm.estimated_cost} onChange={e => setJobForm(f => ({ ...f, estimated_cost: e.target.value }))} />
+              </div>
+
+              {/* Approval */}
+              <div className="space-y-2">
+                <Label className="text-xs">Approval Status</Label>
+                <Select value={jobForm.approval_status} onValueChange={v => setJobForm(f => ({ ...f, approval_status: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="approved">Approved</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDetailOpen(false)}>Cancel</Button>
+            <Button onClick={saveJobDetail} disabled={saving}>
+              {saving && <Loader2 className="w-4 h-4 mr-1 animate-spin" />} Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
