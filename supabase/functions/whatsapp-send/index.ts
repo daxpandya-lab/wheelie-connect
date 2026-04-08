@@ -12,15 +12,55 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // JWT validation
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+    // Verify user
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claims, error: claimsErr } = await userClient.auth.getClaims(token);
+    if (claimsErr || !claims?.claims?.sub) {
+      return new Response(JSON.stringify({ error: "Invalid token" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    const { tenant_id, max_batch } = await req.json();
+    const body = await req.json();
+    const tenant_id = typeof body.tenant_id === "string" ? body.tenant_id.trim() : null;
+    const max_batch = typeof body.max_batch === "number" && body.max_batch > 0 ? Math.min(body.max_batch, 100) : 50;
 
-    if (!tenant_id) {
-      return new Response(JSON.stringify({ error: "tenant_id required" }), {
+    if (!tenant_id || !/^[0-9a-f-]{36}$/.test(tenant_id)) {
+      return new Response(JSON.stringify({ error: "Valid tenant_id required" }), {
         status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Verify tenant is active
+    const { data: tenant } = await supabase
+      .from("tenants")
+      .select("status")
+      .eq("id", tenant_id)
+      .single();
+
+    if (!tenant || tenant.status !== "active") {
+      return new Response(JSON.stringify({ error: "Tenant is not active" }), {
+        status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
