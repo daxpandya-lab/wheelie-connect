@@ -73,11 +73,11 @@ export default function FlowBuilderPage() {
         tenant_id: tenantId,
         name: s.name,
         description: s.description,
-        flow_data: s.flow_data as unknown as Record<string, unknown>,
+        flow_data: JSON.parse(JSON.stringify(s.flow_data)),
         is_active: false,
         language: s.language,
         channel: s.channel,
-      });
+      } as any);
     }
     setSaving(false);
     toast.success("Default flows created!");
@@ -96,7 +96,7 @@ export default function FlowBuilderPage() {
     if (!activeFlowId) return;
     setSaving(true);
     const { error } = await supabase.from("chatbot_flows")
-      .update({ flow_data: flowData as unknown as Record<string, unknown>, name: flowName })
+      .update({ flow_data: JSON.parse(JSON.stringify(flowData)), name: flowName } as any)
       .eq("id", activeFlowId);
     setSaving(false);
     if (error) toast.error(error.message);
