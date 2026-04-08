@@ -65,6 +65,7 @@ const App = () => (
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/team" element={<UserManagementPage />} />
                 <Route path="/flow-builder" element={<FlowBuilderPage />} />
+                <Route path="/automations" element={<AutomationsPage />} />
                 <Route path="/super-admin" element={
                   <ProtectedRoute requiredRoles={["super_admin"]}>
                     <SuperAdminPage />
