@@ -218,6 +218,16 @@ export default function SuperAdminPage() {
     }
   };
 
+  const handleDelete = async (tenant: Tenant) => {
+    if (!window.confirm(`Are you sure you want to delete "${tenant.name}"? This action cannot be undone.`)) return;
+    const { error } = await supabase.from("tenants").delete().eq("id", tenant.id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Dealer deleted");
+      fetchTenants();
+    }
+  };
+
   const openEdit = (t: Tenant) => {
     setEditForm({
       id: t.id,
