@@ -857,9 +857,13 @@ export type Database = {
       }
       tenants: {
         Row: {
+          address: string | null
+          contact_person: string | null
           created_at: string
+          email: string | null
           id: string
           name: string
+          phone: string | null
           plan: Database["public"]["Enums"]["tenant_plan"]
           settings: Json | null
           slug: string
@@ -870,9 +874,13 @@ export type Database = {
           whatsapp_config: Json | null
         }
         Insert: {
+          address?: string | null
+          contact_person?: string | null
           created_at?: string
+          email?: string | null
           id?: string
           name: string
+          phone?: string | null
           plan?: Database["public"]["Enums"]["tenant_plan"]
           settings?: Json | null
           slug: string
@@ -883,9 +891,13 @@ export type Database = {
           whatsapp_config?: Json | null
         }
         Update: {
+          address?: string | null
+          contact_person?: string | null
           created_at?: string
+          email?: string | null
           id?: string
           name?: string
+          phone?: string | null
           plan?: Database["public"]["Enums"]["tenant_plan"]
           settings?: Json | null
           slug?: string
