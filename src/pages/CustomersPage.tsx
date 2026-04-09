@@ -262,9 +262,11 @@ export default function CustomersPage() {
               className="pl-9 w-72"
             />
           </div>
-          <Button onClick={() => setShowCreate(true)}>
-            <Plus className="w-4 h-4 mr-1" /> Add Customer
-          </Button>
+          {!isExecutive && (
+            <Button onClick={() => setShowCreate(true)}>
+              <Plus className="w-4 h-4 mr-1" /> Add Customer
+            </Button>
+          )}
         </div>
 
         {/* Tabs */}
