@@ -49,7 +49,9 @@ type Booking = {
 type Profile = { user_id: string; full_name: string | null };
 
 export default function CustomersPage() {
-  const { tenantId } = useAuth();
+  const { tenantId, roles, user } = useAuth();
+  const isExecutive = roles.includes("staff") && !roles.includes("tenant_admin") && !roles.includes("super_admin");
+
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [teamMembers, setTeamMembers] = useState<Profile[]>([]);
@@ -77,13 +79,30 @@ export default function CustomersPage() {
   const fetchData = async () => {
     if (!tenantId) return;
     setLoading(true);
+
+    // Build bookings query with RBAC filtering
+    let bookQuery = supabase.from("service_bookings").select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false });
+    if (isExecutive && user?.id) {
+      bookQuery = bookQuery.eq("assigned_to", user.id);
+    }
+
     const [custRes, bookRes, teamRes] = await Promise.all([
       supabase.from("customers").select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false }),
-      supabase.from("service_bookings").select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false }),
+      bookQuery,
       supabase.from("profiles").select("user_id, full_name").eq("tenant_id", tenantId),
     ]);
-    if (custRes.data) setCustomers(custRes.data as Customer[]);
-    if (bookRes.data) setBookings(bookRes.data as Booking[]);
+
+    let allCustomers = (custRes.data || []) as Customer[];
+    const allBookings = (bookRes.data || []) as Booking[];
+
+    // For executives, only show customers that have bookings assigned to them
+    if (isExecutive && user?.id) {
+      const assignedCustomerIds = new Set(allBookings.map(b => b.customer_id).filter(Boolean));
+      allCustomers = allCustomers.filter(c => assignedCustomerIds.has(c.id));
+    }
+
+    setCustomers(allCustomers);
+    setBookings(allBookings);
     if (teamRes.data) setTeamMembers(teamRes.data);
     setLoading(false);
   };
