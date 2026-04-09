@@ -540,6 +540,7 @@ export type Database = {
         Row: {
           address: string | null
           area: string | null
+          assigned_to: string | null
           city: string | null
           created_at: string
           email: string | null
@@ -553,6 +554,7 @@ export type Database = {
         Insert: {
           address?: string | null
           area?: string | null
+          assigned_to?: string | null
           city?: string | null
           created_at?: string
           email?: string | null
@@ -566,6 +568,7 @@ export type Database = {
         Update: {
           address?: string | null
           area?: string | null
+          assigned_to?: string | null
           city?: string | null
           created_at?: string
           email?: string | null
@@ -706,8 +709,10 @@ export type Database = {
         Row: {
           avatar_url: string | null
           created_at: string
+          email: string | null
           full_name: string | null
           id: string
+          initial_password: string | null
           phone: string | null
           tenant_id: string | null
           updated_at: string
@@ -716,8 +721,10 @@ export type Database = {
         Insert: {
           avatar_url?: string | null
           created_at?: string
+          email?: string | null
           full_name?: string | null
           id?: string
+          initial_password?: string | null
           phone?: string | null
           tenant_id?: string | null
           updated_at?: string
@@ -726,8 +733,10 @@ export type Database = {
         Update: {
           avatar_url?: string | null
           created_at?: string
+          email?: string | null
           full_name?: string | null
           id?: string
+          initial_password?: string | null
           phone?: string | null
           tenant_id?: string | null
           updated_at?: string
