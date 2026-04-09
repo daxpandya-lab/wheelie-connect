@@ -31,10 +31,12 @@ interface TeamMember {
   role: AppRole;
   full_name: string | null;
   phone: string | null;
+  email: string | null;
+  initial_password: string | null;
 }
 
 export default function UserManagementPage() {
-  const { tenantId, isTenantAdmin, isSuperAdmin, user, session } = useAuth();
+  const { tenantId, isTenantAdmin, isSuperAdmin, user } = useAuth();
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -43,6 +45,7 @@ export default function UserManagementPage() {
   const [resetUserId, setResetUserId] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [submitting, setSubmitting] = useState(false);
 
   const [form, setForm] = useState({ name: "", phone: "", email: "", password: "", role: "staff" as string });
@@ -51,30 +54,42 @@ export default function UserManagementPage() {
 
   const fetchData = async () => {
     if (!tenantId) { setLoading(false); return; }
-    const { data: rolesData } = await supabase
-      .from("user_roles")
-      .select("user_id, role")
-      .eq("tenant_id", tenantId);
-
-    if (rolesData && rolesData.length > 0) {
-      const userIds = rolesData.map(r => r.user_id);
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("user_id, full_name, phone")
-        .in("user_id", userIds);
-
-      const merged: TeamMember[] = rolesData.map(r => {
-        const p = profiles?.find(pr => pr.user_id === r.user_id);
-        return {
-          user_id: r.user_id,
-          role: r.role,
-          full_name: p?.full_name ?? null,
-          phone: p?.phone ?? null,
-        };
+    try {
+      const { data, error } = await supabase.functions.invoke("manage-team", {
+        body: { action: "list", tenant_id: tenantId },
       });
-      setMembers(merged);
-    } else {
-      setMembers([]);
+      if (error) throw error;
+      if (data?.members) setMembers(data.members);
+      else setMembers([]);
+    } catch {
+      // Fallback to direct query if edge function fails
+      const { data: rolesData } = await supabase
+        .from("user_roles")
+        .select("user_id, role")
+        .eq("tenant_id", tenantId);
+
+      if (rolesData && rolesData.length > 0) {
+        const userIds = rolesData.map(r => r.user_id);
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("user_id, full_name, phone, email, initial_password")
+          .in("user_id", userIds);
+
+        const merged: TeamMember[] = rolesData.map(r => {
+          const p = profiles?.find(pr => pr.user_id === r.user_id);
+          return {
+            user_id: r.user_id,
+            role: r.role,
+            full_name: p?.full_name ?? null,
+            phone: p?.phone ?? null,
+            email: (p as any)?.email ?? null,
+            initial_password: (p as any)?.initial_password ?? null,
+          };
+        });
+        setMembers(merged);
+      } else {
+        setMembers([]);
+      }
     }
     setLoading(false);
   };
@@ -99,6 +114,7 @@ export default function UserManagementPage() {
           user_id: editingMember.user_id,
           name: form.name,
           phone: form.phone,
+          email: form.email,
           role: form.role,
         });
         toast.success("Team member updated");
@@ -150,6 +166,7 @@ export default function UserManagementPage() {
       toast.success("Password reset successfully");
       setResetDialogOpen(false);
       setNewPassword("");
+      fetchData();
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -165,13 +182,17 @@ export default function UserManagementPage() {
 
   const openEdit = (m: TeamMember) => {
     setEditingMember(m);
-    setForm({ name: m.full_name || "", phone: m.phone || "", email: "", password: "", role: m.role });
+    setForm({ name: m.full_name || "", phone: m.phone || "", email: m.email || "", password: "", role: m.role });
     setDialogOpen(true);
   };
 
   const resetForm = () => {
     setForm({ name: "", phone: "", email: "", password: "", role: "staff" });
     setEditingMember(null);
+  };
+
+  const togglePasswordVisibility = (userId: string) => {
+    setShowPasswords(prev => ({ ...prev, [userId]: !prev[userId] }));
   };
 
   const roleLabel = (r: AppRole) =>
@@ -204,7 +225,9 @@ export default function UserManagementPage() {
             <TableHeader>
               <TableRow className="bg-secondary/50">
                 <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
                 <TableHead>Phone</TableHead>
+                <TableHead>Password</TableHead>
                 <TableHead>Role</TableHead>
                 {canManage && <TableHead className="w-12"></TableHead>}
               </TableRow>
@@ -212,13 +235,13 @@ export default function UserManagementPage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-8">
+                  <TableCell colSpan={6} className="text-center py-8">
                     <Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
               ) : members.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                     No team members yet
                   </TableCell>
                 </TableRow>
@@ -232,7 +255,22 @@ export default function UserManagementPage() {
                       <span className="font-medium text-foreground">{m.full_name || "Unknown"}</span>
                     </div>
                   </TableCell>
+                  <TableCell className="text-muted-foreground text-xs">{m.email || "—"}</TableCell>
                   <TableCell className="text-muted-foreground font-mono text-xs">{m.phone || "—"}</TableCell>
+                  <TableCell>
+                    {m.initial_password ? (
+                      <div className="flex items-center gap-1">
+                        <span className="font-mono text-xs text-foreground">
+                          {showPasswords[m.user_id] ? m.initial_password : "••••••••"}
+                        </span>
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => togglePasswordVisibility(m.user_id)}>
+                          {showPasswords[m.user_id] ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${roleColor(m.role)}`}>
                       {roleLabel(m.role)}
@@ -283,33 +321,37 @@ export default function UserManagementPage() {
                 <Label>Phone Number</Label>
                 <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+91 9876543210" />
               </div>
+              <div className="space-y-2">
+                <Label>Email {editingMember ? "" : "(Login Username) *"}</Label>
+                <Input
+                  type="email"
+                  value={form.email}
+                  onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                  placeholder="executive@dealer.com"
+                  disabled={!!editingMember}
+                />
+              </div>
               {!editingMember && (
-                <>
-                  <div className="space-y-2">
-                    <Label>Email (Login Username) *</Label>
-                    <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="executive@dealer.com" />
+                <div className="space-y-2">
+                  <Label>Password *</Label>
+                  <div className="relative">
+                    <Input
+                      type={showPassword ? "text" : "password"}
+                      value={form.password}
+                      onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                      placeholder="Min 6 characters"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </Button>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Password *</Label>
-                    <div className="relative">
-                      <Input
-                        type={showPassword ? "text" : "password"}
-                        value={form.password}
-                        onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                        placeholder="Min 6 characters"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
-                        onClick={() => setShowPassword(!showPassword)}
-                      >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </Button>
-                    </div>
-                  </div>
-                </>
+                </div>
               )}
               <div className="space-y-2">
                 <Label>Role</Label>
