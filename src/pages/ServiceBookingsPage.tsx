@@ -20,27 +20,14 @@ import {
 import { toast } from "sonner";
 
 type ServiceBooking = {
-  id: string;
-  customer_name: string;
-  phone_number: string;
-  vehicle_model: string;
-  kms_driven: number | null;
-  service_type: string;
-  booking_date: string;
-  preferred_time: string | null;
-  status: string;
-  pickup_required: boolean | null;
-  drop_required: boolean | null;
-  notes: string | null;
-  total_amount: number | null;
-  assigned_to: string | null;
-  issue_description: string | null;
-  estimated_cost: number | null;
-  approval_status: string | null;
-  quotation_notes: string | null;
-  work_notes: string | null;
-  parts_required: string | null;
-  created_at: string;
+  id: string; customer_name: string; phone_number: string; vehicle_model: string;
+  kms_driven: number | null; service_type: string; booking_date: string;
+  preferred_time: string | null; status: string; pickup_required: boolean | null;
+  drop_required: boolean | null; notes: string | null; total_amount: number | null;
+  assigned_to: string | null; issue_description: string | null;
+  estimated_cost: number | null; approval_status: string | null;
+  quotation_notes: string | null; work_notes: string | null;
+  parts_required: string | null; created_at: string;
 };
 
 type Profile = { user_id: string; full_name: string | null };
@@ -56,7 +43,7 @@ const STATUS_FLOW = [
 const SERVICE_TYPES = ["Oil Change", "General Service", "Repair", "Inspection", "Custom"];
 
 export default function ServiceBookingsPage() {
-  const { tenantId, roles } = useAuth();
+  const { tenantId, roles, user } = useAuth();
   const isExecutive = roles.includes("staff") && !roles.includes("tenant_admin") && !roles.includes("super_admin");
 
   const [bookings, setBookings] = useState<ServiceBooking[]>([]);
@@ -70,7 +57,6 @@ export default function ServiceBookingsPage() {
   const [dateTo, setDateTo] = useState<Date | undefined>();
   const [tab, setTab] = useState("all");
 
-  // Job detail dialog
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState<ServiceBooking | null>(null);
   const [jobForm, setJobForm] = useState({ work_notes: "", parts_required: "", estimated_cost: "", approval_status: "pending", status: "pending" });
@@ -82,6 +68,10 @@ export default function ServiceBookingsPage() {
     const [bookRes, teamRes] = await Promise.all([
       (() => {
         let query = supabase.from("service_bookings").select("*").eq("tenant_id", tenantId).order("booking_date", { ascending: false });
+        // RBAC: Executive only sees assigned bookings
+        if (isExecutive && user?.id) {
+          query = query.eq("assigned_to", user.id);
+        }
         if (statusFilter !== "all") query = query.eq("status", statusFilter as any);
         if (serviceTypeFilter !== "all") query = query.ilike("service_type", `%${serviceTypeFilter}%`);
         if (dateFrom) query = query.gte("booking_date", format(dateFrom, "yyyy-MM-dd"));
@@ -95,7 +85,7 @@ export default function ServiceBookingsPage() {
     if (bookRes.data) setBookings(bookRes.data as ServiceBooking[]);
     if (teamRes.data) setTeamMembers(teamRes.data);
     setLoading(false);
-  }, [tenantId, statusFilter, serviceTypeFilter, dateFrom, dateTo, search, phoneSearch]);
+  }, [tenantId, statusFilter, serviceTypeFilter, dateFrom, dateTo, search, phoneSearch, isExecutive, user?.id]);
 
   useEffect(() => { fetchBookings(); }, [fetchBookings]);
 
@@ -127,11 +117,9 @@ export default function ServiceBookingsPage() {
   const openJobDetail = (b: ServiceBooking) => {
     setSelectedJob(b);
     setJobForm({
-      work_notes: b.work_notes || "",
-      parts_required: b.parts_required || "",
+      work_notes: b.work_notes || "", parts_required: b.parts_required || "",
       estimated_cost: b.estimated_cost?.toString() || "",
-      approval_status: b.approval_status || "pending",
-      status: b.status,
+      approval_status: b.approval_status || "pending", status: b.status,
     });
     setDetailOpen(true);
   };
@@ -139,15 +127,23 @@ export default function ServiceBookingsPage() {
   const saveJobDetail = async () => {
     if (!selectedJob) return;
     setSaving(true);
+
+    // Executives can only update work_notes, parts_required, estimated_cost, and status
+    const updateData: Record<string, unknown> = {
+      work_notes: jobForm.work_notes || null,
+      parts_required: jobForm.parts_required || null,
+      estimated_cost: jobForm.estimated_cost ? parseFloat(jobForm.estimated_cost) : null,
+      status: jobForm.status as any,
+    };
+
+    // Only admins can update approval_status
+    if (!isExecutive) {
+      updateData.approval_status = jobForm.approval_status;
+    }
+
     const { error } = await supabase
       .from("service_bookings")
-      .update({
-        work_notes: jobForm.work_notes || null,
-        parts_required: jobForm.parts_required || null,
-        estimated_cost: jobForm.estimated_cost ? parseFloat(jobForm.estimated_cost) : null,
-        approval_status: jobForm.approval_status,
-        status: jobForm.status as any,
-      } as any)
+      .update(updateData as any)
       .eq("id", selectedJob.id);
     if (error) toast.error(error.message);
     else { toast.success("Job updated"); setDetailOpen(false); fetchBookings(); }
@@ -167,7 +163,7 @@ export default function ServiceBookingsPage() {
 
   return (
     <>
-      <TopBar title={isExecutive ? "My Jobs" : "Service Bookings"} />
+      <TopBar title={isExecutive ? "My Assigned Jobs" : "Service Bookings"} />
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
         {/* KPIs */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -257,7 +253,7 @@ export default function ServiceBookingsPage() {
             ) : filtered.length === 0 ? (
               <div className="text-center py-12 glass-card rounded-xl">
                 <AlertCircle className="w-10 h-10 text-muted-foreground mx-auto mb-2" />
-                <p className="text-muted-foreground">No bookings found</p>
+                <p className="text-muted-foreground">{isExecutive ? "No jobs assigned to you" : "No bookings found"}</p>
               </div>
             ) : (
               <div className="glass-card rounded-xl overflow-hidden">
@@ -268,7 +264,7 @@ export default function ServiceBookingsPage() {
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Customer</th>
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium hidden lg:table-cell">Vehicle</th>
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Service</th>
-                        <th className="text-left py-3 px-4 text-muted-foreground font-medium hidden md:table-cell">Assigned</th>
+                        {!isExecutive && <th className="text-left py-3 px-4 text-muted-foreground font-medium hidden md:table-cell">Assigned</th>}
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Status</th>
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium hidden md:table-cell">Approval</th>
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Actions</th>
@@ -288,8 +284,8 @@ export default function ServiceBookingsPage() {
                             <td className="py-3 px-4">
                               <Badge variant="outline" className="text-xs capitalize">{b.service_type}</Badge>
                             </td>
-                            <td className="py-3 px-4 hidden md:table-cell">
-                              {!isExecutive ? (
+                            {!isExecutive && (
+                              <td className="py-3 px-4 hidden md:table-cell">
                                 <Select value={b.assigned_to || ""} onValueChange={v => handleAssign(b.id, v)}>
                                   <SelectTrigger className="h-7 w-[120px] text-xs"><SelectValue placeholder="Assign" /></SelectTrigger>
                                   <SelectContent>
@@ -298,10 +294,8 @@ export default function ServiceBookingsPage() {
                                     ))}
                                   </SelectContent>
                                 </Select>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">{getTeamName(b.assigned_to)}</span>
-                              )}
-                            </td>
+                              </td>
+                            )}
                             <td className="py-3 px-4">
                               <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${sc.class}`}>
                                 <StatusIcon className="w-3 h-3" />{sc.label}
@@ -333,7 +327,7 @@ export default function ServiceBookingsPage() {
         </Tabs>
       </div>
 
-      {/* Job Detail / Update Dialog */}
+      {/* Job Detail Dialog */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -341,25 +335,18 @@ export default function ServiceBookingsPage() {
           </DialogHeader>
           {selectedJob && (
             <div className="space-y-4">
-              {/* Info */}
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div><span className="text-muted-foreground">Vehicle:</span> <span className="text-foreground font-medium">{selectedJob.vehicle_model}</span></div>
                 <div><span className="text-muted-foreground">Service:</span> <span className="text-foreground font-medium">{selectedJob.service_type}</span></div>
-                <div><span className="text-muted-foreground">Date:</span> <span className="text-foreground">{format(new Date(selectedJob.booking_date), "MMM d, yyyy")}</span></div>
+                <div><span className="text-muted-foreground">Date:</span> <span className="text-foreground">{selectedJob.booking_date}</span></div>
                 <div><span className="text-muted-foreground">Phone:</span> <span className="text-foreground font-mono text-xs">{selectedJob.phone_number}</span></div>
+                {selectedJob.issue_description && (
+                  <div className="col-span-2"><span className="text-muted-foreground">Issue:</span> <span className="text-foreground">{selectedJob.issue_description}</span></div>
+                )}
               </div>
-              {selectedJob.issue_description && (
-                <div className="text-sm">
-                  <span className="text-muted-foreground">Issue:</span>
-                  <p className="text-foreground mt-1">{selectedJob.issue_description}</p>
-                </div>
-              )}
 
-              <hr className="border-border" />
-
-              {/* Status */}
               <div className="space-y-2">
-                <Label className="text-xs">Job Status</Label>
+                <Label>Status</Label>
                 <Select value={jobForm.status} onValueChange={v => setJobForm(f => ({ ...f, status: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -368,36 +355,34 @@ export default function ServiceBookingsPage() {
                 </Select>
               </div>
 
-              {/* Work Notes */}
               <div className="space-y-2">
-                <Label className="text-xs">Work Done / Issues Found</Label>
-                <Textarea value={jobForm.work_notes} onChange={e => setJobForm(f => ({ ...f, work_notes: e.target.value }))} rows={3} placeholder="Describe work done, issues found..." />
+                <Label>Work Notes</Label>
+                <Textarea value={jobForm.work_notes} onChange={e => setJobForm(f => ({ ...f, work_notes: e.target.value }))} placeholder="Work done, findings..." rows={3} />
               </div>
 
-              {/* Parts Required */}
               <div className="space-y-2">
-                <Label className="text-xs">Parts Required</Label>
-                <Textarea value={jobForm.parts_required} onChange={e => setJobForm(f => ({ ...f, parts_required: e.target.value }))} rows={2} placeholder="List required parts..." />
+                <Label>Parts Required</Label>
+                <Textarea value={jobForm.parts_required} onChange={e => setJobForm(f => ({ ...f, parts_required: e.target.value }))} placeholder="List parts needed..." rows={2} />
               </div>
 
-              {/* Quotation */}
               <div className="space-y-2">
-                <Label className="text-xs">Estimated Cost (₹)</Label>
-                <Input type="number" value={jobForm.estimated_cost} onChange={e => setJobForm(f => ({ ...f, estimated_cost: e.target.value }))} />
+                <Label>Estimated Cost (₹)</Label>
+                <Input type="number" value={jobForm.estimated_cost} onChange={e => setJobForm(f => ({ ...f, estimated_cost: e.target.value }))} placeholder="0" />
               </div>
 
-              {/* Approval */}
-              <div className="space-y-2">
-                <Label className="text-xs">Approval Status</Label>
-                <Select value={jobForm.approval_status} onValueChange={v => setJobForm(f => ({ ...f, approval_status: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="approved">Approved</SelectItem>
-                    <SelectItem value="rejected">Rejected</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {!isExecutive && (
+                <div className="space-y-2">
+                  <Label>Approval Status</Label>
+                  <Select value={jobForm.approval_status} onValueChange={v => setJobForm(f => ({ ...f, approval_status: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="approved">Approved</SelectItem>
+                      <SelectItem value="rejected">Rejected</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
           )}
           <DialogFooter>

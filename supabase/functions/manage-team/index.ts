@@ -17,7 +17,6 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Verify caller
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return json({ error: "Unauthorized" }, 401);
 
@@ -25,7 +24,6 @@ Deno.serve(async (req) => {
     const { data: { user: caller } } = await supabaseAdmin.auth.getUser(token);
     if (!caller) return json({ error: "Invalid token" }, 401);
 
-    // Check caller is tenant_admin or super_admin
     const { data: callerRoles } = await supabaseAdmin
       .from("user_roles")
       .select("role, tenant_id")
@@ -39,7 +37,6 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const action = body.action;
 
-    // Get caller's tenant_id
     const { data: callerProfile } = await supabaseAdmin
       .from("profiles")
       .select("tenant_id")
@@ -59,7 +56,6 @@ Deno.serve(async (req) => {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email)) return json({ error: "Invalid email format" }, 400);
 
-      // Create auth user
       const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
         email: email.trim().toLowerCase(),
         password,
@@ -68,14 +64,15 @@ Deno.serve(async (req) => {
       });
       if (authError) return json({ error: authError.message }, 400);
 
-      // Update profile with tenant_id and phone
+      // Update profile with tenant_id, phone, email and initial_password
       await supabaseAdmin.from("profiles").update({
         tenant_id: targetTenantId,
         full_name: name.trim(),
         phone: phone?.trim() || null,
+        email: email.trim().toLowerCase(),
+        initial_password: password,
       }).eq("user_id", authUser.user.id);
 
-      // Assign role
       const appRole = role === "tenant_admin" ? "tenant_admin" : "staff";
       await supabaseAdmin.from("user_roles").insert({
         user_id: authUser.user.id,
@@ -87,10 +84,9 @@ Deno.serve(async (req) => {
     }
 
     if (action === "update") {
-      const { user_id, name, phone, role } = body;
+      const { user_id, name, phone, email, role } = body;
       if (!user_id) return json({ error: "user_id required" }, 400);
 
-      // Verify target user belongs to same tenant
       const { data: targetProfile } = await supabaseAdmin
         .from("profiles")
         .select("tenant_id")
@@ -101,15 +97,14 @@ Deno.serve(async (req) => {
         return json({ error: "Cannot modify user from another tenant" }, 403);
       }
 
-      // Update profile
       const profileUpdate: Record<string, unknown> = {};
       if (name !== undefined) profileUpdate.full_name = name.trim();
       if (phone !== undefined) profileUpdate.phone = phone?.trim() || null;
+      if (email !== undefined) profileUpdate.email = email?.trim() || null;
       if (Object.keys(profileUpdate).length > 0) {
         await supabaseAdmin.from("profiles").update(profileUpdate).eq("user_id", user_id);
       }
 
-      // Update role if changed
       if (role) {
         const appRole = role === "tenant_admin" ? "tenant_admin" : "staff";
         await supabaseAdmin.from("user_roles")
@@ -125,7 +120,6 @@ Deno.serve(async (req) => {
       const { user_id } = body;
       if (!user_id) return json({ error: "user_id required" }, 400);
 
-      // Verify target user belongs to same tenant
       const { data: targetProfile } = await supabaseAdmin
         .from("profiles")
         .select("tenant_id")
@@ -136,10 +130,8 @@ Deno.serve(async (req) => {
         return json({ error: "Cannot delete user from another tenant" }, 403);
       }
 
-      // Don't allow deleting yourself
       if (user_id === caller.id) return json({ error: "Cannot delete yourself" }, 400);
 
-      // Delete auth user (cascades to profiles and user_roles)
       const { error } = await supabaseAdmin.auth.admin.deleteUser(user_id);
       if (error) return json({ error: error.message }, 400);
 
@@ -154,7 +146,48 @@ Deno.serve(async (req) => {
       const { error } = await supabaseAdmin.auth.admin.updateUserById(user_id, { password: new_password });
       if (error) return json({ error: error.message }, 400);
 
+      // Update stored password for visibility
+      await supabaseAdmin.from("profiles").update({ initial_password: new_password }).eq("user_id", user_id);
+
       return json({ success: true });
+    }
+
+    if (action === "list") {
+      // Return team members with email and password for admin visibility
+      const targetTenantId = body.tenant_id || callerTenantId;
+      if (!targetTenantId) return json({ error: "No tenant context" }, 400);
+
+      // Only allow super_admin to query other tenants
+      if (!isSuperAdmin && targetTenantId !== callerTenantId) {
+        return json({ error: "Forbidden" }, 403);
+      }
+
+      const { data: rolesData } = await supabaseAdmin
+        .from("user_roles")
+        .select("user_id, role")
+        .eq("tenant_id", targetTenantId);
+
+      if (!rolesData || rolesData.length === 0) return json({ members: [] });
+
+      const userIds = rolesData.map(r => r.user_id);
+      const { data: profiles } = await supabaseAdmin
+        .from("profiles")
+        .select("user_id, full_name, phone, email, initial_password")
+        .in("user_id", userIds);
+
+      const members = rolesData.map(r => {
+        const p = profiles?.find(pr => pr.user_id === r.user_id);
+        return {
+          user_id: r.user_id,
+          role: r.role,
+          full_name: p?.full_name ?? null,
+          phone: p?.phone ?? null,
+          email: p?.email ?? null,
+          initial_password: p?.initial_password ?? null,
+        };
+      });
+
+      return json({ members });
     }
 
     return json({ error: "Unknown action" }, 400);
