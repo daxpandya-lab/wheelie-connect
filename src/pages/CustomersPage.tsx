@@ -234,7 +234,7 @@ export default function CustomersPage() {
 
   return (
     <>
-      <TopBar title="Customer CRM" />
+      <TopBar title={isExecutive ? "My Customers" : "Customer CRM"} />
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
         {/* KPI Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
