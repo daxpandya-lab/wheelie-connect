@@ -343,12 +343,14 @@ export default function CustomersPage() {
                     <TableHead className="hidden md:table-cell">Service</TableHead>
                     <TableHead className="hidden lg:table-cell">Assigned To</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead className="hidden xl:table-cell">Issue</TableHead>
+                    <TableHead className="hidden xl:table-cell">Exec. Notes</TableHead>
                     <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {bookings.length === 0 ? (
-                    <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No bookings</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No bookings</TableCell></TableRow>
                   ) : bookings.map(b => (
                     <TableRow key={b.id}>
                       <TableCell>
@@ -361,6 +363,12 @@ export default function CustomersPage() {
                       <TableCell>
                         <Badge variant="outline" className={statusBadge(b.status)}>{b.status.replace("_", " ")}</Badge>
                       </TableCell>
+                      <TableCell className="hidden xl:table-cell">
+                        <p className="text-xs text-muted-foreground max-w-[150px] truncate">{b.issue_description || "—"}</p>
+                      </TableCell>
+                      <TableCell className="hidden xl:table-cell">
+                        <p className="text-xs text-muted-foreground max-w-[150px] truncate">{(b as any).executive_notes || "—"}</p>
+                      </TableCell>
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -369,13 +377,19 @@ export default function CustomersPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleStatusChange(b, "confirmed")}>Mark Confirmed</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleStatusChange(b, "in_progress")}>Mark In Progress</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleStatusChange(b, "completed")}>Mark Completed</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleStatusChange(b, "cancelled")}>Cancel</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => openQuotation(b)}>
-                              <FileText className="w-4 h-4 mr-2" /> Quotation
-                            </DropdownMenuItem>
+                            {!isExecutive && (
+                              <>
+                                <DropdownMenuItem onClick={() => handleStatusChange(b, "confirmed")}>Mark Confirmed</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleStatusChange(b, "in_progress")}>Mark In Progress</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleStatusChange(b, "completed")}>Mark Completed</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleStatusChange(b, "cancelled")}>Cancel</DropdownMenuItem>
+                              </>
+                            )}
+                            {!isExecutive && (
+                              <DropdownMenuItem onClick={() => openQuotation(b)}>
+                                <FileText className="w-4 h-4 mr-2" /> Quotation
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>

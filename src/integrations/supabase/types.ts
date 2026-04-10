@@ -792,6 +792,7 @@ export type Database = {
           customer_name: string
           drop_required: boolean | null
           estimated_cost: number | null
+          executive_notes: string | null
           id: string
           issue_description: string | null
           kms_driven: number | null
@@ -819,6 +820,7 @@ export type Database = {
           customer_name: string
           drop_required?: boolean | null
           estimated_cost?: number | null
+          executive_notes?: string | null
           id?: string
           issue_description?: string | null
           kms_driven?: number | null
@@ -846,6 +848,7 @@ export type Database = {
           customer_name?: string
           drop_required?: boolean | null
           estimated_cost?: number | null
+          executive_notes?: string | null
           id?: string
           issue_description?: string | null
           kms_driven?: number | null

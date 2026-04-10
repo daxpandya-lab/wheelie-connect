@@ -59,7 +59,7 @@ export default function ServiceBookingsPage() {
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState<ServiceBooking | null>(null);
-  const [jobForm, setJobForm] = useState({ work_notes: "", parts_required: "", estimated_cost: "", approval_status: "pending", status: "pending" });
+  const [jobForm, setJobForm] = useState({ work_notes: "", parts_required: "", estimated_cost: "", approval_status: "pending", status: "pending", executive_notes: "" });
   const [saving, setSaving] = useState(false);
 
   const fetchBookings = useCallback(async () => {
@@ -120,6 +120,7 @@ export default function ServiceBookingsPage() {
       work_notes: b.work_notes || "", parts_required: b.parts_required || "",
       estimated_cost: b.estimated_cost?.toString() || "",
       approval_status: b.approval_status || "pending", status: b.status,
+      executive_notes: (b as any).executive_notes || "",
     });
     setDetailOpen(true);
   };
@@ -128,12 +129,13 @@ export default function ServiceBookingsPage() {
     if (!selectedJob) return;
     setSaving(true);
 
-    // Executives can only update work_notes, parts_required, estimated_cost, and status
+    // Executives can only update executive_notes, work_notes, parts_required, estimated_cost, and status
     const updateData: Record<string, unknown> = {
       work_notes: jobForm.work_notes || null,
       parts_required: jobForm.parts_required || null,
       estimated_cost: jobForm.estimated_cost ? parseFloat(jobForm.estimated_cost) : null,
       status: jobForm.status as any,
+      executive_notes: jobForm.executive_notes || null,
     };
 
     // Only admins can update approval_status
@@ -340,8 +342,34 @@ export default function ServiceBookingsPage() {
                 <div><span className="text-muted-foreground">Service:</span> <span className="text-foreground font-medium">{selectedJob.service_type}</span></div>
                 <div><span className="text-muted-foreground">Date:</span> <span className="text-foreground">{selectedJob.booking_date}</span></div>
                 <div><span className="text-muted-foreground">Phone:</span> <span className="text-foreground font-mono text-xs">{selectedJob.phone_number}</span></div>
-                {selectedJob.issue_description && (
-                  <div className="col-span-2"><span className="text-muted-foreground">Issue:</span> <span className="text-foreground">{selectedJob.issue_description}</span></div>
+                {!isExecutive && selectedJob.assigned_to && (
+                  <div className="col-span-2"><span className="text-muted-foreground">Assigned To:</span> <span className="text-foreground font-medium">{getTeamName(selectedJob.assigned_to)}</span></div>
+                )}
+              </div>
+
+              {/* Issue Description - always visible, read-only for executives */}
+              <div className="space-y-2 rounded-lg border border-border p-3 bg-muted/30">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Issue Description (from Dealer)</Label>
+                <p className="text-sm text-foreground whitespace-pre-wrap">{selectedJob.issue_description || "No issue description provided"}</p>
+              </div>
+
+              {/* Executive Notes - editable by executives, read-only for dealers */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  Executive Notes
+                  {isExecutive && <Badge variant="outline" className="text-xs">You can edit</Badge>}
+                </Label>
+                {isExecutive ? (
+                  <Textarea
+                    value={jobForm.executive_notes}
+                    onChange={e => setJobForm(f => ({ ...f, executive_notes: e.target.value }))}
+                    placeholder="Add your observations, findings, work updates..."
+                    rows={4}
+                  />
+                ) : (
+                  <div className="rounded-lg border border-border p-3 bg-muted/30 min-h-[60px]">
+                    <p className="text-sm text-foreground whitespace-pre-wrap">{(selectedJob as any).executive_notes || "No notes from executive yet"}</p>
+                  </div>
                 )}
               </div>
 
