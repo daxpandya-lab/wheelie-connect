@@ -109,6 +109,31 @@ export default function CustomersPage() {
 
   useEffect(() => { fetchData(); }, [tenantId]);
 
+  // Fetch capacity limit
+  const [maxPerDay, setMaxPerDay] = useState<number | null>(null);
+  useEffect(() => {
+    if (!tenantId) return;
+    supabase.from("tenants").select("settings").eq("id", tenantId).single()
+      .then(({ data }) => {
+        const settings = data?.settings as Record<string, unknown> | null;
+        if (settings?.max_vehicles_per_day) setMaxPerDay(Number(settings.max_vehicles_per_day));
+      });
+  }, [tenantId]);
+
+  const checkCapacity = async (date: string): Promise<boolean> => {
+    if (!tenantId || !maxPerDay) return true; // no limit set
+    const { count } = await supabase
+      .from("service_bookings")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", tenantId)
+      .eq("booking_date", date);
+    if ((count || 0) >= maxPerDay) {
+      toast.error(`Service slots full for ${date} (${count}/${maxPerDay}). Please choose another day.`);
+      return false;
+    }
+    return true;
+  };
+
   const handleCreate = async () => {
     if (!tenantId || !form.name || !form.phone) {
       toast.error("Name and Phone are required");
@@ -116,6 +141,14 @@ export default function CustomersPage() {
     }
     setSubmitting(true);
     try {
+      const bookingDate = new Date().toISOString().split("T")[0];
+
+      // Check capacity before creating
+      if (form.service_type) {
+        const hasCapacity = await checkCapacity(bookingDate);
+        if (!hasCapacity) { setSubmitting(false); return; }
+      }
+
       // 1. Create customer
       const { data: cust, error: custErr } = await supabase
         .from("customers")
@@ -153,7 +186,7 @@ export default function CustomersPage() {
             service_type: form.service_type,
             issue_description: form.issue_description || null,
             assigned_to: form.assigned_to || null,
-            booking_date: new Date().toISOString().split("T")[0],
+            booking_date: bookingDate,
             status: "pending", approval_status: "pending",
           });
         if (bookErr) throw bookErr;
