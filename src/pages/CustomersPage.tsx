@@ -215,13 +215,17 @@ export default function CustomersPage() {
   const handleQuotationSave = async () => {
     if (!selectedBooking) return;
     setSubmitting(true);
+    const updateData: Record<string, unknown> = {
+      estimated_cost: quotForm.estimated_cost ? parseFloat(quotForm.estimated_cost) : null,
+      quotation_notes: quotForm.quotation_notes || null,
+    };
+    // Only admins can change approval status
+    if (!isExecutive) {
+      updateData.approval_status = quotForm.approval_status;
+    }
     const { error } = await supabase
       .from("service_bookings")
-      .update({
-        estimated_cost: quotForm.estimated_cost ? parseFloat(quotForm.estimated_cost) : null,
-        quotation_notes: quotForm.quotation_notes || null,
-        approval_status: quotForm.approval_status,
-      } as any)
+      .update(updateData as any)
       .eq("id", selectedBooking.id);
     if (error) toast.error(error.message);
     else { toast.success("Quotation updated"); setShowQuotation(false); fetchData(); }
@@ -410,19 +414,15 @@ export default function CustomersPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleStatusChange(b, "confirmed")}>Mark Confirmed</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleStatusChange(b, "in_progress")}>Mark In Progress</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleStatusChange(b, "completed")}>Mark Completed</DropdownMenuItem>
                             {!isExecutive && (
-                              <>
-                                <DropdownMenuItem onClick={() => handleStatusChange(b, "confirmed")}>Mark Confirmed</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleStatusChange(b, "in_progress")}>Mark In Progress</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleStatusChange(b, "completed")}>Mark Completed</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleStatusChange(b, "cancelled")}>Cancel</DropdownMenuItem>
-                              </>
+                              <DropdownMenuItem onClick={() => handleStatusChange(b, "cancelled")}>Cancel</DropdownMenuItem>
                             )}
-                            {!isExecutive && (
-                              <DropdownMenuItem onClick={() => openQuotation(b)}>
-                                <FileText className="w-4 h-4 mr-2" /> Quotation
-                              </DropdownMenuItem>
-                            )}
+                            <DropdownMenuItem onClick={() => openQuotation(b)}>
+                              <FileText className="w-4 h-4 mr-2" /> Quotation
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -460,7 +460,7 @@ export default function CustomersPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="sm" onClick={() => openQuotation(b)}>Edit</Button>
+                        <Button variant="ghost" size="sm" onClick={() => openQuotation(b)}>{isExecutive ? "View" : "Edit"}</Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -597,17 +597,19 @@ export default function CustomersPage() {
               <Label className="text-xs">Quotation Notes</Label>
               <Textarea value={quotForm.quotation_notes} onChange={e => setQuotForm(f => ({ ...f, quotation_notes: e.target.value }))} rows={3} />
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Approval Status</Label>
-              <Select value={quotForm.approval_status} onValueChange={v => setQuotForm(f => ({ ...f, approval_status: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="approved">Approved</SelectItem>
-                  <SelectItem value="rejected">Rejected</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {!isExecutive && (
+              <div className="space-y-1">
+                <Label className="text-xs">Approval Status</Label>
+                <Select value={quotForm.approval_status} onValueChange={v => setQuotForm(f => ({ ...f, approval_status: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="approved">Approved</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowQuotation(false)}>Cancel</Button>
