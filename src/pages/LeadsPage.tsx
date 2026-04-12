@@ -1,5 +1,11 @@
+import { useState, useRef } from "react";
 import TopBar from "@/components/TopBar";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Upload, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 const stages = [
   { name: "New", color: "bg-info", leads: [
@@ -29,10 +35,66 @@ const sourceStyle: Record<string, string> = {
 };
 
 export default function LeadsPage() {
+  const { tenantId } = useAuth();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleBulkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !tenantId) return;
+
+    setUploading(true);
+    try {
+      const text = await file.text();
+      const lines = text.split("\n").filter(l => l.trim());
+      if (lines.length < 2) { toast.error("File must have a header row and at least one data row"); setUploading(false); return; }
+
+      const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
+      const nameIdx = headers.findIndex(h => h.includes("name"));
+      const phoneIdx = headers.findIndex(h => h.includes("phone"));
+      const emailIdx = headers.findIndex(h => h.includes("email"));
+      const vehicleIdx = headers.findIndex(h => h.includes("vehicle") || h.includes("model") || h.includes("interest"));
+      const sourceIdx = headers.findIndex(h => h.includes("source"));
+
+      if (nameIdx === -1) { toast.error("CSV must have a 'name' column"); setUploading(false); return; }
+
+      const rows = lines.slice(1).map(line => {
+        const cols = line.split(",").map(c => c.trim());
+        return {
+          tenant_id: tenantId,
+          customer_name: cols[nameIdx] || "Unknown",
+          phone_number: phoneIdx >= 0 ? cols[phoneIdx] || null : null,
+          email: emailIdx >= 0 ? cols[emailIdx] || null : null,
+          vehicle_interest: vehicleIdx >= 0 ? cols[vehicleIdx] || null : null,
+          source: (sourceIdx >= 0 && ["whatsapp", "web", "walkin", "referral", "campaign"].includes(cols[sourceIdx]?.toLowerCase()))
+            ? cols[sourceIdx].toLowerCase() as any : "web" as any,
+          status: "new" as const,
+        };
+      }).filter(r => r.customer_name !== "Unknown");
+
+      if (rows.length === 0) { toast.error("No valid rows found"); setUploading(false); return; }
+
+      const { error } = await supabase.from("leads").insert(rows);
+      if (error) toast.error(error.message);
+      else toast.success(`${rows.length} leads imported successfully`);
+    } catch (err: any) {
+      toast.error("Failed to parse file: " + err.message);
+    }
+    setUploading(false);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
   return (
     <>
       <TopBar title="Lead Pipeline" />
       <div className="flex-1 overflow-x-auto p-6">
+        <div className="flex justify-end mb-4">
+          <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleBulkUpload} />
+          <Button variant="outline" onClick={() => fileRef.current?.click()} disabled={uploading}>
+            {uploading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Upload className="w-4 h-4 mr-1" />}
+            Bulk Upload
+          </Button>
+        </div>
         <div className="flex gap-4 min-w-max">
           {stages.map((stage) => (
             <div key={stage.name} className="w-72 flex flex-col">

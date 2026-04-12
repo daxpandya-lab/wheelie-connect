@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import TopBar from "@/components/TopBar";
 import WhatsAppConfig from "@/components/whatsapp/WhatsAppConfig";
-import { Building2, Globe, Palette, Bell, Shield, CreditCard, ChevronLeft, Car } from "lucide-react";
+import { Building2, Globe, Palette, Bell, Shield, CreditCard, ChevronLeft, Car, Share2, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,7 @@ import { toast } from "sonner";
 const sections = [
   { id: "whatsapp", icon: Globe, title: "WhatsApp Configuration", desc: "Connect your WhatsApp Business API" },
   { id: "capacity", icon: Car, title: "Service Capacity", desc: "Set daily vehicle booking limits" },
+  { id: "chatbot", icon: Share2, title: "Share Chatbot", desc: "Get your unique chatbot link for customers" },
   { id: "dealership", icon: Building2, title: "Dealership Info", desc: "Business name, address, contact details" },
   { id: "branding", icon: Palette, title: "Branding", desc: "Logo, colors, and theme customization" },
   { id: "notifications", icon: Bell, title: "Notifications", desc: "Email and WhatsApp notification preferences" },
@@ -30,9 +31,7 @@ function CapacitySettings() {
     supabase.from("tenants").select("settings").eq("id", tenantId).single()
       .then(({ data }) => {
         const settings = data?.settings as Record<string, unknown> | null;
-        if (settings?.max_vehicles_per_day) {
-          setMaxVehicles(String(settings.max_vehicles_per_day));
-        }
+        if (settings?.max_vehicles_per_day) setMaxVehicles(String(settings.max_vehicles_per_day));
         setLoading(false);
       });
   }, [tenantId]);
@@ -40,11 +39,9 @@ function CapacitySettings() {
   const handleSave = async () => {
     if (!tenantId) return;
     setSaving(true);
-    // Fetch current settings to merge
     const { data: tenant } = await supabase.from("tenants").select("settings").eq("id", tenantId).single();
     const currentSettings = (tenant?.settings as Record<string, unknown>) || {};
     const newSettings = { ...currentSettings, max_vehicles_per_day: maxVehicles ? parseInt(maxVehicles) : null };
-
     const { error } = await supabase.from("tenants").update({ settings: newSettings } as any).eq("id", tenantId);
     if (error) toast.error(error.message);
     else toast.success("Capacity settings saved");
@@ -57,23 +54,46 @@ function CapacitySettings() {
     <div className="space-y-6">
       <div className="glass-card rounded-xl p-6 space-y-4">
         <h3 className="text-base font-semibold text-foreground">Daily Vehicle Limit</h3>
-        <p className="text-sm text-muted-foreground">
-          Set the maximum number of vehicles that can be booked for service per day.
-          Leave empty for unlimited bookings.
-        </p>
+        <p className="text-sm text-muted-foreground">Set the maximum number of vehicles that can be booked for service per day.</p>
         <div className="space-y-2 max-w-xs">
           <Label>Max Vehicles Per Day</Label>
-          <Input
-            type="number"
-            min="1"
-            value={maxVehicles}
-            onChange={e => setMaxVehicles(e.target.value)}
-            placeholder="e.g. 10"
-          />
+          <Input type="number" min="1" value={maxVehicles} onChange={e => setMaxVehicles(e.target.value)} placeholder="e.g. 10" />
         </div>
-        <Button onClick={handleSave} disabled={saving}>
-          {saving ? "Saving..." : "Save Settings"}
-        </Button>
+        <Button onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save Settings"}</Button>
+      </div>
+    </div>
+  );
+}
+
+function ChatbotShareSection() {
+  const { tenantId } = useAuth();
+  const [copied, setCopied] = useState(false);
+  const chatUrl = tenantId ? `${window.location.origin}/chat/${tenantId}` : "";
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(chatUrl);
+    setCopied(true);
+    toast.success("Link copied to clipboard!");
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="glass-card rounded-xl p-6 space-y-4">
+        <h3 className="text-base font-semibold text-foreground">Your Chatbot Link</h3>
+        <p className="text-sm text-muted-foreground">
+          Share this link with your customers so they can chat with your dealership directly.
+        </p>
+        <div className="flex gap-2">
+          <Input readOnly value={chatUrl} className="font-mono text-xs" />
+          <Button variant="outline" onClick={handleCopy} className="shrink-0">
+            {copied ? <Check className="w-4 h-4 mr-1" /> : <Copy className="w-4 h-4 mr-1" />}
+            {copied ? "Copied" : "Copy"}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Tip: Add this link to your website, WhatsApp Business profile, or share via SMS campaigns.
+        </p>
       </div>
     </div>
   );
@@ -92,12 +112,7 @@ export default function SettingsPage() {
     return (
       <>
         <TopBar title="WhatsApp Configuration" />
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-2xl">
-            {renderBack()}
-            <WhatsAppConfig />
-          </div>
-        </div>
+        <div className="flex-1 overflow-y-auto p-6"><div className="max-w-2xl">{renderBack()}<WhatsAppConfig /></div></div>
       </>
     );
   }
@@ -106,12 +121,16 @@ export default function SettingsPage() {
     return (
       <>
         <TopBar title="Service Capacity" />
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-2xl">
-            {renderBack()}
-            <CapacitySettings />
-          </div>
-        </div>
+        <div className="flex-1 overflow-y-auto p-6"><div className="max-w-2xl">{renderBack()}<CapacitySettings /></div></div>
+      </>
+    );
+  }
+
+  if (activeSection === "chatbot") {
+    return (
+      <>
+        <TopBar title="Share Chatbot" />
+        <div className="flex-1 overflow-y-auto p-6"><div className="max-w-2xl">{renderBack()}<ChatbotShareSection /></div></div>
       </>
     );
   }

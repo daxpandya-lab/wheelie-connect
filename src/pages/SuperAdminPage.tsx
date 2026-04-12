@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -13,20 +14,21 @@ import { Plus, Loader2, Pencil, KeyRound, Ban, CheckCircle, Trash2, Eye, EyeOff 
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 
-type TenantPlan = Database["public"]["Enums"]["tenant_plan"];
 type TenantStatus = Database["public"]["Enums"]["tenant_status"];
 
 interface Tenant {
   id: string; name: string; slug: string; contact_person: string | null;
   phone: string | null; email: string | null; address: string | null;
-  plan: TenantPlan; status: TenantStatus;
+  status: TenantStatus;
   subscription_start_date: string | null; subscription_end_date: string | null;
+  service_booking_enabled: boolean; test_drive_enabled: boolean;
   created_at: string;
 }
 
 const emptyForm = {
   name: "", contact_person: "", phone: "", email: "", address: "", password: "",
-  plan: "free" as TenantPlan, status: "active" as TenantStatus, startDate: "", endDate: "",
+  status: "active" as TenantStatus, endDate: "",
+  service_booking_enabled: true, test_drive_enabled: true,
 };
 
 export default function SuperAdminPage() {
@@ -37,7 +39,7 @@ export default function SuperAdminPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
-  const [editForm, setEditForm] = useState<Partial<Tenant> & { id: string }>({ id: "" });
+  const [editForm, setEditForm] = useState<any>({ id: "" });
   const [resetTarget, setResetTarget] = useState<Tenant | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [saving, setSaving] = useState(false);
@@ -96,8 +98,10 @@ export default function SuperAdminPage() {
       await callEdgeFn("create", {
         name: form.name, contact_person: form.contact_person, phone: form.phone,
         email: form.email, address: form.address, password: form.password,
-        plan: form.plan, status: form.status,
-        start_date: form.startDate || null, end_date: form.endDate || null,
+        plan: "free", status: form.status,
+        start_date: null, end_date: form.endDate || null,
+        service_booking_enabled: form.service_booking_enabled,
+        test_drive_enabled: form.test_drive_enabled,
       });
       toast.success("Dealer created with login credentials");
       setCreateOpen(false); setForm(emptyForm); fetchTenants(); fetchCredentials();
@@ -108,12 +112,19 @@ export default function SuperAdminPage() {
   const handleEdit = async () => {
     setSaving(true);
     try {
+      // Update via edge function for name/contact/etc
       await callEdgeFn("update", {
         id: editForm.id, name: editForm.name, contact_person: editForm.contact_person,
         phone: editForm.phone, email: editForm.email, address: editForm.address,
-        plan: editForm.plan, status: editForm.status,
+        plan: "free", status: editForm.status,
         start_date: editForm.subscription_start_date, end_date: editForm.subscription_end_date,
       });
+      // Update module toggles directly
+      await supabase.from("tenants").update({
+        service_booking_enabled: editForm.service_booking_enabled,
+        test_drive_enabled: editForm.test_drive_enabled,
+        subscription_end_date: editForm.subscription_end_date || null,
+      } as any).eq("id", editForm.id);
       toast.success("Dealer updated"); setEditOpen(false); fetchTenants();
     } catch (err: any) { toast.error(err.message); }
     setSaving(false);
@@ -149,9 +160,11 @@ export default function SuperAdminPage() {
   const openEdit = (t: Tenant) => {
     setEditForm({
       id: t.id, name: t.name, contact_person: t.contact_person, phone: t.phone,
-      email: t.email, address: t.address, plan: t.plan, status: t.status,
+      email: t.email, address: t.address, status: t.status,
       subscription_start_date: t.subscription_start_date?.split("T")[0] || "",
       subscription_end_date: t.subscription_end_date?.split("T")[0] || "",
+      service_booking_enabled: t.service_booking_enabled ?? true,
+      test_drive_enabled: t.test_drive_enabled ?? true,
     });
     setEditOpen(true);
   };
@@ -191,9 +204,8 @@ export default function SuperAdminPage() {
                   <TableHead>Phone</TableHead>
                   <TableHead>Login Email</TableHead>
                   <TableHead>Login Password</TableHead>
-                  <TableHead>Plan</TableHead>
+                  <TableHead>Modules</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Start Date</TableHead>
                   <TableHead>End Date</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -201,7 +213,7 @@ export default function SuperAdminPage() {
               <TableBody>
                 {tenants.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                       No dealers found. Click "Add Dealer" to create one.
                     </TableCell>
                   </TableRow>
@@ -227,11 +239,16 @@ export default function SuperAdminPage() {
                           <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </TableCell>
-                      <TableCell><Badge variant="outline" className="capitalize">{t.plan}</Badge></TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          {t.service_booking_enabled && <Badge variant="outline" className="text-xs">Service</Badge>}
+                          {t.test_drive_enabled && <Badge variant="outline" className="text-xs">Test Drive</Badge>}
+                          {!t.service_booking_enabled && !t.test_drive_enabled && <span className="text-xs text-muted-foreground">None</span>}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColor(t.status)}`}>{t.status}</span>
                       </TableCell>
-                      <TableCell className="text-sm">{t.subscription_start_date ? new Date(t.subscription_start_date).toLocaleDateString() : "—"}</TableCell>
                       <TableCell className="text-sm">{t.subscription_end_date ? new Date(t.subscription_end_date).toLocaleDateString() : "—"}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
@@ -285,39 +302,30 @@ export default function SuperAdminPage() {
                   <Button variant="outline" type="button" onClick={() => setForm({ ...form, password: generatePassword() })}>Generate</Button>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Plan</Label>
-                  <Select value={form.plan} onValueChange={(v) => setForm({ ...form, plan: v as TenantPlan })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="free">Free</SelectItem>
-                      <SelectItem value="starter">Starter</SelectItem>
-                      <SelectItem value="pro">Pro</SelectItem>
-                      <SelectItem value="enterprise">Enterprise</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v as TenantStatus })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="suspended">Suspended</SelectItem>
-                      <SelectItem value="cancelled">Cancelled</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label>Subscription End Date</Label>
+                <Input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Start Date</Label>
-                  <Input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v as TenantStatus })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="suspended">Suspended</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-3 rounded-lg border p-4">
+                <Label className="text-sm font-semibold">Module Access</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-normal">Service Booking</Label>
+                  <Switch checked={form.service_booking_enabled} onCheckedChange={(v) => setForm({ ...form, service_booking_enabled: v })} />
                 </div>
-                <div className="space-y-2">
-                  <Label>End Date</Label>
-                  <Input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-normal">Test Drive</Label>
+                  <Switch checked={form.test_drive_enabled} onCheckedChange={(v) => setForm({ ...form, test_drive_enabled: v })} />
                 </div>
               </div>
               <Button className="w-full" onClick={handleCreate} disabled={saving}>
@@ -354,39 +362,30 @@ export default function SuperAdminPage() {
                 <Label>Address</Label>
                 <Input value={editForm.address || ""} onChange={(e) => setEditForm({ ...editForm, address: e.target.value })} />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Plan</Label>
-                  <Select value={editForm.plan || "free"} onValueChange={(v) => setEditForm({ ...editForm, plan: v as TenantPlan })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="free">Free</SelectItem>
-                      <SelectItem value="starter">Starter</SelectItem>
-                      <SelectItem value="pro">Pro</SelectItem>
-                      <SelectItem value="enterprise">Enterprise</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Select value={editForm.status || "active"} onValueChange={(v) => setEditForm({ ...editForm, status: v as TenantStatus })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="suspended">Suspended</SelectItem>
-                      <SelectItem value="cancelled">Cancelled</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Select value={editForm.status || "active"} onValueChange={(v) => setEditForm({ ...editForm, status: v as TenantStatus })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="suspended">Suspended</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Start Date</Label>
-                  <Input type="date" value={editForm.subscription_start_date || ""} onChange={(e) => setEditForm({ ...editForm, subscription_start_date: e.target.value })} />
+              <div className="space-y-2">
+                <Label>Subscription End Date</Label>
+                <Input type="date" value={editForm.subscription_end_date || ""} onChange={(e) => setEditForm({ ...editForm, subscription_end_date: e.target.value })} />
+              </div>
+              <div className="space-y-3 rounded-lg border p-4">
+                <Label className="text-sm font-semibold">Module Access</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-normal">Service Booking</Label>
+                  <Switch checked={editForm.service_booking_enabled ?? true} onCheckedChange={(v) => setEditForm({ ...editForm, service_booking_enabled: v })} />
                 </div>
-                <div className="space-y-2">
-                  <Label>End Date</Label>
-                  <Input type="date" value={editForm.subscription_end_date || ""} onChange={(e) => setEditForm({ ...editForm, subscription_end_date: e.target.value })} />
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-normal">Test Drive</Label>
+                  <Switch checked={editForm.test_drive_enabled ?? true} onCheckedChange={(v) => setEditForm({ ...editForm, test_drive_enabled: v })} />
                 </div>
               </div>
               <Button className="w-full" onClick={handleEdit} disabled={saving}>

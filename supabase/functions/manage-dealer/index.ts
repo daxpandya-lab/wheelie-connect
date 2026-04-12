@@ -42,12 +42,15 @@ Deno.serve(async (req) => {
 
       const tenantSlug = name.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
 
+      const { service_booking_enabled, test_drive_enabled } = body;
       const { data: tenant, error: tenantError } = await supabaseAdmin.from("tenants").insert({
         name: name.trim(), slug: tenantSlug,
         contact_person: contact_person?.trim() || null, phone: phone?.trim() || null,
         email: email.trim().toLowerCase(), address: address?.trim() || null,
         plan: plan || "free", status: status || "active",
         subscription_start_date: start_date || null, subscription_end_date: end_date || null,
+        service_booking_enabled: service_booking_enabled ?? true,
+        test_drive_enabled: test_drive_enabled ?? true,
       }).select().single();
       if (tenantError) return json({ error: tenantError.message }, 400);
 
