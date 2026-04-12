@@ -901,11 +901,13 @@ export type Database = {
           name: string
           phone: string | null
           plan: Database["public"]["Enums"]["tenant_plan"]
+          service_booking_enabled: boolean
           settings: Json | null
           slug: string
           status: Database["public"]["Enums"]["tenant_status"]
           subscription_end_date: string | null
           subscription_start_date: string | null
+          test_drive_enabled: boolean
           updated_at: string
           whatsapp_config: Json | null
         }
@@ -918,11 +920,13 @@ export type Database = {
           name: string
           phone?: string | null
           plan?: Database["public"]["Enums"]["tenant_plan"]
+          service_booking_enabled?: boolean
           settings?: Json | null
           slug: string
           status?: Database["public"]["Enums"]["tenant_status"]
           subscription_end_date?: string | null
           subscription_start_date?: string | null
+          test_drive_enabled?: boolean
           updated_at?: string
           whatsapp_config?: Json | null
         }
@@ -935,11 +939,13 @@ export type Database = {
           name?: string
           phone?: string | null
           plan?: Database["public"]["Enums"]["tenant_plan"]
+          service_booking_enabled?: boolean
           settings?: Json | null
           slug?: string
           status?: Database["public"]["Enums"]["tenant_status"]
           subscription_end_date?: string | null
           subscription_start_date?: string | null
+          test_drive_enabled?: boolean
           updated_at?: string
           whatsapp_config?: Json | null
         }
