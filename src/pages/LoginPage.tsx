@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { signInWithRetry, getFriendlyErrorMessage } from "@/lib/auth-retry";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +14,20 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // On mount, clear any stale session to prevent infinite refresh loops
+  useEffect(() => {
+    (async () => {
+      try {
+        const { error } = await supabase.auth.getSession();
+        if (error) {
+          await supabase.auth.signOut().catch(() => {});
+        }
+      } catch {
+        await supabase.auth.signOut().catch(() => {});
+      }
+    })();
+  }, []);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !password.trim()) {
@@ -20,10 +35,10 @@ export default function LoginPage() {
       return;
     }
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    const { error } = await signInWithRetry(email.trim(), password);
     setLoading(false);
     if (error) {
-      toast.error(error.message);
+      toast.error(getFriendlyErrorMessage(error));
     } else {
       navigate("/");
     }

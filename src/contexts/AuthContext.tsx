@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useRef, ReactNode } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -26,6 +26,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Database["public"]["Tables"]["profiles"]["Row"] | null>(null);
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchUserData = async (userId: string) => {
     const [profileRes, rolesRes] = await Promise.all([
@@ -38,6 +39,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    // Safety timeout: if isLoading stays true for 10s, force resolve
+    loadingTimeoutRef.current = setTimeout(async () => {
+      setIsLoading((prev) => {
+        if (prev) {
+          // Clear stale session that may be causing the hang
+          supabase.auth.signOut().catch(() => {});
+          return false;
+        }
+        return prev;
+      });
+    }, 10000);
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         setSession(session);
@@ -53,16 +66,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchUserData(session.user.id);
+    // Initial session check with error handling for stale tokens
+    (async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) {
+          // Stale session / network error — clear it and let user re-login
+          await supabase.auth.signOut().catch(() => {});
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+          setRoles([]);
+          setIsLoading(false);
+          return;
+        }
+        setSession(session);
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          fetchUserData(session.user.id);
+        }
+        setIsLoading(false);
+      } catch {
+        // Network completely down — clear stale state
+        await supabase.auth.signOut().catch(() => {});
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+        setRoles([]);
+        setIsLoading(false);
       }
-      setIsLoading(false);
-    });
+    })();
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+    };
   }, []);
 
   const signOut = async () => {
