@@ -5,9 +5,10 @@ import TopBar from "@/components/TopBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Car, Loader2 } from "lucide-react";
+import { Plus, Car, Loader2, Search, Bot, User } from "lucide-react";
 import { toast } from "sonner";
 
 const statusColors: Record<string, string> = {
@@ -18,12 +19,21 @@ const statusColors: Record<string, string> = {
   cancelled: "bg-destructive/10 text-destructive",
 };
 
+function SourceBadge({ source }: { source: string }) {
+  if (source === "ai_bot") {
+    return <Badge variant="outline" className="text-xs gap-1 bg-primary/10 text-primary border-primary/20"><Bot className="w-3 h-3" />AI Bot</Badge>;
+  }
+  return <Badge variant="outline" className="text-xs gap-1 bg-muted text-muted-foreground"><User className="w-3 h-3" />Manual</Badge>;
+}
+
 export default function TestDrivesPage() {
   const { tenantId } = useAuth();
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
+  const [sourceFilter, setSourceFilter] = useState("all");
   const [form, setForm] = useState({
     customer_name: "", phone_number: "", vehicle_model: "",
     preferred_date: "", preferred_time: "", license_status: "verified",
@@ -32,13 +42,21 @@ export default function TestDrivesPage() {
 
   const fetchBookings = async () => {
     if (!tenantId) return;
-    const { data } = await supabase.from("test_drive_bookings")
+    let query = supabase.from("test_drive_bookings")
       .select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false });
+    if (sourceFilter !== "all") query = query.eq("booking_source", sourceFilter);
+    const { data } = await query;
     if (data) setBookings(data);
     setLoading(false);
   };
 
-  useEffect(() => { fetchBookings(); }, [tenantId]);
+  useEffect(() => { fetchBookings(); }, [tenantId, sourceFilter]);
+
+  const filtered = bookings.filter(td => {
+    if (!search.trim()) return true;
+    const s = search.toLowerCase();
+    return td.customer_name?.toLowerCase().includes(s) || td.vehicle_model?.toLowerCase().includes(s) || td.phone_number?.includes(s);
+  });
 
   const handleCreate = async () => {
     if (!form.customer_name.trim() || !form.phone_number.trim() || !form.vehicle_model.trim() || !form.preferred_date) {
@@ -53,6 +71,7 @@ export default function TestDrivesPage() {
       vehicle_model: form.vehicle_model,
       preferred_date: form.preferred_date,
       preferred_time: form.preferred_time || null,
+      booking_source: "manual",
       notes: [
         form.license_status === "verified" ? "License: Verified" : "License: Pending",
         `Visit: ${form.visit_type === "home" ? "Home Visit" : "Showroom"}`,
@@ -73,17 +92,31 @@ export default function TestDrivesPage() {
     <>
       <TopBar title="Test Drives" />
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
-        <div className="flex justify-end">
+        <div className="flex flex-wrap items-center gap-3 justify-between">
+          <div className="flex flex-wrap items-center gap-3 flex-1">
+            <div className="relative min-w-[200px] flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input placeholder="Search name, model, phone..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9 text-sm" />
+            </div>
+            <Select value={sourceFilter} onValueChange={setSourceFilter}>
+              <SelectTrigger className="h-9 w-[140px] text-sm"><SelectValue placeholder="Source" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sources</SelectItem>
+                <SelectItem value="ai_bot">AI Bot</SelectItem>
+                <SelectItem value="manual">Manual</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <Button onClick={() => setCreateOpen(true)}><Plus className="w-4 h-4" /> Schedule Test Drive</Button>
         </div>
 
         {loading ? (
           <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-        ) : bookings.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground">No test drives yet. Click "Schedule Test Drive" to create one.</div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground">No test drives found.</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {bookings.map((td) => (
+            {filtered.map((td) => (
               <div key={td.id} className="glass-card rounded-xl p-5">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
@@ -112,6 +145,10 @@ export default function TestDrivesPage() {
                       <span className="text-foreground">{td.preferred_time}</span>
                     </div>
                   )}
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Source</span>
+                    <SourceBadge source={td.booking_source || "manual"} />
+                  </div>
                   {td.notes && (
                     <p className="text-xs text-muted-foreground mt-2 border-t pt-2">{td.notes}</p>
                   )}

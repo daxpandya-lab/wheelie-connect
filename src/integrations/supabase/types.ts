@@ -787,6 +787,7 @@ export type Database = {
           approval_status: string | null
           assigned_to: string | null
           booking_date: string
+          booking_source: string
           created_at: string
           customer_id: string | null
           customer_name: string
@@ -815,6 +816,7 @@ export type Database = {
           approval_status?: string | null
           assigned_to?: string | null
           booking_date: string
+          booking_source?: string
           created_at?: string
           customer_id?: string | null
           customer_name: string
@@ -843,6 +845,7 @@ export type Database = {
           approval_status?: string | null
           assigned_to?: string | null
           booking_date?: string
+          booking_source?: string
           created_at?: string
           customer_id?: string | null
           customer_name?: string
@@ -954,6 +957,7 @@ export type Database = {
       test_drive_bookings: {
         Row: {
           assigned_to: string | null
+          booking_source: string
           created_at: string
           customer_id: string | null
           customer_name: string
@@ -970,6 +974,7 @@ export type Database = {
         }
         Insert: {
           assigned_to?: string | null
+          booking_source?: string
           created_at?: string
           customer_id?: string | null
           customer_name: string
@@ -986,6 +991,7 @@ export type Database = {
         }
         Update: {
           assigned_to?: string | null
+          booking_source?: string
           created_at?: string
           customer_id?: string | null
           customer_name?: string
