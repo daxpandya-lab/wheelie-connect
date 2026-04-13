@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { format, isToday, isFuture } from "date-fns";
 import {
   Search, CalendarIcon, Loader2, RefreshCw, Phone, Wrench,
-  Clock, CheckCircle, XCircle, Play, AlertCircle, Eye, ClipboardList,
+  Clock, CheckCircle, XCircle, Play, AlertCircle, Eye, ClipboardList, Bot, User,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -27,7 +27,7 @@ type ServiceBooking = {
   assigned_to: string | null; issue_description: string | null;
   estimated_cost: number | null; approval_status: string | null;
   quotation_notes: string | null; work_notes: string | null;
-  parts_required: string | null; created_at: string;
+  parts_required: string | null; created_at: string; booking_source: string;
 };
 
 type Profile = { user_id: string; full_name: string | null };
@@ -42,6 +42,13 @@ const STATUS_FLOW = [
 
 const SERVICE_TYPES = ["Oil Change", "General Service", "Repair", "Inspection", "Custom"];
 
+function SourceBadge({ source }: { source: string }) {
+  if (source === "ai_bot") {
+    return <Badge variant="outline" className="text-xs gap-1 bg-primary/10 text-primary border-primary/20"><Bot className="w-3 h-3" />AI Bot</Badge>;
+  }
+  return <Badge variant="outline" className="text-xs gap-1 bg-muted text-muted-foreground"><User className="w-3 h-3" />Manual</Badge>;
+}
+
 export default function ServiceBookingsPage() {
   const { tenantId, roles, user } = useAuth();
   const isExecutive = roles.includes("staff") && !roles.includes("tenant_admin") && !roles.includes("super_admin");
@@ -53,6 +60,7 @@ export default function ServiceBookingsPage() {
   const [phoneSearch, setPhoneSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [serviceTypeFilter, setServiceTypeFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState<Date | undefined>();
   const [dateTo, setDateTo] = useState<Date | undefined>();
   const [tab, setTab] = useState("all");
@@ -68,12 +76,10 @@ export default function ServiceBookingsPage() {
     const [bookRes, teamRes] = await Promise.all([
       (() => {
         let query = supabase.from("service_bookings").select("*").eq("tenant_id", tenantId).order("booking_date", { ascending: false });
-        // RBAC: Executive only sees assigned bookings
-        if (isExecutive && user?.id) {
-          query = query.eq("assigned_to", user.id);
-        }
+        if (isExecutive && user?.id) query = query.eq("assigned_to", user.id);
         if (statusFilter !== "all") query = query.eq("status", statusFilter as any);
         if (serviceTypeFilter !== "all") query = query.ilike("service_type", `%${serviceTypeFilter}%`);
+        if (sourceFilter !== "all") query = query.eq("booking_source", sourceFilter);
         if (dateFrom) query = query.gte("booking_date", format(dateFrom, "yyyy-MM-dd"));
         if (dateTo) query = query.lte("booking_date", format(dateTo, "yyyy-MM-dd"));
         if (search.trim()) query = query.ilike("customer_name", `%${search.trim()}%`);
@@ -85,7 +91,7 @@ export default function ServiceBookingsPage() {
     if (bookRes.data) setBookings(bookRes.data as ServiceBooking[]);
     if (teamRes.data) setTeamMembers(teamRes.data);
     setLoading(false);
-  }, [tenantId, statusFilter, serviceTypeFilter, dateFrom, dateTo, search, phoneSearch, isExecutive, user?.id]);
+  }, [tenantId, statusFilter, serviceTypeFilter, sourceFilter, dateFrom, dateTo, search, phoneSearch, isExecutive, user?.id]);
 
   useEffect(() => { fetchBookings(); }, [fetchBookings]);
 
@@ -128,8 +134,6 @@ export default function ServiceBookingsPage() {
   const saveJobDetail = async () => {
     if (!selectedJob) return;
     setSaving(true);
-
-    // Executives can only update executive_notes, work_notes, parts_required, estimated_cost, and status
     const updateData: Record<string, unknown> = {
       work_notes: jobForm.work_notes || null,
       parts_required: jobForm.parts_required || null,
@@ -137,26 +141,17 @@ export default function ServiceBookingsPage() {
       status: jobForm.status as any,
       executive_notes: jobForm.executive_notes || null,
     };
-
-    // Only admins can update approval_status
     if (!isExecutive) {
       updateData.approval_status = jobForm.approval_status;
     }
-
-    const { error } = await supabase
-      .from("service_bookings")
-      .update(updateData as any)
-      .eq("id", selectedJob.id);
+    const { error } = await supabase.from("service_bookings").update(updateData as any).eq("id", selectedJob.id);
     if (error) toast.error(error.message);
     else { toast.success("Job updated"); setDetailOpen(false); fetchBookings(); }
     setSaving(false);
   };
 
   const handleAssign = async (bookingId: string, userId: string) => {
-    const { error } = await supabase
-      .from("service_bookings")
-      .update({ assigned_to: userId || null } as any)
-      .eq("id", bookingId);
+    const { error } = await supabase.from("service_bookings").update({ assigned_to: userId || null } as any).eq("id", bookingId);
     if (error) toast.error(error.message);
     else { toast.success("Assigned"); fetchBookings(); }
   };
@@ -212,6 +207,14 @@ export default function ServiceBookingsPage() {
                 {SERVICE_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
               </SelectContent>
             </Select>
+            <Select value={sourceFilter} onValueChange={setSourceFilter}>
+              <SelectTrigger className="h-9 w-[140px] text-sm"><SelectValue placeholder="Source" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sources</SelectItem>
+                <SelectItem value="ai_bot">AI Bot</SelectItem>
+                <SelectItem value="manual">Manual</SelectItem>
+              </SelectContent>
+            </Select>
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" className="h-9 gap-1.5">
@@ -234,8 +237,8 @@ export default function ServiceBookingsPage() {
                 <Calendar mode="single" selected={dateTo} onSelect={setDateTo} className="p-3 pointer-events-auto" />
               </PopoverContent>
             </Popover>
-            {(search || phoneSearch || statusFilter !== "all" || serviceTypeFilter !== "all" || dateFrom || dateTo) && (
-              <Button variant="ghost" size="sm" className="h-9" onClick={() => { setSearch(""); setPhoneSearch(""); setStatusFilter("all"); setServiceTypeFilter("all"); setDateFrom(undefined); setDateTo(undefined); }}>Clear</Button>
+            {(search || phoneSearch || statusFilter !== "all" || serviceTypeFilter !== "all" || sourceFilter !== "all" || dateFrom || dateTo) && (
+              <Button variant="ghost" size="sm" className="h-9" onClick={() => { setSearch(""); setPhoneSearch(""); setStatusFilter("all"); setServiceTypeFilter("all"); setSourceFilter("all"); setDateFrom(undefined); setDateTo(undefined); }}>Clear</Button>
             )}
             <Button variant="ghost" size="icon" className="h-9 w-9" onClick={fetchBookings}><RefreshCw className="w-4 h-4" /></Button>
           </div>
@@ -266,6 +269,7 @@ export default function ServiceBookingsPage() {
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Customer</th>
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium hidden lg:table-cell">Vehicle</th>
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Service</th>
+                        <th className="text-left py-3 px-4 text-muted-foreground font-medium">Source</th>
                         {!isExecutive && <th className="text-left py-3 px-4 text-muted-foreground font-medium hidden md:table-cell">Assigned</th>}
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Status</th>
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium hidden md:table-cell">Approval</th>
@@ -285,6 +289,9 @@ export default function ServiceBookingsPage() {
                             <td className="py-3 px-4 text-foreground hidden lg:table-cell">{b.vehicle_model}</td>
                             <td className="py-3 px-4">
                               <Badge variant="outline" className="text-xs capitalize">{b.service_type}</Badge>
+                            </td>
+                            <td className="py-3 px-4">
+                              <SourceBadge source={b.booking_source || "manual"} />
                             </td>
                             {!isExecutive && (
                               <td className="py-3 px-4 hidden md:table-cell">
@@ -342,18 +349,17 @@ export default function ServiceBookingsPage() {
                 <div><span className="text-muted-foreground">Service:</span> <span className="text-foreground font-medium">{selectedJob.service_type}</span></div>
                 <div><span className="text-muted-foreground">Date:</span> <span className="text-foreground">{selectedJob.booking_date}</span></div>
                 <div><span className="text-muted-foreground">Phone:</span> <span className="text-foreground font-mono text-xs">{selectedJob.phone_number}</span></div>
+                <div><span className="text-muted-foreground">Source:</span> <SourceBadge source={selectedJob.booking_source || "manual"} /></div>
                 {!isExecutive && selectedJob.assigned_to && (
                   <div className="col-span-2"><span className="text-muted-foreground">Assigned To:</span> <span className="text-foreground font-medium">{getTeamName(selectedJob.assigned_to)}</span></div>
                 )}
               </div>
 
-              {/* Issue Description - always visible, read-only for executives */}
               <div className="space-y-2 rounded-lg border border-border p-3 bg-muted/30">
                 <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Issue Description (from Dealer)</Label>
                 <p className="text-sm text-foreground whitespace-pre-wrap">{selectedJob.issue_description || "No issue description provided"}</p>
               </div>
 
-              {/* Executive Notes - editable by executives, read-only for dealers */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
                   Executive Notes
