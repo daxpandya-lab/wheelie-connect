@@ -496,12 +496,98 @@ async function queueReply(
   recipientPhone: string,
   content: string
 ) {
-  await supabase.from("whatsapp_message_queue").insert({
+  // Insert into queue first
+  const { data: queuedMsg } = await supabase.from("whatsapp_message_queue").insert({
     tenant_id: tenantId,
     conversation_id: conversationId,
     recipient_phone: recipientPhone,
     message_type: "text",
     content: content,
     status: "queued",
-  });
+  }).select("id").single();
+
+  // Attempt immediate delivery via Meta Cloud API
+  try {
+    // Get tenant's WhatsApp config
+    const { data: tenantData } = await supabase
+      .from("tenants")
+      .select("whatsapp_config")
+      .eq("id", tenantId)
+      .single();
+
+    const waConfig = tenantData?.whatsapp_config as Record<string, string> | null;
+    const accessToken = waConfig?.access_token;
+
+    if (!accessToken) {
+      console.warn(`No WhatsApp access token for tenant ${tenantId}`);
+      return;
+    }
+
+    // Get phone_number_id
+    const { data: session } = await supabase
+      .from("whatsapp_sessions")
+      .select("phone_number_id")
+      .eq("tenant_id", tenantId)
+      .eq("is_active", true)
+      .single();
+
+    if (!session) {
+      console.warn(`No active WhatsApp session for tenant ${tenantId}`);
+      return;
+    }
+
+    // Mark as sending
+    if (queuedMsg) {
+      await supabase
+        .from("whatsapp_message_queue")
+        .update({ status: "sending", attempts: 1, last_attempt_at: new Date().toISOString() })
+        .eq("id", queuedMsg.id);
+    }
+
+    // Send via Meta Cloud API
+    const response = await fetch(
+      `https://graph.facebook.com/v18.0/${session.phone_number_id}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to: recipientPhone,
+          type: "text",
+          text: { body: content },
+        }),
+      }
+    );
+
+    const result = await response.json();
+
+    if (response.ok && result.messages?.[0]?.id) {
+      console.log(`Message sent to ${recipientPhone}: ${result.messages[0].id}`);
+      if (queuedMsg) {
+        await supabase
+          .from("whatsapp_message_queue")
+          .update({ status: "sent", external_message_id: result.messages[0].id })
+          .eq("id", queuedMsg.id);
+      }
+    } else {
+      console.error(`Failed to send to ${recipientPhone}:`, JSON.stringify(result.error || result));
+      if (queuedMsg) {
+        await supabase
+          .from("whatsapp_message_queue")
+          .update({ status: "failed", error_message: JSON.stringify(result.error || result) })
+          .eq("id", queuedMsg.id);
+      }
+    }
+  } catch (err) {
+    console.error(`Send error for ${recipientPhone}:`, err);
+    if (queuedMsg) {
+      await supabase
+        .from("whatsapp_message_queue")
+        .update({ status: "failed", error_message: String(err) })
+        .eq("id", queuedMsg.id);
+    }
+  }
 }
