@@ -12,6 +12,10 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+
     // JWT validation
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
@@ -21,11 +25,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-
-    // Verify user
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -51,21 +50,31 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Verify tenant is active
-    const { data: tenant } = await supabase
+    // Verify tenant is active and get WhatsApp config
+    const { data: tenantData } = await supabase
       .from("tenants")
-      .select("status")
+      .select("status, whatsapp_config")
       .eq("id", tenant_id)
       .single();
 
-    if (!tenant || tenant.status !== "active") {
+    if (!tenantData || tenantData.status !== "active") {
       return new Response(JSON.stringify({ error: "Tenant is not active" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Get tenant's WhatsApp config
+    const waConfig = tenantData.whatsapp_config as Record<string, string> | null;
+    const accessToken = waConfig?.access_token;
+
+    if (!accessToken) {
+      return new Response(JSON.stringify({ error: "WhatsApp access token not configured" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Get tenant's WhatsApp session
     const { data: session } = await supabase
       .from("whatsapp_sessions")
       .select("phone_number_id")
@@ -80,32 +89,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Get tenant's WhatsApp access token from tenant settings
-    const { data: tenant } = await supabase
-      .from("tenants")
-      .select("whatsapp_config")
-      .eq("id", tenant_id)
-      .single();
-
-    const waConfig = tenant?.whatsapp_config as Record<string, string> | null;
-    const accessToken = waConfig?.access_token;
-
-    if (!accessToken) {
-      return new Response(JSON.stringify({ error: "WhatsApp access token not configured" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     // Fetch queued messages
-    const batchSize = max_batch || 10;
     const { data: messages } = await supabase
       .from("whatsapp_message_queue")
       .select("*")
       .eq("tenant_id", tenant_id)
       .eq("status", "queued")
       .order("created_at", { ascending: true })
-      .limit(batchSize);
+      .limit(max_batch);
 
     if (!messages || messages.length === 0) {
       return new Response(JSON.stringify({ processed: 0 }), {
@@ -118,7 +109,6 @@ Deno.serve(async (req) => {
     let failed = 0;
 
     for (const msg of messages) {
-      // Mark as sending
       await supabase
         .from("whatsapp_message_queue")
         .update({ status: "sending", attempts: msg.attempts + 1, last_attempt_at: new Date().toISOString() })
@@ -128,7 +118,6 @@ Deno.serve(async (req) => {
         let waBody: Record<string, unknown>;
 
         if (msg.template_name) {
-          // Template message
           waBody = {
             messaging_product: "whatsapp",
             to: msg.recipient_phone,
@@ -140,7 +129,6 @@ Deno.serve(async (req) => {
             },
           };
         } else {
-          // Text message
           waBody = {
             messaging_product: "whatsapp",
             to: msg.recipient_phone,
