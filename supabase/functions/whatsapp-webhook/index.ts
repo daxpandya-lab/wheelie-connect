@@ -57,6 +57,12 @@ Deno.serve(async (req) => {
     const challenge = url.searchParams.get("hub.challenge");
 
     if (mode === "subscribe" && token) {
+      // Accept hardcoded "lovable" token for Meta verification
+      if (token === "lovable") {
+        console.log("Webhook verified with default token");
+        return new Response(challenge, { status: 200, headers: { "Content-Type": "text/plain" } });
+      }
+
       // Look up tenant by verify_token
       const { data: session } = await supabase
         .from("whatsapp_sessions")
@@ -67,9 +73,9 @@ Deno.serve(async (req) => {
 
       if (session) {
         console.log(`Webhook verified for tenant ${session.tenant_id}`);
-        return new Response(challenge, { status: 200 });
+        return new Response(challenge, { status: 200, headers: { "Content-Type": "text/plain" } });
       }
-      return new Response("Forbidden", { status: 403 });
+      return new Response("Verification token mismatch", { status: 403 });
     }
     return new Response("OK", { status: 200 });
   }
@@ -396,11 +402,12 @@ async function processChatbotFlow(
         phone_number: customerPhone,
         vehicle_model: collectedData.vehicle_model || "",
         kms_driven: collectedData.kms_driven ? Number(collectedData.kms_driven) : null,
-        service_type: collectedData.service_type || "",
+        service_type: collectedData.service_type || "General Service",
         booking_date: collectedData.preferred_date || new Date().toISOString().split("T")[0],
         pickup_required: !!collectedData.pickup_required,
         drop_required: !!collectedData.drop_required,
         notes: collectedData.issue_description || "",
+        booking_source: "ai_bot",
         status: "confirmed",
       });
     } else if (node.metadata.action === "create_test_drive_booking") {
@@ -412,6 +419,7 @@ async function processChatbotFlow(
         vehicle_model: collectedData.vehicle_model || "",
         preferred_date: collectedData.preferred_date || new Date().toISOString().split("T")[0],
         preferred_time: collectedData.preferred_time || "",
+        booking_source: "ai_bot",
         status: "confirmed",
       });
 
