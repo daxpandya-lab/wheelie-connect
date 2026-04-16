@@ -137,27 +137,33 @@ Deno.serve(async (req) => {
           };
         }
 
-        const response = await fetch(
-          `https://graph.facebook.com/v18.0/${session.phone_number_id}/messages`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(waBody),
-          }
-        );
+        const metaUrl = `https://graph.facebook.com/v21.0/${session.phone_number_id}/messages`;
+        console.log(`[BATCH-SEND] POST ${metaUrl}`);
+        console.log(`[BATCH-SEND] Payload: ${JSON.stringify(waBody)}`);
+        console.log(`[BATCH-SEND] Auth: Bearer ${accessToken.substring(0, 8)}...`);
+
+        const response = await fetch(metaUrl, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(waBody),
+        });
 
         const result = await response.json();
+        console.log(`[BATCH-SEND] Meta response status: ${response.status} ${response.statusText}`);
+        console.log(`[BATCH-SEND] Meta response body: ${JSON.stringify(result)}`);
 
         if (response.ok && result.messages?.[0]?.id) {
+          console.log(`[BATCH-SEND] ✅ Sent to ${msg.recipient_phone}: ${result.messages[0].id}`);
           await supabase
             .from("whatsapp_message_queue")
             .update({ status: "sent", external_message_id: result.messages[0].id })
             .eq("id", msg.id);
           sent++;
         } else {
+          console.error(`[BATCH-SEND] ❌ Failed for ${msg.recipient_phone}: ${JSON.stringify(result.error || result)}`);
           await supabase
             .from("whatsapp_message_queue")
             .update({ status: "failed", error_message: JSON.stringify(result.error || result) })
