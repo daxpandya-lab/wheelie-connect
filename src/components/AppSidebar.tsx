@@ -13,6 +13,8 @@ export default function AppSidebar() {
   const location = useLocation();
   const { isSuperAdmin, isTenantAdmin, signOut, profile } = useAuth();
 
+  const isAdminOrAbove = isTenantAdmin || isSuperAdmin;
+
   const navItems = [
     { to: "/", icon: LayoutDashboard, label: "Dashboard" },
     { to: "/customers", icon: Users, label: "Customers" },
@@ -20,11 +22,13 @@ export default function AppSidebar() {
     { to: "/service-bookings", icon: Wrench, label: "Service Bookings" },
     { to: "/test-drives", icon: TestTube2, label: "Test Drives" },
     { to: "/conversations", icon: MessageSquare, label: "Conversations" },
-    { to: "/campaigns", icon: Megaphone, label: "Campaigns" },
-    { to: "/analytics", icon: BarChart3, label: "Analytics" },
-    { to: "/flow-builder", icon: Bot, label: "Flow Builder" },
-    { to: "/automations", icon: Zap, label: "Automations" },
-    ...(isTenantAdmin || isSuperAdmin ? [{ to: "/team", icon: UsersRound, label: "Team" }] : []),
+    ...(isAdminOrAbove ? [
+      { to: "/campaigns", icon: Megaphone, label: "Campaigns" },
+      { to: "/analytics", icon: BarChart3, label: "Analytics" },
+      { to: "/flow-builder", icon: Bot, label: "Flow Builder" },
+      { to: "/automations", icon: Zap, label: "Automations" },
+    ] : []),
+    ...(isAdminOrAbove ? [{ to: "/team", icon: UsersRound, label: "Team" }] : []),
     ...(isSuperAdmin ? [{ to: "/super-admin", icon: Shield, label: "Super Admin" }] : []),
     { to: "/settings", icon: Settings, label: "Settings" },
   ];
