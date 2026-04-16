@@ -70,12 +70,26 @@ const App = () => (
                   <Route path="/service-bookings" element={<ServiceBookingsPage />} />
                   <Route path="/test-drives" element={<TestDrivesPage />} />
                   <Route path="/conversations" element={<ConversationsPage />} />
-                  <Route path="/campaigns" element={<CampaignsPage />} />
-                  <Route path="/analytics" element={<AnalyticsPage />} />
-                  <Route path="/settings" element={<SettingsPage />} />
-                  <Route path="/team" element={<UserManagementPage />} />
-                  <Route path="/flow-builder" element={<FlowBuilderPage />} />
-                  <Route path="/automations" element={<AutomationsPage />} />
+                  <Route path="/campaigns" element={
+                    <ProtectedRoute requiredRoles={["tenant_admin", "super_admin"]}>
+                      <CampaignsPage />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/analytics" element={
+                    <ProtectedRoute requiredRoles={["tenant_admin", "super_admin"]}>
+                      <AnalyticsPage />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/flow-builder" element={
+                    <ProtectedRoute requiredRoles={["tenant_admin", "super_admin"]}>
+                      <FlowBuilderPage />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/automations" element={
+                    <ProtectedRoute requiredRoles={["tenant_admin", "super_admin"]}>
+                      <AutomationsPage />
+                    </ProtectedRoute>
+                  } />
                   <Route path="/super-admin" element={
                     <ProtectedRoute requiredRoles={["super_admin"]}>
                       <SuperAdminPage />
