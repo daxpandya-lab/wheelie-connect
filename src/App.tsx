@@ -89,6 +89,7 @@ const App = () => (
                     <ProtectedRoute requiredRoles={["tenant_admin", "super_admin"]}>
                       <AutomationsPage />
                     </ProtectedRoute>
+                  } />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/team" element={<UserManagementPage />} />
                   <Route path="/super-admin" element={
