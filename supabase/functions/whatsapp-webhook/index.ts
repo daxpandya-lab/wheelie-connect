@@ -519,9 +519,10 @@ async function queueReply(
     const accessToken = waConfig?.access_token;
 
     if (!accessToken) {
-      console.warn(`No WhatsApp access token for tenant ${tenantId}`);
+      console.warn(`[SEND] No WhatsApp access token for tenant ${tenantId}`);
       return;
     }
+    console.log(`[SEND] Access token found for tenant ${tenantId} (length: ${accessToken.length}, starts: ${accessToken.substring(0, 8)}...)`);
 
     // Get phone_number_id
     const { data: session } = await supabase
@@ -532,9 +533,10 @@ async function queueReply(
       .single();
 
     if (!session) {
-      console.warn(`No active WhatsApp session for tenant ${tenantId}`);
+      console.warn(`[SEND] No active WhatsApp session for tenant ${tenantId}`);
       return;
     }
+    console.log(`[SEND] Using phone_number_id: ${session.phone_number_id}`);
 
     // Mark as sending
     if (queuedMsg) {
@@ -544,28 +546,35 @@ async function queueReply(
         .eq("id", queuedMsg.id);
     }
 
+    // Build request
+    const metaUrl = `https://graph.facebook.com/v21.0/${session.phone_number_id}/messages`;
+    const metaBody = {
+      messaging_product: "whatsapp",
+      to: recipientPhone,
+      type: "text",
+      text: { body: content },
+    };
+
+    console.log(`[SEND] POST ${metaUrl}`);
+    console.log(`[SEND] Payload: ${JSON.stringify(metaBody)}`);
+    console.log(`[SEND] Auth header: Bearer ${accessToken.substring(0, 8)}...`);
+
     // Send via Meta Cloud API
-    const response = await fetch(
-      `https://graph.facebook.com/v18.0/${session.phone_number_id}/messages`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messaging_product: "whatsapp",
-          to: recipientPhone,
-          type: "text",
-          text: { body: content },
-        }),
-      }
-    );
+    const response = await fetch(metaUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(metaBody),
+    });
 
     const result = await response.json();
+    console.log(`[SEND] Meta API response status: ${response.status} ${response.statusText}`);
+    console.log(`[SEND] Meta API response body: ${JSON.stringify(result)}`);
 
     if (response.ok && result.messages?.[0]?.id) {
-      console.log(`Message sent to ${recipientPhone}: ${result.messages[0].id}`);
+      console.log(`[SEND] ✅ Message sent to ${recipientPhone}: ${result.messages[0].id}`);
       if (queuedMsg) {
         await supabase
           .from("whatsapp_message_queue")
@@ -573,7 +582,8 @@ async function queueReply(
           .eq("id", queuedMsg.id);
       }
     } else {
-      console.error(`Failed to send to ${recipientPhone}:`, JSON.stringify(result.error || result));
+      console.error(`[SEND] ❌ Failed to send to ${recipientPhone}. Status: ${response.status}`);
+      console.error(`[SEND] ❌ Error detail: ${JSON.stringify(result.error || result)}`);
       if (queuedMsg) {
         await supabase
           .from("whatsapp_message_queue")
