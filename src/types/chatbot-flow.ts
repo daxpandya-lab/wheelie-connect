@@ -211,12 +211,12 @@ export const SERVICE_BOOKING_FLOW: FlowData = {
     },
     {
       id: "ask_date",
-      type: "question",
+      type: "date_buttons",
       label: "Ask Preferred Date",
       message: {
-        en: "When would you like to bring your vehicle in? (Please enter a date, e.g., 2025-01-15)",
-        hi: "आप अपना वाहन कब लाना चाहेंगे? (कृपया तारीख दर्ज करें)",
-        ar: "متى تريد إحضار سيارتك؟",
+        en: "When would you like to bring your vehicle in? Pick a date below 👇",
+        hi: "आप अपना वाहन कब लाना चाहेंगे? नीचे एक तारीख चुनें 👇",
+        ar: "متى تريد إحضار سيارتك؟ اختر تاريخًا 👇",
       },
       dataField: "preferred_date",
       validationType: "date",
@@ -396,9 +396,9 @@ export const TEST_DRIVE_FLOW: FlowData = {
     },
     {
       id: "td_ask_date",
-      type: "question",
+      type: "date_buttons",
       label: "Ask Preferred Date",
-      message: { en: "When would you like to schedule the test drive? (e.g., 2025-01-15)", hi: "आप टेस्ट ड्राइव कब शेड्यूल करना चाहेंगे?", ar: "متى تريد جدولة تجربة القيادة؟" },
+      message: { en: "Pick your preferred test drive date 👇", hi: "टेस्ट ड्राइव की तारीख चुनें 👇", ar: "اختر تاريخ تجربة القيادة 👇" },
       dataField: "preferred_date",
       validationType: "date",
       nextNodeId: "td_ask_time",
