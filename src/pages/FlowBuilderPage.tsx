@@ -96,12 +96,13 @@ export default function FlowBuilderPage() {
   const saveFlow = async () => {
     if (!activeFlowId) return;
     setSaving(true);
+    const refreshed: FlowData = { ...flowData, connections: rebuildConnections(flowData.nodes) };
     const { error } = await supabase.from("chatbot_flows")
-      .update({ flow_data: JSON.parse(JSON.stringify(flowData)), name: flowName } as any)
+      .update({ flow_data: JSON.parse(JSON.stringify(refreshed)), name: flowName, updated_at: new Date().toISOString() } as any)
       .eq("id", activeFlowId);
     setSaving(false);
     if (error) toast.error(error.message);
-    else { toast.success("Flow saved!"); fetchFlows(); }
+    else { setFlowData(refreshed); toast.success("Flow saved!"); fetchFlows(); }
   };
 
   const toggleActive = async (flowId: string, isActive: boolean) => {
