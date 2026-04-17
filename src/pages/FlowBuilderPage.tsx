@@ -13,10 +13,11 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Save, Play, ZoomIn, ZoomOut, Maximize2,
   MessageSquare, Car, Loader2, Plus, ChevronLeft,
+  ArrowUp, ArrowDown, Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { FlowData, FlowNode } from "@/types/chatbot-flow";
-import { SERVICE_BOOKING_FLOW, TEST_DRIVE_FLOW } from "@/types/chatbot-flow";
+import type { FlowData, FlowNode, NodeType } from "@/types/chatbot-flow";
+import { SERVICE_BOOKING_FLOW, TEST_DRIVE_FLOW, NODE_TYPE_CONFIG, createBlankNode } from "@/types/chatbot-flow";
 
 type FlowRecord = {
   id: string;
@@ -95,12 +96,13 @@ export default function FlowBuilderPage() {
   const saveFlow = async () => {
     if (!activeFlowId) return;
     setSaving(true);
+    const refreshed: FlowData = { ...flowData, connections: rebuildConnections(flowData.nodes) };
     const { error } = await supabase.from("chatbot_flows")
-      .update({ flow_data: JSON.parse(JSON.stringify(flowData)), name: flowName } as any)
+      .update({ flow_data: JSON.parse(JSON.stringify(refreshed)), name: flowName, updated_at: new Date().toISOString() } as any)
       .eq("id", activeFlowId);
     setSaving(false);
     if (error) toast.error(error.message);
-    else { toast.success("Flow saved!"); fetchFlows(); }
+    else { setFlowData(refreshed); toast.success("Flow saved!"); fetchFlows(); }
   };
 
   const toggleActive = async (flowId: string, isActive: boolean) => {
@@ -113,6 +115,63 @@ export default function FlowBuilderPage() {
       ...prev,
       nodes: prev.nodes.map((n) => (n.id === updated.id ? updated : n)),
     }));
+  };
+
+  // Recompute connections from nodes' nextNodeId/options
+  const rebuildConnections = (nodes: FlowNode[]): FlowData["connections"] => {
+    const conns: FlowData["connections"] = [];
+    nodes.forEach((n) => {
+      if (n.options && n.options.length) {
+        n.options.forEach((o, i) => {
+          if (o.nextNodeId) conns.push({ id: `${n.id}_opt${i}`, sourceId: n.id, targetId: o.nextNodeId, label: o.label });
+        });
+      } else if (n.nextNodeId) {
+        conns.push({ id: `${n.id}_next`, sourceId: n.id, targetId: n.nextNodeId });
+      }
+    });
+    return conns;
+  };
+
+  const addNode = (type: NodeType) => {
+    const lastNode = flowData.nodes[flowData.nodes.length - 1];
+    const position = { x: 400, y: (lastNode?.position.y || 0) + 100 };
+    const newNode = createBlankNode(type, position);
+    // Wire previous tail node to point at new node
+    const updatedNodes = flowData.nodes.map((n, i) => {
+      if (i === flowData.nodes.length - 1 && !n.options?.length && !n.nextNodeId && n.type !== "end") {
+        return { ...n, nextNodeId: newNode.id };
+      }
+      return n;
+    });
+    const nodes = [...updatedNodes, newNode];
+    setFlowData({ ...flowData, nodes, connections: rebuildConnections(nodes) });
+    setSelectedNodeId(newNode.id);
+    toast.success(`Added ${NODE_TYPE_CONFIG[type].label} block`);
+  };
+
+  const deleteNode = (nodeId: string) => {
+    if (nodeId === flowData.startNodeId) { toast.error("Cannot delete the start node"); return; }
+    const nodes = flowData.nodes
+      .filter((n) => n.id !== nodeId)
+      .map((n) => ({
+        ...n,
+        nextNodeId: n.nextNodeId === nodeId ? undefined : n.nextNodeId,
+        options: n.options?.map((o) => o.nextNodeId === nodeId ? { ...o, nextNodeId: "" } : o),
+      }));
+    setFlowData({ ...flowData, nodes, connections: rebuildConnections(nodes) });
+    setSelectedNodeId(null);
+    toast.success("Block deleted");
+  };
+
+  const moveNode = (nodeId: string, dir: -1 | 1) => {
+    const idx = flowData.nodes.findIndex((n) => n.id === nodeId);
+    const newIdx = idx + dir;
+    if (idx < 0 || newIdx < 0 || newIdx >= flowData.nodes.length) return;
+    const nodes = [...flowData.nodes];
+    [nodes[idx], nodes[newIdx]] = [nodes[newIdx], nodes[idx]];
+    // Reposition vertically based on order
+    nodes.forEach((n, i) => { n.position = { x: 400, y: 50 + i * 100 }; });
+    setFlowData({ ...flowData, nodes });
   };
 
   const selectedNode = flowData.nodes.find((n) => n.id === selectedNodeId);
@@ -233,6 +292,65 @@ export default function FlowBuilderPage() {
 
         {/* Canvas + Panels */}
         <div className="flex-1 flex overflow-hidden">
+          {/* Block list (left rail) */}
+          <div className="w-64 border-r border-border bg-card overflow-y-auto shrink-0">
+            <div className="p-3 border-b border-border flex items-center justify-between">
+              <h3 className="text-xs font-semibold text-foreground">Blocks ({flowData.nodes.length})</h3>
+              <Select onValueChange={(v) => addNode(v as NodeType)}>
+                <SelectTrigger className="h-7 w-24 text-xs">
+                  <Plus className="w-3 h-3" />
+                  <span>Add</span>
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(NODE_TYPE_CONFIG) as NodeType[]).map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {NODE_TYPE_CONFIG[t].icon} {NODE_TYPE_CONFIG[t].label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="p-2 space-y-1">
+              {flowData.nodes.map((n, i) => (
+                <div
+                  key={n.id}
+                  onClick={() => setSelectedNodeId(n.id)}
+                  className={`group p-2 rounded-md cursor-pointer text-xs flex items-center gap-2 ${
+                    selectedNodeId === n.id ? "bg-primary/10 border border-primary/30" : "hover:bg-muted border border-transparent"
+                  }`}
+                >
+                  <span className="text-base">{NODE_TYPE_CONFIG[n.type].icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate font-medium text-foreground">{n.label}</p>
+                    <p className="truncate text-[10px] text-muted-foreground">{n.type}</p>
+                  </div>
+                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); moveNode(n.id, -1); }}
+                      disabled={i === 0}
+                      className="p-1 hover:bg-background rounded disabled:opacity-30"
+                    >
+                      <ArrowUp className="w-3 h-3" />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); moveNode(n.id, 1); }}
+                      disabled={i === flowData.nodes.length - 1}
+                      className="p-1 hover:bg-background rounded disabled:opacity-30"
+                    >
+                      <ArrowDown className="w-3 h-3" />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); deleteNode(n.id); }}
+                      className="p-1 hover:bg-background rounded"
+                    >
+                      <Trash2 className="w-3 h-3 text-destructive" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Canvas */}
           <div className="flex-1 relative">
             <FlowCanvas
@@ -242,7 +360,6 @@ export default function FlowBuilderPage() {
               zoom={zoom}
               pan={pan}
             />
-            {/* Node count badge */}
             <div className="absolute bottom-3 left-3 bg-card/90 backdrop-blur-sm border border-border rounded-lg px-3 py-1.5 text-xs text-muted-foreground">
               {flowData.nodes.length} nodes · {flowData.connections.length} connections
             </div>
@@ -252,7 +369,9 @@ export default function FlowBuilderPage() {
           {selectedNode && !showPreview && (
             <NodeProperties
               node={selectedNode}
+              allNodes={flowData.nodes}
               onChange={handleNodeChange}
+              onDelete={deleteNode}
               onClose={() => setSelectedNodeId(null)}
               language={language}
             />

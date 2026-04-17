@@ -4,6 +4,7 @@ import type { Database } from "@/integrations/supabase/types";
 export type NodeType =
   | "greeting"
   | "question"
+  | "date_buttons"
   | "api_check"
   | "condition"
   | "action"
@@ -210,12 +211,12 @@ export const SERVICE_BOOKING_FLOW: FlowData = {
     },
     {
       id: "ask_date",
-      type: "question",
+      type: "date_buttons",
       label: "Ask Preferred Date",
       message: {
-        en: "When would you like to bring your vehicle in? (Please enter a date, e.g., 2025-01-15)",
-        hi: "आप अपना वाहन कब लाना चाहेंगे? (कृपया तारीख दर्ज करें)",
-        ar: "متى تريد إحضار سيارتك؟",
+        en: "When would you like to bring your vehicle in? Pick a date below 👇",
+        hi: "आप अपना वाहन कब लाना चाहेंगे? नीचे एक तारीख चुनें 👇",
+        ar: "متى تريد إحضار سيارتك؟ اختر تاريخًا 👇",
       },
       dataField: "preferred_date",
       validationType: "date",
@@ -395,9 +396,9 @@ export const TEST_DRIVE_FLOW: FlowData = {
     },
     {
       id: "td_ask_date",
-      type: "question",
+      type: "date_buttons",
       label: "Ask Preferred Date",
-      message: { en: "When would you like to schedule the test drive? (e.g., 2025-01-15)", hi: "आप टेस्ट ड्राइव कब शेड्यूल करना चाहेंगे?", ar: "متى تريد جدولة تجربة القيادة؟" },
+      message: { en: "Pick your preferred test drive date 👇", hi: "टेस्ट ड्राइव की तारीख चुनें 👇", ar: "اختر تاريخ تجربة القيادة 👇" },
       dataField: "preferred_date",
       validationType: "date",
       nextNodeId: "td_ask_time",
@@ -463,9 +464,43 @@ export const TEST_DRIVE_FLOW: FlowData = {
 export const NODE_TYPE_CONFIG: Record<NodeType, { color: string; icon: string; label: string }> = {
   greeting: { color: "hsl(var(--success))", icon: "👋", label: "Greeting" },
   question: { color: "hsl(var(--primary))", icon: "❓", label: "Question" },
+  date_buttons: { color: "hsl(var(--primary))", icon: "📅", label: "Date Picker" },
   api_check: { color: "hsl(var(--info))", icon: "🔍", label: "API Check" },
   condition: { color: "hsl(var(--warning))", icon: "🔀", label: "Condition" },
   action: { color: "hsl(var(--accent))", icon: "⚡", label: "Action" },
   confirmation: { color: "hsl(var(--info))", icon: "✅", label: "Confirmation" },
   end: { color: "hsl(var(--destructive))", icon: "🏁", label: "End" },
 };
+
+// Helper to create a blank node of a given type
+export function createBlankNode(type: NodeType, position: FlowNodePosition): FlowNode {
+  const id = `node_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  const base: FlowNode = {
+    id,
+    type,
+    label: NODE_TYPE_CONFIG[type].label,
+    message: { en: "", hi: "", ar: "" },
+    position,
+  };
+  if (type === "question") {
+    base.message.en = "Please share the information.";
+    base.validationType = "text";
+    base.dataField = "";
+  } else if (type === "date_buttons") {
+    base.message.en = "Pick your preferred date:";
+    base.validationType = "date";
+    base.dataField = "preferred_date";
+  } else if (type === "greeting") {
+    base.message.en = "👋 Hello! How can I help you today?";
+  } else if (type === "confirmation") {
+    base.message.en = "Please confirm the details above.";
+    base.validationType = "selection";
+    base.options = [
+      { label: "Yes, confirm", value: "confirm", nextNodeId: "" },
+      { label: "Start over", value: "restart", nextNodeId: "" },
+    ];
+  } else if (type === "end") {
+    base.message.en = "✅ All done. Thank you!";
+  }
+  return base;
+}
