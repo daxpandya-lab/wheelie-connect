@@ -13,10 +13,11 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Save, Play, ZoomIn, ZoomOut, Maximize2,
   MessageSquare, Car, Loader2, Plus, ChevronLeft,
+  ArrowUp, ArrowDown, Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { FlowData, FlowNode } from "@/types/chatbot-flow";
-import { SERVICE_BOOKING_FLOW, TEST_DRIVE_FLOW } from "@/types/chatbot-flow";
+import type { FlowData, FlowNode, NodeType } from "@/types/chatbot-flow";
+import { SERVICE_BOOKING_FLOW, TEST_DRIVE_FLOW, NODE_TYPE_CONFIG, createBlankNode } from "@/types/chatbot-flow";
 
 type FlowRecord = {
   id: string;
@@ -113,6 +114,63 @@ export default function FlowBuilderPage() {
       ...prev,
       nodes: prev.nodes.map((n) => (n.id === updated.id ? updated : n)),
     }));
+  };
+
+  // Recompute connections from nodes' nextNodeId/options
+  const rebuildConnections = (nodes: FlowNode[]): FlowData["connections"] => {
+    const conns: FlowData["connections"] = [];
+    nodes.forEach((n) => {
+      if (n.options && n.options.length) {
+        n.options.forEach((o, i) => {
+          if (o.nextNodeId) conns.push({ id: `${n.id}_opt${i}`, sourceId: n.id, targetId: o.nextNodeId, label: o.label });
+        });
+      } else if (n.nextNodeId) {
+        conns.push({ id: `${n.id}_next`, sourceId: n.id, targetId: n.nextNodeId });
+      }
+    });
+    return conns;
+  };
+
+  const addNode = (type: NodeType) => {
+    const lastNode = flowData.nodes[flowData.nodes.length - 1];
+    const position = { x: 400, y: (lastNode?.position.y || 0) + 100 };
+    const newNode = createBlankNode(type, position);
+    // Wire previous tail node to point at new node
+    const updatedNodes = flowData.nodes.map((n, i) => {
+      if (i === flowData.nodes.length - 1 && !n.options?.length && !n.nextNodeId && n.type !== "end") {
+        return { ...n, nextNodeId: newNode.id };
+      }
+      return n;
+    });
+    const nodes = [...updatedNodes, newNode];
+    setFlowData({ ...flowData, nodes, connections: rebuildConnections(nodes) });
+    setSelectedNodeId(newNode.id);
+    toast.success(`Added ${NODE_TYPE_CONFIG[type].label} block`);
+  };
+
+  const deleteNode = (nodeId: string) => {
+    if (nodeId === flowData.startNodeId) { toast.error("Cannot delete the start node"); return; }
+    const nodes = flowData.nodes
+      .filter((n) => n.id !== nodeId)
+      .map((n) => ({
+        ...n,
+        nextNodeId: n.nextNodeId === nodeId ? undefined : n.nextNodeId,
+        options: n.options?.map((o) => o.nextNodeId === nodeId ? { ...o, nextNodeId: "" } : o),
+      }));
+    setFlowData({ ...flowData, nodes, connections: rebuildConnections(nodes) });
+    setSelectedNodeId(null);
+    toast.success("Block deleted");
+  };
+
+  const moveNode = (nodeId: string, dir: -1 | 1) => {
+    const idx = flowData.nodes.findIndex((n) => n.id === nodeId);
+    const newIdx = idx + dir;
+    if (idx < 0 || newIdx < 0 || newIdx >= flowData.nodes.length) return;
+    const nodes = [...flowData.nodes];
+    [nodes[idx], nodes[newIdx]] = [nodes[newIdx], nodes[idx]];
+    // Reposition vertically based on order
+    nodes.forEach((n, i) => { n.position = { x: 400, y: 50 + i * 100 }; });
+    setFlowData({ ...flowData, nodes });
   };
 
   const selectedNode = flowData.nodes.find((n) => n.id === selectedNodeId);
