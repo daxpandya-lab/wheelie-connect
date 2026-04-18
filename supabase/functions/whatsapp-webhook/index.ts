@@ -414,9 +414,19 @@ async function processChatbotFlow(
     }
   }
 
-  // End node — create booking
+  // End node — create booking + lead with full metadata
   if (node?.type === "end" && node.metadata?.action) {
     const isoDate = (collectedData.preferred_date_iso as string) || new Date().toISOString().split("T")[0];
+
+    // Build metadata blob: every collected data field except internal _iso helpers
+    const cleanMetadata: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(collectedData)) {
+      if (k.endsWith("_iso")) continue;
+      cleanMetadata[k] = v;
+    }
+    cleanMetadata.flow_id = flowId;
+    cleanMetadata.captured_at = new Date().toISOString();
+
     if (node.metadata.action === "create_service_booking") {
       await supabase.from("service_bookings").insert({
         tenant_id: tenantId, customer_id: customerId,
@@ -430,6 +440,7 @@ async function processChatbotFlow(
         drop_required: !!collectedData.drop_required,
         notes: collectedData.issue_description || "",
         booking_source: "ai_bot", status: "confirmed",
+        metadata: cleanMetadata,
       });
     } else if (node.metadata.action === "create_test_drive_booking") {
       await supabase.from("test_drive_bookings").insert({
@@ -440,15 +451,23 @@ async function processChatbotFlow(
         preferred_date: isoDate,
         preferred_time: collectedData.preferred_time || "",
         booking_source: "ai_bot", status: "confirmed",
-      });
-      await supabase.from("leads").insert({
-        tenant_id: tenantId, customer_id: customerId,
-        customer_name: collectedData.customer_name || "",
-        phone_number: customerPhone, email: collectedData.email || "",
-        source: "whatsapp", vehicle_interest: collectedData.vehicle_model || "",
-        status: "new",
+        metadata: cleanMetadata,
       });
     }
+
+    // ALWAYS create a lead with full metadata so the dynamic Leads report
+    // surfaces every variable the dealer configured in their flow.
+    await supabase.from("leads").insert({
+      tenant_id: tenantId, customer_id: customerId,
+      customer_name: (collectedData.customer_name as string) || customerPhone,
+      phone_number: customerPhone,
+      email: (collectedData.email as string) || null,
+      source: "whatsapp",
+      vehicle_interest: (collectedData.vehicle_model as string) || null,
+      status: "new",
+      metadata: cleanMetadata,
+    });
+
     await supabase.from("chatbot_conversations")
       .update({ status: "closed", ended_at: new Date().toISOString() })
       .eq("id", conversationId);
