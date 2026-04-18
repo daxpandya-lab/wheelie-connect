@@ -85,6 +85,35 @@ export default function FlowBuilderPage() {
     fetchFlows();
   };
 
+  // Create a new flow — blank or a duplicate of an existing one
+  const createNewFlow = async (sourceFlow?: FlowRecord) => {
+    if (!tenantId) return;
+    setSaving(true);
+    const blank: FlowData = {
+      version: 1,
+      startNodeId: "start",
+      nodes: [{
+        id: "start", type: "greeting", label: "Greeting",
+        message: { en: "👋 Hello! How can I help you today?", hi: "", ar: "" },
+        position: { x: 400, y: 50 },
+      }],
+      connections: [],
+    };
+    const newFlowData = sourceFlow
+      ? JSON.parse(JSON.stringify(sourceFlow.flow_data))
+      : JSON.parse(JSON.stringify(blank));
+    const name = sourceFlow ? `${sourceFlow.name} (Copy)` : "Untitled Flow";
+    const { data, error } = await supabase.from("chatbot_flows").insert({
+      tenant_id: tenantId, name, description: sourceFlow?.description || null,
+      flow_data: newFlowData, is_active: false, language: "en", channel: "both",
+    } as any).select("id, name, description, flow_data, is_active, language, channel").single();
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("New flow created");
+    await fetchFlows();
+    if (data) openFlow({ ...data, flow_data: data.flow_data as unknown as FlowData });
+  };
+
   const openFlow = (flow: FlowRecord) => {
     setActiveFlowId(flow.id);
     setFlowData(flow.flow_data);
@@ -188,12 +217,18 @@ export default function FlowBuilderPage() {
                 <h2 className="text-lg font-semibold text-foreground">Chatbot Flows</h2>
                 <p className="text-sm text-muted-foreground">Build and manage your automated conversation flows</p>
               </div>
-              {flows.length === 0 && !loading && (
-                <Button onClick={seedFlows} disabled={saving}>
+              <div className="flex items-center gap-2">
+                {flows.length === 0 && !loading && (
+                  <Button variant="outline" onClick={seedFlows} disabled={saving}>
+                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                    Create Default Flows
+                  </Button>
+                )}
+                <Button onClick={() => createNewFlow()} disabled={saving}>
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                  Create Default Flows
+                  Create New Flow
                 </Button>
-              )}
+              </div>
             </div>
 
             {loading ? (

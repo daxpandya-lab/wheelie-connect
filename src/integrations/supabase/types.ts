@@ -598,6 +598,7 @@ export type Database = {
           email: string | null
           follow_up_date: string | null
           id: string
+          metadata: Json
           notes: string | null
           phone_number: string | null
           score: number | null
@@ -615,6 +616,7 @@ export type Database = {
           email?: string | null
           follow_up_date?: string | null
           id?: string
+          metadata?: Json
           notes?: string | null
           phone_number?: string | null
           score?: number | null
@@ -632,6 +634,7 @@ export type Database = {
           email?: string | null
           follow_up_date?: string | null
           id?: string
+          metadata?: Json
           notes?: string | null
           phone_number?: string | null
           score?: number | null
@@ -797,6 +800,7 @@ export type Database = {
           id: string
           issue_description: string | null
           kms_driven: number | null
+          metadata: Json
           notes: string | null
           parts_required: string | null
           phone_number: string
@@ -826,6 +830,7 @@ export type Database = {
           id?: string
           issue_description?: string | null
           kms_driven?: number | null
+          metadata?: Json
           notes?: string | null
           parts_required?: string | null
           phone_number: string
@@ -855,6 +860,7 @@ export type Database = {
           id?: string
           issue_description?: string | null
           kms_driven?: number | null
+          metadata?: Json
           notes?: string | null
           parts_required?: string | null
           phone_number?: string
@@ -963,6 +969,7 @@ export type Database = {
           customer_name: string
           follow_up_date: string | null
           id: string
+          metadata: Json
           notes: string | null
           phone_number: string
           preferred_date: string
@@ -980,6 +987,7 @@ export type Database = {
           customer_name: string
           follow_up_date?: string | null
           id?: string
+          metadata?: Json
           notes?: string | null
           phone_number: string
           preferred_date: string
@@ -997,6 +1005,7 @@ export type Database = {
           customer_name?: string
           follow_up_date?: string | null
           id?: string
+          metadata?: Json
           notes?: string | null
           phone_number?: string
           preferred_date?: string

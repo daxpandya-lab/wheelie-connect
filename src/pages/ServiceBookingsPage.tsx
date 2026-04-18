@@ -15,9 +15,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { format, isToday, isFuture } from "date-fns";
 import {
   Search, CalendarIcon, Loader2, RefreshCw, Phone, Wrench,
-  Clock, CheckCircle, XCircle, Play, AlertCircle, Eye, ClipboardList, Bot, User,
+  Clock, CheckCircle, XCircle, Play, AlertCircle, Eye, ClipboardList, Bot, User, Settings2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useDynamicColumns } from "@/hooks/useDynamicColumns";
+import ColumnManagerDialog from "@/components/reports/ColumnManagerDialog";
+import DynamicReportTable from "@/components/reports/DynamicReportTable";
 
 type ServiceBooking = {
   id: string; customer_name: string; phone_number: string; vehicle_model: string;
@@ -28,7 +31,19 @@ type ServiceBooking = {
   estimated_cost: number | null; approval_status: string | null;
   quotation_notes: string | null; work_notes: string | null;
   parts_required: string | null; created_at: string; booking_source: string;
+  metadata: Record<string, unknown> | null;
 };
+
+const FIXED_COLS = [
+  { key: "customer_name", label: "Customer" },
+  { key: "phone_number", label: "Phone" },
+  { key: "vehicle_model", label: "Vehicle" },
+  { key: "service_type", label: "Service" },
+  { key: "booking_date", label: "Date" },
+  { key: "status", label: "Status" },
+  { key: "approval_status", label: "Approval" },
+  { key: "booking_source", label: "Source" },
+];
 
 type Profile = { user_id: string; full_name: string | null };
 
@@ -64,6 +79,8 @@ export default function ServiceBookingsPage() {
   const [dateFrom, setDateFrom] = useState<Date | undefined>();
   const [dateTo, setDateTo] = useState<Date | undefined>();
   const [tab, setTab] = useState("all");
+  const [colMgrOpen, setColMgrOpen] = useState(false);
+  const { columns, savePrefs } = useDynamicColumns("service_bookings", FIXED_COLS, bookings as any);
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState<ServiceBooking | null>(null);
@@ -240,6 +257,7 @@ export default function ServiceBookingsPage() {
             {(search || phoneSearch || statusFilter !== "all" || serviceTypeFilter !== "all" || sourceFilter !== "all" || dateFrom || dateTo) && (
               <Button variant="ghost" size="sm" className="h-9" onClick={() => { setSearch(""); setPhoneSearch(""); setStatusFilter("all"); setServiceTypeFilter("all"); setSourceFilter("all"); setDateFrom(undefined); setDateTo(undefined); }}>Clear</Button>
             )}
+            <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => setColMgrOpen(true)}><Settings2 className="w-4 h-4" />Manage Columns</Button>
             <Button variant="ghost" size="icon" className="h-9 w-9" onClick={fetchBookings}><RefreshCw className="w-4 h-4" /></Button>
           </div>
         </div>
@@ -251,9 +269,12 @@ export default function ServiceBookingsPage() {
             <TabsTrigger value="today">Today ({todayCount})</TabsTrigger>
             <TabsTrigger value="upcoming">Upcoming ({upcomingCount})</TabsTrigger>
             <TabsTrigger value="completed">Completed ({completedCount})</TabsTrigger>
+            <TabsTrigger value="report">Report</TabsTrigger>
           </TabsList>
           <TabsContent value={tab} className="mt-4">
-            {loading ? (
+            {tab === "report" ? (
+              <DynamicReportTable columns={columns} rows={bookings as any} emptyMessage="No bookings yet." />
+            ) : loading ? (
               <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
             ) : filtered.length === 0 ? (
               <div className="text-center py-12 glass-card rounded-xl">
@@ -427,6 +448,13 @@ export default function ServiceBookingsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ColumnManagerDialog
+        open={colMgrOpen}
+        onOpenChange={setColMgrOpen}
+        columns={columns}
+        onSave={async (next) => savePrefs(next)}
+      />
     </>
   );
 }

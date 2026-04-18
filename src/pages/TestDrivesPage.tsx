@@ -8,8 +8,12 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Car, Loader2, Search, Bot, User } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus, Car, Loader2, Search, Bot, User, Settings2, LayoutGrid, List as ListIcon } from "lucide-react";
 import { toast } from "sonner";
+import { useDynamicColumns } from "@/hooks/useDynamicColumns";
+import ColumnManagerDialog from "@/components/reports/ColumnManagerDialog";
+import DynamicReportTable from "@/components/reports/DynamicReportTable";
 
 const statusColors: Record<string, string> = {
   pending: "bg-warning/10 text-warning",
@@ -18,6 +22,16 @@ const statusColors: Record<string, string> = {
   completed: "bg-success/10 text-success",
   cancelled: "bg-destructive/10 text-destructive",
 };
+
+const FIXED_COLS = [
+  { key: "customer_name", label: "Customer" },
+  { key: "phone_number", label: "Phone" },
+  { key: "vehicle_model", label: "Vehicle" },
+  { key: "preferred_date", label: "Date" },
+  { key: "preferred_time", label: "Time" },
+  { key: "status", label: "Status" },
+  { key: "booking_source", label: "Source" },
+];
 
 function SourceBadge({ source }: { source: string }) {
   if (source === "ai_bot") {
@@ -34,11 +48,15 @@ export default function TestDrivesPage() {
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState("all");
+  const [view, setView] = useState<"table" | "cards">("table");
+  const [colMgrOpen, setColMgrOpen] = useState(false);
   const [form, setForm] = useState({
     customer_name: "", phone_number: "", vehicle_model: "",
     preferred_date: "", preferred_time: "", license_status: "verified",
     visit_type: "showroom", notes: "",
   });
+
+  const { columns, savePrefs } = useDynamicColumns("test_drive_bookings", FIXED_COLS, bookings);
 
   const fetchBookings = async () => {
     if (!tenantId) return;
@@ -107,11 +125,28 @@ export default function TestDrivesPage() {
               </SelectContent>
             </Select>
           </div>
-          <Button onClick={() => setCreateOpen(true)}><Plus className="w-4 h-4" /> Schedule Test Drive</Button>
+          <div className="flex items-center gap-2">
+            <Tabs value={view} onValueChange={(v) => setView(v as any)}>
+              <TabsList className="h-9">
+                <TabsTrigger value="table" className="text-xs gap-1"><ListIcon className="w-3.5 h-3.5" />Report</TabsTrigger>
+                <TabsTrigger value="cards" className="text-xs gap-1"><LayoutGrid className="w-3.5 h-3.5" />Cards</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <Button variant="outline" size="sm" onClick={() => setColMgrOpen(true)} className="gap-1.5">
+              <Settings2 className="w-4 h-4" /> Manage Columns
+            </Button>
+            <Button onClick={() => setCreateOpen(true)}><Plus className="w-4 h-4" /> Schedule Test Drive</Button>
+          </div>
         </div>
 
         {loading ? (
           <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+        ) : view === "table" ? (
+          <DynamicReportTable
+            columns={columns}
+            rows={filtered}
+            emptyMessage="No test drives yet."
+          />
         ) : filtered.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">No test drives found.</div>
         ) : (
@@ -131,27 +166,11 @@ export default function TestDrivesPage() {
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[td.status] || ""}`}>{td.status}</span>
                 </div>
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Phone</span>
-                    <span className="text-foreground">{td.phone_number}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Date</span>
-                    <span className="text-foreground">{new Date(td.preferred_date).toLocaleDateString()}</span>
-                  </div>
-                  {td.preferred_time && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Time</span>
-                      <span className="text-foreground">{td.preferred_time}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Source</span>
-                    <SourceBadge source={td.booking_source || "manual"} />
-                  </div>
-                  {td.notes && (
-                    <p className="text-xs text-muted-foreground mt-2 border-t pt-2">{td.notes}</p>
-                  )}
+                  <div className="flex justify-between"><span className="text-muted-foreground">Phone</span><span className="text-foreground">{td.phone_number}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Date</span><span className="text-foreground">{new Date(td.preferred_date).toLocaleDateString()}</span></div>
+                  {td.preferred_time && (<div className="flex justify-between"><span className="text-muted-foreground">Time</span><span className="text-foreground">{td.preferred_time}</span></div>)}
+                  <div className="flex justify-between items-center"><span className="text-muted-foreground">Source</span><SourceBadge source={td.booking_source || "manual"} /></div>
+                  {td.notes && (<p className="text-xs text-muted-foreground mt-2 border-t pt-2">{td.notes}</p>)}
                 </div>
               </div>
             ))}
@@ -162,61 +181,30 @@ export default function TestDrivesPage() {
           <DialogContent className="max-w-md">
             <DialogHeader><DialogTitle>Schedule Test Drive</DialogTitle></DialogHeader>
             <div className="space-y-4 pt-2">
-              <div className="space-y-2">
-                <Label>Customer Name *</Label>
-                <Input value={form.customer_name} onChange={(e) => setForm({ ...form, customer_name: e.target.value })} placeholder="Full name" />
-              </div>
-              <div className="space-y-2">
-                <Label>Phone Number *</Label>
-                <Input value={form.phone_number} onChange={(e) => setForm({ ...form, phone_number: e.target.value })} placeholder="+91 98765 43210" />
-              </div>
-              <div className="space-y-2">
-                <Label>Interested Model *</Label>
-                <Input value={form.vehicle_model} onChange={(e) => setForm({ ...form, vehicle_model: e.target.value })} placeholder="e.g. 2024 Toyota Fortuner" />
+              <div className="space-y-2"><Label>Customer Name *</Label><Input value={form.customer_name} onChange={(e) => setForm({ ...form, customer_name: e.target.value })} placeholder="Full name" /></div>
+              <div className="space-y-2"><Label>Phone Number *</Label><Input value={form.phone_number} onChange={(e) => setForm({ ...form, phone_number: e.target.value })} placeholder="+91 98765 43210" /></div>
+              <div className="space-y-2"><Label>Interested Model *</Label><Input value={form.vehicle_model} onChange={(e) => setForm({ ...form, vehicle_model: e.target.value })} placeholder="e.g. 2024 Toyota Fortuner" /></div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>Preferred Date *</Label><Input type="date" value={form.preferred_date} onChange={(e) => setForm({ ...form, preferred_date: e.target.value })} /></div>
+                <div className="space-y-2"><Label>Preferred Time</Label><Input type="time" value={form.preferred_time} onChange={(e) => setForm({ ...form, preferred_time: e.target.value })} /></div>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Preferred Date *</Label>
-                  <Input type="date" value={form.preferred_date} onChange={(e) => setForm({ ...form, preferred_date: e.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Preferred Time</Label>
-                  <Input type="time" value={form.preferred_time} onChange={(e) => setForm({ ...form, preferred_time: e.target.value })} />
-                </div>
+                <div className="space-y-2"><Label>License Status</Label><Select value={form.license_status} onValueChange={(v) => setForm({ ...form, license_status: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="verified">Verified</SelectItem><SelectItem value="pending">Pending</SelectItem></SelectContent></Select></div>
+                <div className="space-y-2"><Label>Visit Type</Label><Select value={form.visit_type} onValueChange={(v) => setForm({ ...form, visit_type: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="showroom">Showroom</SelectItem><SelectItem value="home">Home Visit</SelectItem></SelectContent></Select></div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>License Status</Label>
-                  <Select value={form.license_status} onValueChange={(v) => setForm({ ...form, license_status: v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="verified">Verified</SelectItem>
-                      <SelectItem value="pending">Pending</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Visit Type</Label>
-                  <Select value={form.visit_type} onValueChange={(v) => setForm({ ...form, visit_type: v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="showroom">Showroom</SelectItem>
-                      <SelectItem value="home">Home Visit</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Notes</Label>
-                <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Any additional notes" />
-              </div>
-              <Button className="w-full" onClick={handleCreate} disabled={saving}>
-                {saving && <Loader2 className="w-4 h-4 animate-spin mr-1" />} Schedule Test Drive
-              </Button>
+              <div className="space-y-2"><Label>Notes</Label><Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Any additional notes" /></div>
+              <Button className="w-full" onClick={handleCreate} disabled={saving}>{saving && <Loader2 className="w-4 h-4 animate-spin mr-1" />} Schedule Test Drive</Button>
             </div>
           </DialogContent>
         </Dialog>
       </div>
+
+      <ColumnManagerDialog
+        open={colMgrOpen}
+        onOpenChange={setColMgrOpen}
+        columns={columns}
+        onSave={async (next) => savePrefs(next)}
+      />
     </>
   );
 }
