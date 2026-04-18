@@ -257,6 +257,7 @@ export default function ServiceBookingsPage() {
             {(search || phoneSearch || statusFilter !== "all" || serviceTypeFilter !== "all" || sourceFilter !== "all" || dateFrom || dateTo) && (
               <Button variant="ghost" size="sm" className="h-9" onClick={() => { setSearch(""); setPhoneSearch(""); setStatusFilter("all"); setServiceTypeFilter("all"); setSourceFilter("all"); setDateFrom(undefined); setDateTo(undefined); }}>Clear</Button>
             )}
+            <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => setColMgrOpen(true)}><Settings2 className="w-4 h-4" />Manage Columns</Button>
             <Button variant="ghost" size="icon" className="h-9 w-9" onClick={fetchBookings}><RefreshCw className="w-4 h-4" /></Button>
           </div>
         </div>
@@ -268,9 +269,12 @@ export default function ServiceBookingsPage() {
             <TabsTrigger value="today">Today ({todayCount})</TabsTrigger>
             <TabsTrigger value="upcoming">Upcoming ({upcomingCount})</TabsTrigger>
             <TabsTrigger value="completed">Completed ({completedCount})</TabsTrigger>
+            <TabsTrigger value="report">Report</TabsTrigger>
           </TabsList>
           <TabsContent value={tab} className="mt-4">
-            {loading ? (
+            {tab === "report" ? (
+              <DynamicReportTable columns={columns} rows={bookings as any} emptyMessage="No bookings yet." />
+            ) : loading ? (
               <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
             ) : filtered.length === 0 ? (
               <div className="text-center py-12 glass-card rounded-xl">
