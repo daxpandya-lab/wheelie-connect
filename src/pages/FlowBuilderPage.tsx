@@ -99,13 +99,13 @@ export default function FlowBuilderPage() {
       }],
       connections: [],
     };
-    const flowData = sourceFlow
+    const newFlowData = sourceFlow
       ? JSON.parse(JSON.stringify(sourceFlow.flow_data))
       : JSON.parse(JSON.stringify(blank));
     const name = sourceFlow ? `${sourceFlow.name} (Copy)` : "Untitled Flow";
     const { data, error } = await supabase.from("chatbot_flows").insert({
       tenant_id: tenantId, name, description: sourceFlow?.description || null,
-      flow_data, is_active: false, language: "en", channel: "both",
+      flow_data: newFlowData, is_active: false, language: "en", channel: "both",
     } as any).select("id, name, description, flow_data, is_active, language, channel").single();
     setSaving(false);
     if (error) { toast.error(error.message); return; }
