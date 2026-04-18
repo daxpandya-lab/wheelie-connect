@@ -15,9 +15,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { format, isToday, isFuture } from "date-fns";
 import {
   Search, CalendarIcon, Loader2, RefreshCw, Phone, Wrench,
-  Clock, CheckCircle, XCircle, Play, AlertCircle, Eye, ClipboardList, Bot, User,
+  Clock, CheckCircle, XCircle, Play, AlertCircle, Eye, ClipboardList, Bot, User, Settings2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useDynamicColumns } from "@/hooks/useDynamicColumns";
+import ColumnManagerDialog from "@/components/reports/ColumnManagerDialog";
+import DynamicReportTable from "@/components/reports/DynamicReportTable";
 
 type ServiceBooking = {
   id: string; customer_name: string; phone_number: string; vehicle_model: string;
@@ -28,7 +31,19 @@ type ServiceBooking = {
   estimated_cost: number | null; approval_status: string | null;
   quotation_notes: string | null; work_notes: string | null;
   parts_required: string | null; created_at: string; booking_source: string;
+  metadata: Record<string, unknown> | null;
 };
+
+const FIXED_COLS = [
+  { key: "customer_name", label: "Customer" },
+  { key: "phone_number", label: "Phone" },
+  { key: "vehicle_model", label: "Vehicle" },
+  { key: "service_type", label: "Service" },
+  { key: "booking_date", label: "Date" },
+  { key: "status", label: "Status" },
+  { key: "approval_status", label: "Approval" },
+  { key: "booking_source", label: "Source" },
+];
 
 type Profile = { user_id: string; full_name: string | null };
 
