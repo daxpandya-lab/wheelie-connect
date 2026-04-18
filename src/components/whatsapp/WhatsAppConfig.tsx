@@ -141,6 +141,41 @@ export default function WhatsAppConfig() {
         </CardHeader>
       </Card>
 
+      {/* Active Flow Selector */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm">Active Chatbot Flow</CardTitle>
+          <CardDescription>
+            Select which flow your customers will interact with on WhatsApp.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {flows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No flows yet. Create one in the Flow Builder first.
+            </p>
+          ) : (
+            <Select value={activeFlowId} onValueChange={handleSetActiveFlow} disabled={activatingFlow}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select active flow" />
+              </SelectTrigger>
+              <SelectContent>
+                {flows.map((f) => (
+                  <SelectItem key={f.id} value={f.id}>
+                    {f.name} {f.is_active && "✓"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {activatingFlow && (
+            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+              <Loader2 className="w-3 h-3 animate-spin" /> Updating active flow...
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Webhook URL */}
       <Card>
         <CardHeader className="pb-3">
