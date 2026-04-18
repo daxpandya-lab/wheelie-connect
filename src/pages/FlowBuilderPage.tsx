@@ -217,12 +217,18 @@ export default function FlowBuilderPage() {
                 <h2 className="text-lg font-semibold text-foreground">Chatbot Flows</h2>
                 <p className="text-sm text-muted-foreground">Build and manage your automated conversation flows</p>
               </div>
-              {flows.length === 0 && !loading && (
-                <Button onClick={seedFlows} disabled={saving}>
+              <div className="flex items-center gap-2">
+                {flows.length === 0 && !loading && (
+                  <Button variant="outline" onClick={seedFlows} disabled={saving}>
+                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                    Create Default Flows
+                  </Button>
+                )}
+                <Button onClick={() => createNewFlow()} disabled={saving}>
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                  Create Default Flows
+                  Create New Flow
                 </Button>
-              )}
+              </div>
             </div>
 
             {loading ? (
