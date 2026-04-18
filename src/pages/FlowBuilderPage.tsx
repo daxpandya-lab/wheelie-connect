@@ -85,6 +85,35 @@ export default function FlowBuilderPage() {
     fetchFlows();
   };
 
+  // Create a new flow — blank or a duplicate of an existing one
+  const createNewFlow = async (sourceFlow?: FlowRecord) => {
+    if (!tenantId) return;
+    setSaving(true);
+    const blank: FlowData = {
+      version: 1,
+      startNodeId: "start",
+      nodes: [{
+        id: "start", type: "greeting", label: "Greeting",
+        message: { en: "👋 Hello! How can I help you today?", hi: "", ar: "" },
+        position: { x: 400, y: 50 },
+      }],
+      connections: [],
+    };
+    const flowData = sourceFlow
+      ? JSON.parse(JSON.stringify(sourceFlow.flow_data))
+      : JSON.parse(JSON.stringify(blank));
+    const name = sourceFlow ? `${sourceFlow.name} (Copy)` : "Untitled Flow";
+    const { data, error } = await supabase.from("chatbot_flows").insert({
+      tenant_id: tenantId, name, description: sourceFlow?.description || null,
+      flow_data, is_active: false, language: "en", channel: "both",
+    } as any).select("id, name, description, flow_data, is_active, language, channel").single();
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("New flow created");
+    await fetchFlows();
+    if (data) openFlow({ ...data, flow_data: data.flow_data as unknown as FlowData });
+  };
+
   const openFlow = (flow: FlowRecord) => {
     setActiveFlowId(flow.id);
     setFlowData(flow.flow_data);

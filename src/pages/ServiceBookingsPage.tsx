@@ -448,6 +448,13 @@ export default function ServiceBookingsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ColumnManagerDialog
+        open={colMgrOpen}
+        onOpenChange={setColMgrOpen}
+        columns={columns}
+        onSave={async (next) => savePrefs(next)}
+      />
     </>
   );
 }
