@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { MessageSquare, Copy, Check, Loader2, ExternalLink, Wifi, WifiOff } from "lucide-react";
 import { toast } from "sonner";
@@ -16,6 +17,8 @@ export default function WhatsAppConfig() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [flows, setFlows] = useState<Array<{ id: string; name: string; is_active: boolean }>>([]);
+  const [activatingFlow, setActivatingFlow] = useState(false);
   const [form, setForm] = useState({
     phoneNumberId: "",
     wabaId: "",
@@ -27,26 +30,39 @@ export default function WhatsAppConfig() {
     ? `https://${projectId}.supabase.co/functions/v1/whatsapp-webhook`
     : "[Deploy to get webhook URL]";
 
+  const activeFlowId = flows.find((f) => f.is_active)?.id || "";
+
   const fetchSession = async () => {
     if (!tenantId) { setLoading(false); return; }
-    const { data } = await supabase
-      .from("whatsapp_sessions")
-      .select("*")
-      .eq("tenant_id", tenantId)
-      .single();
+    const [{ data: sessionData }, { data: flowsData }] = await Promise.all([
+      supabase.from("whatsapp_sessions").select("*").eq("tenant_id", tenantId).single(),
+      supabase.from("chatbot_flows").select("id, name, is_active").eq("tenant_id", tenantId).order("name"),
+    ]);
 
-    if (data) {
-      setSession(data);
+    if (sessionData) {
+      setSession(sessionData);
       setForm({
-        phoneNumberId: data.phone_number_id || "",
-        wabaId: data.waba_id || "",
+        phoneNumberId: sessionData.phone_number_id || "",
+        wabaId: sessionData.waba_id || "",
         accessToken: "",
       });
     }
+    if (flowsData) setFlows(flowsData);
     setLoading(false);
   };
 
   useEffect(() => { fetchSession(); }, [tenantId]);
+
+  const handleSetActiveFlow = async (flowId: string) => {
+    if (!tenantId) return;
+    setActivatingFlow(true);
+    // Deactivate all, then activate selected
+    await supabase.from("chatbot_flows").update({ is_active: false }).eq("tenant_id", tenantId);
+    const { error } = await supabase.from("chatbot_flows").update({ is_active: true }).eq("id", flowId);
+    setActivatingFlow(false);
+    if (error) toast.error(error.message);
+    else { toast.success("Active flow updated"); fetchSession(); }
+  };
 
   const handleSave = async () => {
     if (!tenantId || !form.phoneNumberId.trim()) {
@@ -123,6 +139,41 @@ export default function WhatsAppConfig() {
             </Badge>
           </div>
         </CardHeader>
+      </Card>
+
+      {/* Active Flow Selector */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm">Active Chatbot Flow</CardTitle>
+          <CardDescription>
+            Select which flow your customers will interact with on WhatsApp.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {flows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No flows yet. Create one in the Flow Builder first.
+            </p>
+          ) : (
+            <Select value={activeFlowId} onValueChange={handleSetActiveFlow} disabled={activatingFlow}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select active flow" />
+              </SelectTrigger>
+              <SelectContent>
+                {flows.map((f) => (
+                  <SelectItem key={f.id} value={f.id}>
+                    {f.name} {f.is_active && "✓"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {activatingFlow && (
+            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+              <Loader2 className="w-3 h-3 animate-spin" /> Updating active flow...
+            </p>
+          )}
+        </CardContent>
       </Card>
 
       {/* Webhook URL */}

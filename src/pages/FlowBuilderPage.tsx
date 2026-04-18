@@ -13,7 +13,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Save, Play, ZoomIn, ZoomOut, Maximize2,
   MessageSquare, Car, Loader2, Plus, ChevronLeft,
-  ArrowUp, ArrowDown, Trash2,
+  ArrowUp, ArrowDown, Trash2, Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { FlowData, FlowNode, NodeType } from "@/types/chatbot-flow";
@@ -261,6 +261,9 @@ export default function FlowBuilderPage() {
                     <div className="flex items-center gap-2">
                       <Button variant="outline" size="sm" onClick={() => toggleActive(f.id, f.is_active)}>
                         {f.is_active ? "Deactivate" : "Activate"}
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => createNewFlow(f)} disabled={saving} title="Duplicate">
+                        <Copy className="w-4 h-4" />
                       </Button>
                       <Button size="sm" onClick={() => openFlow(f)}>
                         Edit Flow
