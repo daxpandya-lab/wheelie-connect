@@ -262,6 +262,9 @@ export default function FlowBuilderPage() {
                       <Button variant="outline" size="sm" onClick={() => toggleActive(f.id, f.is_active)}>
                         {f.is_active ? "Deactivate" : "Activate"}
                       </Button>
+                      <Button variant="outline" size="sm" onClick={() => createNewFlow(f)} disabled={saving} title="Duplicate">
+                        <Copy className="w-4 h-4" />
+                      </Button>
                       <Button size="sm" onClick={() => openFlow(f)}>
                         Edit Flow
                       </Button>
