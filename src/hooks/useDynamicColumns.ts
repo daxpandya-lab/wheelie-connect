@@ -105,7 +105,7 @@ export function useDynamicColumns(
       const { data: t } = await supabase.from("tenants").select("settings").eq("id", tenantId).single();
       const settings = ((t?.settings as Record<string, unknown>) || {});
       settings[settingsKey(report)] = next.map((c) => ({ key: c.key, visible: c.visible }));
-      await supabase.from("tenants").update({ settings }).eq("id", tenantId);
+      await supabase.from("tenants").update({ settings: settings as any }).eq("id", tenantId);
     },
     [tenantId, report],
   );
