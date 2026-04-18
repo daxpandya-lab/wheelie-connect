@@ -79,6 +79,8 @@ export default function ServiceBookingsPage() {
   const [dateFrom, setDateFrom] = useState<Date | undefined>();
   const [dateTo, setDateTo] = useState<Date | undefined>();
   const [tab, setTab] = useState("all");
+  const [colMgrOpen, setColMgrOpen] = useState(false);
+  const { columns, savePrefs } = useDynamicColumns("service_bookings", FIXED_COLS, bookings as any);
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState<ServiceBooking | null>(null);
