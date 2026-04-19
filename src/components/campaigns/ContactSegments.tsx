@@ -4,10 +4,79 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { Plus, Users, Loader2, Trash2, Upload } from "lucide-react";
+import { Plus, Users, Loader2, Trash2, Upload, FileText, Hash } from "lucide-react";
+
+/**
+ * Clean a phone number string:
+ * - strip all non-digits
+ * - drop leading 0
+ * - if exactly 10 digits, prefix country code (default 91 / India)
+ * - keep numbers that already include a country code (11–15 digits)
+ * Returns null if the result isn't a plausible phone number.
+ */
+function cleanPhone(raw: string, defaultCc = "91"): string | null {
+  if (!raw) return null;
+  let digits = raw.replace(/\D+/g, "");
+  digits = digits.replace(/^0+/, "");
+  if (digits.length === 10) digits = defaultCc + digits;
+  if (digits.length < 11 || digits.length > 15) return null;
+  return digits;
+}
+
+interface ParsedContact {
+  name: string;
+  phone: string;
+  email: string | null;
+}
+
+interface ParseResult {
+  total: number;
+  valid: ParsedContact[];
+  invalid: number;
+  duplicates: number;
+}
+
+function parseCsv(text: string): ParseResult {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length === 0) return { total: 0, valid: [], invalid: 0, duplicates: 0 };
+  // Skip header if it looks like one
+  const first = lines[0].toLowerCase();
+  const rows = /name|phone|mobile|email/.test(first) ? lines.slice(1) : lines;
+  return parseRows(rows.map((line) => {
+    const [name, phone, email] = line.split(",").map((s) => (s ?? "").trim());
+    return { name, phone, email };
+  }));
+}
+
+function parseManual(text: string): ParseResult {
+  // Split on newlines, commas, semicolons
+  const tokens = text.split(/[\n,;]+/).map((t) => t.trim()).filter(Boolean);
+  return parseRows(tokens.map((t) => ({ name: "", phone: t, email: "" })));
+}
+
+function parseRows(rows: { name: string; phone: string; email: string }[]): ParseResult {
+  const total = rows.length;
+  const seen = new Set<string>();
+  const valid: ParsedContact[] = [];
+  let invalid = 0;
+  let duplicates = 0;
+  for (const r of rows) {
+    const cleaned = cleanPhone(r.phone);
+    if (!cleaned) { invalid++; continue; }
+    if (seen.has(cleaned)) { duplicates++; continue; }
+    seen.add(cleaned);
+    valid.push({
+      name: r.name?.trim() || `Contact ${cleaned.slice(-4)}`,
+      phone: cleaned,
+      email: r.email?.trim() || null,
+    });
+  }
+  return { total, valid, invalid, duplicates };
+}
 
 export default function ContactSegments() {
   const { tenantId } = useAuth();
@@ -17,7 +86,10 @@ export default function ContactSegments() {
   const [showUpload, setShowUpload] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", filter_type: "all" });
   const [saving, setSaving] = useState(false);
+  const [uploadTab, setUploadTab] = useState<"csv" | "manual">("csv");
   const [csvData, setCsvData] = useState("");
+  const [manualData, setManualData] = useState("");
+  const [preview, setPreview] = useState<ParseResult | null>(null);
 
   const fetchSegments = async () => {
     if (!tenantId) return;
@@ -29,14 +101,18 @@ export default function ContactSegments() {
 
   useEffect(() => { fetchSegments(); }, [tenantId]);
 
+  // Live preview as user types
+  useEffect(() => {
+    if (!showUpload) { setPreview(null); return; }
+    const text = uploadTab === "csv" ? csvData : manualData;
+    if (!text.trim()) { setPreview(null); return; }
+    setPreview(uploadTab === "csv" ? parseCsv(text) : parseManual(text));
+  }, [csvData, manualData, uploadTab, showUpload]);
+
   const handleCreate = async () => {
     if (!tenantId || !form.name.trim()) { toast.error("Segment name required"); return; }
     setSaving(true);
-
-    // Count customers matching filter
-    let countQuery = supabase.from("customers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId);
-    const { count } = await countQuery;
-
+    const { count } = await supabase.from("customers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId);
     const { error } = await supabase.from("contact_segments").insert({
       tenant_id: tenantId,
       name: form.name.trim(),
@@ -52,23 +128,44 @@ export default function ContactSegments() {
     fetchSegments();
   };
 
-  const handleCsvUpload = async () => {
-    if (!tenantId || !csvData.trim()) { toast.error("Paste CSV data"); return; }
+  const handleUpload = async () => {
+    if (!tenantId) return;
+    if (!preview || preview.valid.length === 0) {
+      toast.error("No valid contacts to upload");
+      return;
+    }
     setSaving(true);
-    const lines = csvData.trim().split("\n").slice(1); // skip header
-    const contacts = lines.map((line) => {
-      const [name, phone, email] = line.split(",").map((s) => s.trim());
-      return { tenant_id: tenantId, name: name || "Unknown", phone: phone || null, email: email || null };
-    }).filter((c) => c.name);
 
-    if (contacts.length === 0) { toast.error("No valid contacts found"); setSaving(false); return; }
+    // De-dupe against existing customers in the tenant
+    const phones = preview.valid.map((c) => c.phone);
+    const { data: existing } = await supabase
+      .from("customers")
+      .select("phone")
+      .eq("tenant_id", tenantId)
+      .in("phone", phones);
+    const existingSet = new Set((existing || []).map((e: any) => e.phone));
+    const fresh = preview.valid.filter((c) => !existingSet.has(c.phone));
+    const dbDuplicates = preview.valid.length - fresh.length;
 
-    const { error } = await supabase.from("customers").insert(contacts);
+    if (fresh.length === 0) {
+      setSaving(false);
+      toast.info(`All ${preview.valid.length} contacts already exist`);
+      return;
+    }
+
+    const { error } = await supabase.from("customers").insert(
+      fresh.map((c) => ({ tenant_id: tenantId, name: c.name, phone: c.phone, email: c.email })),
+    );
     setSaving(false);
     if (error) { toast.error("Upload failed: " + error.message); return; }
-    toast.success(`${contacts.length} contacts uploaded`);
+    toast.success(
+      `${fresh.length} contacts added` +
+        (dbDuplicates ? ` · ${dbDuplicates} already existed` : ""),
+    );
     setShowUpload(false);
     setCsvData("");
+    setManualData("");
+    setPreview(null);
     fetchSegments();
   };
 
@@ -152,21 +249,62 @@ export default function ContactSegments() {
       </Dialog>
 
       {/* Upload Contacts Dialog */}
-      <Dialog open={showUpload} onOpenChange={setShowUpload}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Upload Contacts (CSV)</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">Paste CSV with headers: <code className="bg-muted px-1 rounded">name,phone,email</code></p>
-            <textarea
-              className="w-full h-40 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
-              value={csvData}
-              onChange={(e) => setCsvData(e.target.value)}
-              placeholder={`name,phone,email\nAhmed Ali,+971501234567,ahmed@example.com\nSara Khan,+971502345678,sara@example.com`}
-            />
-            <Button onClick={handleCsvUpload} disabled={saving} className="w-full">
-              {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />} Upload Contacts
+      <Dialog open={showUpload} onOpenChange={(o) => { setShowUpload(o); if (!o) { setCsvData(""); setManualData(""); setPreview(null); } }}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader><DialogTitle>Upload Contacts</DialogTitle></DialogHeader>
+          <Tabs value={uploadTab} onValueChange={(v) => setUploadTab(v as "csv" | "manual")} className="space-y-4">
+            <TabsList className="grid grid-cols-2 w-full">
+              <TabsTrigger value="csv"><FileText className="w-4 h-4 mr-1" /> Upload CSV</TabsTrigger>
+              <TabsTrigger value="manual"><Hash className="w-4 h-4 mr-1" /> Manual Paste</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="csv" className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Paste CSV with headers: <code className="bg-muted px-1 rounded">name,phone,email</code>
+              </p>
+              <textarea
+                className="w-full h-40 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+                value={csvData}
+                onChange={(e) => setCsvData(e.target.value)}
+                placeholder={`name,phone,email\nAhmed Ali,9876543210,ahmed@example.com\nSara Khan,+91 98234 56789,sara@example.com`}
+              />
+            </TabsContent>
+
+            <TabsContent value="manual" className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Paste or type phone numbers — one per line, or separated by commas/semicolons. Numbers are auto-cleaned and 10-digit numbers get a <code className="bg-muted px-1 rounded">91</code> prefix.
+              </p>
+              <textarea
+                className="w-full h-40 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+                value={manualData}
+                onChange={(e) => setManualData(e.target.value)}
+                placeholder={`9876543210\n+91 98234-56789\n91 87654 32109, 9123456780`}
+              />
+            </TabsContent>
+
+            {preview && (
+              <div className="rounded-lg border border-border bg-muted/30 p-3 grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <p className="text-xs text-muted-foreground">Total</p>
+                  <p className="text-lg font-bold text-foreground">{preview.total}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Valid</p>
+                  <p className="text-lg font-bold text-success">{preview.valid.length}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Removed</p>
+                  <p className="text-lg font-bold text-destructive">{preview.invalid + preview.duplicates}</p>
+                  <p className="text-[10px] text-muted-foreground">{preview.invalid} invalid · {preview.duplicates} dupes</p>
+                </div>
+              </div>
+            )}
+
+            <Button onClick={handleUpload} disabled={saving || !preview || preview.valid.length === 0} className="w-full">
+              {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              Upload {preview?.valid.length || 0} Contacts
             </Button>
-          </div>
+          </Tabs>
         </DialogContent>
       </Dialog>
     </div>
