@@ -1,14 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, Info } from "lucide-react";
 
 interface CreateCampaignDialogProps {
   open: boolean;
@@ -16,10 +15,33 @@ interface CreateCampaignDialogProps {
   onCreated: () => void;
 }
 
+interface TemplateRecord {
+  id: string;
+  template_name: string;
+  components: any;
+}
+
+/** Extract unique {{1}}, {{2}}... variables from a template body, in order. */
+function extractVariables(components: any): string[] {
+  if (!Array.isArray(components)) return [];
+  const body = components.find((c: any) => (c?.type || "").toUpperCase() === "BODY");
+  const text: string = body?.text || "";
+  const matches = text.match(/\{\{\s*(\d+)\s*\}\}/g) || [];
+  const nums = Array.from(new Set(matches.map((m) => m.replace(/\D/g, ""))));
+  return nums.sort((a, b) => Number(a) - Number(b));
+}
+
+const VARIABLE_FIELDS = [
+  { value: "name", label: "Contact name" },
+  { value: "phone", label: "Phone number" },
+  { value: "email", label: "Email" },
+  { value: "static", label: "Static text…" },
+];
+
 export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: CreateCampaignDialogProps) {
   const { tenantId } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [templates, setTemplates] = useState<{ id: string; template_name: string }[]>([]);
+  const [templates, setTemplates] = useState<TemplateRecord[]>([]);
   const [segments, setSegments] = useState<{ id: string; name: string; customer_count: number }[]>([]);
   const [form, setForm] = useState({
     name: "",
@@ -27,18 +49,37 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
     template_id: "",
     segment_id: "",
     scheduled_at: "",
+    sending_speed: "100", // messages/hour
   });
+  // varMap: { "1": { source: "name" | "phone" | "email" | "static", value?: string } }
+  const [varMap, setVarMap] = useState<Record<string, { source: string; value?: string }>>({});
 
   useEffect(() => {
     if (!open || !tenantId) return;
     Promise.all([
-      supabase.from("whatsapp_templates").select("id, template_name").eq("tenant_id", tenantId).eq("status", "approved"),
+      supabase.from("whatsapp_templates").select("id, template_name, components").eq("tenant_id", tenantId).eq("status", "approved"),
       supabase.from("contact_segments").select("id, name, customer_count").eq("tenant_id", tenantId),
     ]).then(([tRes, sRes]) => {
-      if (tRes.data) setTemplates(tRes.data);
+      if (tRes.data) setTemplates(tRes.data as TemplateRecord[]);
       if (sRes.data) setSegments(sRes.data as any);
     });
   }, [open, tenantId]);
+
+  const selectedTemplate = useMemo(
+    () => templates.find((t) => t.id === form.template_id) || null,
+    [templates, form.template_id],
+  );
+  const variables = useMemo(() => (selectedTemplate ? extractVariables(selectedTemplate.components) : []), [selectedTemplate]);
+
+  // Reset variable map and provide a sensible default ({{1}} → name) when template changes
+  useEffect(() => {
+    if (variables.length === 0) { setVarMap({}); return; }
+    const next: Record<string, { source: string; value?: string }> = {};
+    variables.forEach((v, idx) => {
+      next[v] = idx === 0 ? { source: "name" } : { source: "static", value: "" };
+    });
+    setVarMap(next);
+  }, [form.template_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCreate = async () => {
     if (!tenantId || !form.name.trim()) {
@@ -46,28 +87,37 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
       return;
     }
     setLoading(true);
+    const audience_filter: any = {
+      sending_speed_per_hour: Number(form.sending_speed) || 100,
+    };
+    if (form.segment_id) audience_filter.segment_id = form.segment_id;
+    if (variables.length) audience_filter.variable_mapping = varMap;
+
     const { error } = await supabase.from("campaigns").insert({
       tenant_id: tenantId,
       name: form.name.trim(),
       type: form.type,
       template_id: form.template_id || null,
+      segment_id: form.segment_id || null,
       scheduled_at: form.scheduled_at || null,
       status: form.scheduled_at ? "scheduled" : "draft",
+      audience_filter,
     });
     setLoading(false);
     if (error) {
       toast.error("Failed to create campaign");
     } else {
-      toast.success("Campaign created");
+      toast.success(form.scheduled_at ? "Campaign scheduled" : "Campaign created");
       onCreated();
       onOpenChange(false);
-      setForm({ name: "", type: "whatsapp", template_id: "", segment_id: "", scheduled_at: "" });
+      setForm({ name: "", type: "whatsapp", template_id: "", segment_id: "", scheduled_at: "", sending_speed: "100" });
+      setVarMap({});
     }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create New Campaign</DialogTitle>
         </DialogHeader>
@@ -89,17 +139,55 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
               </Select>
             </div>
             <div>
-              <Label>Template</Label>
+              <Label>Template (Approved)</Label>
               <Select value={form.template_id} onValueChange={(v) => setForm({ ...form, template_id: v })}>
                 <SelectTrigger><SelectValue placeholder="Select template" /></SelectTrigger>
                 <SelectContent>
-                  {templates.map((t) => (
+                  {templates.length === 0 ? (
+                    <div className="px-2 py-1.5 text-xs text-muted-foreground">No approved templates</div>
+                  ) : templates.map((t) => (
                     <SelectItem key={t.id} value={t.id}>{t.template_name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
           </div>
+
+          {/* Template variable mapping */}
+          {variables.length > 0 && (
+            <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
+              <p className="text-xs font-medium text-foreground flex items-center gap-1">
+                <Info className="w-3.5 h-3.5 text-primary" /> Map template variables
+              </p>
+              {variables.map((v) => (
+                <div key={v} className="grid grid-cols-[60px_1fr_1fr] gap-2 items-center">
+                  <code className="text-xs bg-muted rounded px-1.5 py-1 text-center">{`{{${v}}}`}</code>
+                  <Select
+                    value={varMap[v]?.source || "static"}
+                    onValueChange={(src) => setVarMap({ ...varMap, [v]: { source: src, value: varMap[v]?.value } })}
+                  >
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {VARIABLE_FIELDS.map((f) => (
+                        <SelectItem key={f.value} value={f.value} className="text-xs">{f.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {varMap[v]?.source === "static" ? (
+                    <Input
+                      className="h-8 text-xs"
+                      placeholder="Static value"
+                      value={varMap[v]?.value || ""}
+                      onChange={(e) => setVarMap({ ...varMap, [v]: { source: "static", value: e.target.value } })}
+                    />
+                  ) : (
+                    <span className="text-xs text-muted-foreground italic">from contact</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
           <div>
             <Label>Audience Segment</Label>
             <Select value={form.segment_id} onValueChange={(v) => setForm({ ...form, segment_id: v })}>
@@ -111,13 +199,33 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <Label>Schedule (optional)</Label>
-            <Input type="datetime-local" value={form.scheduled_at} onChange={(e) => setForm({ ...form, scheduled_at: e.target.value })} />
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Schedule (optional)</Label>
+              <Input type="datetime-local" value={form.scheduled_at} onChange={(e) => setForm({ ...form, scheduled_at: e.target.value })} />
+            </div>
+            <div>
+              <Label>Sending Speed</Label>
+              <Select value={form.sending_speed} onValueChange={(v) => setForm({ ...form, sending_speed: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="50">50 / hour (safest)</SelectItem>
+                  <SelectItem value="100">100 / hour (recommended)</SelectItem>
+                  <SelectItem value="250">250 / hour</SelectItem>
+                  <SelectItem value="500">500 / hour</SelectItem>
+                  <SelectItem value="1000">1000 / hour (high tier only)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+          <p className="text-xs text-muted-foreground -mt-2">
+            Throttling protects your WABA quality rating. Lower speeds reduce block risk.
+          </p>
+
           <Button onClick={handleCreate} disabled={loading} className="w-full">
             {loading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-            Create Campaign
+            {form.scheduled_at ? "Schedule Campaign" : "Create Campaign"}
           </Button>
         </div>
       </DialogContent>
