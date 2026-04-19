@@ -64,7 +64,7 @@ export default function FlowBuilderPage() {
     if (!tenantId) { setLoading(false); return; }
     const { data } = await supabase
       .from("chatbot_flows")
-      .select("id, name, description, flow_data, is_active, language, channel")
+      .select("id, name, description, flow_data, is_active, language, channel, updated_at")
       .eq("tenant_id", tenantId)
       .order("created_at", { ascending: false });
 
