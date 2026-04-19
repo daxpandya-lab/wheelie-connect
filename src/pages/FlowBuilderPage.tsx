@@ -282,10 +282,15 @@ export default function FlowBuilderPage() {
                         )}
                         <Badge variant="outline" className="text-xs">{f.channel}</Badge>
                       </div>
-                      <p className="text-sm text-muted-foreground">{f.description}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {(f.flow_data as FlowData).nodes?.length || 0} nodes
-                      </p>
+                      {f.description && <p className="text-sm text-muted-foreground truncate">{f.description}</p>}
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1.5">
+                        <span className="inline-flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-primary/60" />
+                          {(f.flow_data as FlowData).nodes?.length || 0} blocks
+                        </span>
+                        <span className="text-muted-foreground/40">·</span>
+                        <span>Edited {formatRelativeTime(f.updated_at)}</span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <Button variant="outline" size="sm" onClick={() => toggleActive(f.id, f.is_active)}>
