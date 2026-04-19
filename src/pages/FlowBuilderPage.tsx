@@ -119,7 +119,7 @@ export default function FlowBuilderPage() {
     const { data, error } = await supabase.from("chatbot_flows").insert({
       tenant_id: tenantId, name, description: sourceFlow?.description || null,
       flow_data: newFlowData, is_active: false, language: "en", channel: "both",
-    } as any).select("id, name, description, flow_data, is_active, language, channel").single();
+    } as any).select("id, name, description, flow_data, is_active, language, channel, updated_at").single();
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     toast.success("New flow created");
