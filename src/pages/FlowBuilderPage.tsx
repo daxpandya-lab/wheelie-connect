@@ -240,17 +240,33 @@ export default function FlowBuilderPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {flows.map((f) => (
-                  <div key={f.id} className="glass-card rounded-xl p-5 flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                      {f.name.includes("Test") ? <Car className="w-5 h-5 text-primary" /> : <MessageSquare className="w-5 h-5 text-primary" />}
+                {[...flows].sort((a, b) => Number(b.is_active) - Number(a.is_active)).map((f) => (
+                  <div
+                    key={f.id}
+                    className={`relative glass-card rounded-xl p-5 flex items-center gap-4 overflow-hidden transition-all ${
+                      f.is_active
+                        ? "border-2 border-success bg-success/5 shadow-[0_0_0_1px_hsl(var(--success)/0.3)]"
+                        : ""
+                    }`}
+                  >
+                    {f.is_active && (
+                      <div className="absolute top-0 right-0">
+                        <div className="bg-success text-success-foreground text-[10px] font-bold tracking-wider px-8 py-1 shadow-md rotate-45 translate-x-6 translate-y-3 uppercase">
+                          Active
+                        </div>
+                      </div>
+                    )}
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${f.is_active ? "bg-success/15" : "bg-primary/10"}`}>
+                      {f.name.includes("Test")
+                        ? <Car className={`w-5 h-5 ${f.is_active ? "text-success" : "text-primary"}`} />
+                        : <MessageSquare className={`w-5 h-5 ${f.is_active ? "text-success" : "text-primary"}`} />}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="font-medium text-foreground">{f.name}</p>
-                        <Badge variant={f.is_active ? "default" : "secondary"} className="text-xs">
-                          {f.is_active ? "Active" : "Inactive"}
-                        </Badge>
+                        {!f.is_active && (
+                          <Badge variant="secondary" className="text-xs">Inactive</Badge>
+                        )}
                         <Badge variant="outline" className="text-xs">{f.channel}</Badge>
                       </div>
                       <p className="text-sm text-muted-foreground">{f.description}</p>
