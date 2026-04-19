@@ -27,6 +27,19 @@ type FlowRecord = {
   is_active: boolean;
   language: string;
   channel: string;
+  updated_at: string;
+};
+
+const formatRelativeTime = (iso: string) => {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  return new Date(iso).toLocaleDateString();
 };
 
 export default function FlowBuilderPage() {
@@ -51,7 +64,7 @@ export default function FlowBuilderPage() {
     if (!tenantId) { setLoading(false); return; }
     const { data } = await supabase
       .from("chatbot_flows")
-      .select("id, name, description, flow_data, is_active, language, channel")
+      .select("id, name, description, flow_data, is_active, language, channel, updated_at")
       .eq("tenant_id", tenantId)
       .order("created_at", { ascending: false });
 
@@ -106,7 +119,7 @@ export default function FlowBuilderPage() {
     const { data, error } = await supabase.from("chatbot_flows").insert({
       tenant_id: tenantId, name, description: sourceFlow?.description || null,
       flow_data: newFlowData, is_active: false, language: "en", channel: "both",
-    } as any).select("id, name, description, flow_data, is_active, language, channel").single();
+    } as any).select("id, name, description, flow_data, is_active, language, channel, updated_at").single();
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     toast.success("New flow created");
@@ -269,10 +282,15 @@ export default function FlowBuilderPage() {
                         )}
                         <Badge variant="outline" className="text-xs">{f.channel}</Badge>
                       </div>
-                      <p className="text-sm text-muted-foreground">{f.description}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {(f.flow_data as FlowData).nodes?.length || 0} nodes
-                      </p>
+                      {f.description && <p className="text-sm text-muted-foreground truncate">{f.description}</p>}
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1.5">
+                        <span className="inline-flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-primary/60" />
+                          {(f.flow_data as FlowData).nodes?.length || 0} blocks
+                        </span>
+                        <span className="text-muted-foreground/40">·</span>
+                        <span>Edited {formatRelativeTime(f.updated_at)}</span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <Button variant="outline" size="sm" onClick={() => toggleActive(f.id, f.is_active)}>
