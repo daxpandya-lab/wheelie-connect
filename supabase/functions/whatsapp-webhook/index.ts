@@ -211,6 +211,19 @@ Deno.serve(async (req) => {
                 interactiveId = msg.interactive.button_reply?.id || msg.interactive.list_reply?.id || null;
               }
 
+              // ===== Click-to-WhatsApp Ad referral capture =====
+              const adSource = msg.referral
+                ? {
+                    source_ad_name: msg.referral.source_ad_name || msg.referral.headline || null,
+                    source_ad_headline: msg.referral.headline || null,
+                    source_ad_body: msg.referral.body || null,
+                    source_url: msg.referral.source_url || null,
+                    source_type: msg.referral.source_type || null, // e.g. 'ad'
+                    ctwa_clid: msg.referral.ctwa_clid || null,
+                    captured_at: new Date().toISOString(),
+                  }
+                : null;
+
               // Find/create customer
               let customerId: string | null = null;
               const { data: existingCustomer } = await supabase
@@ -236,12 +249,25 @@ Deno.serve(async (req) => {
               if (existingConvo) {
                 conversationId = existingConvo.id;
                 conversationMetadata = (existingConvo.metadata as Record<string, unknown>) || {};
+                // Stamp ad source onto existing convo if newly arrived and not already set
+                if (adSource && !conversationMetadata.ad_source) {
+                  conversationMetadata = { ...conversationMetadata, ad_source: adSource };
+                  await supabase.from("chatbot_conversations")
+                    .update({ metadata: conversationMetadata })
+                    .eq("id", conversationId);
+                }
               } else {
+                const initialMeta: Record<string, unknown> = {
+                  current_flow_id: null,
+                  current_node_id: null,
+                  collected_data: {},
+                };
+                if (adSource) initialMeta.ad_source = adSource;
                 const { data: newConvo } = await supabase.from("chatbot_conversations")
                   .insert({
                     tenant_id: tenantId, customer_id: customerId, channel: "whatsapp",
                     phone_number: customerPhone, status: "active",
-                    metadata: { current_flow_id: null, current_node_id: null, collected_data: {} },
+                    metadata: initialMeta,
                   })
                   .select("id, metadata").single();
                 conversationId = newConvo!.id;
@@ -253,7 +279,7 @@ Deno.serve(async (req) => {
                   tenant_id: tenantId, conversation_id: conversationId, sender_type: "customer",
                   content: messageText,
                   message_type: msg.type === "interactive" ? "text" : msg.type,
-                  metadata: { wa_message_id: msg.id, wa_timestamp: msg.timestamp, interactive_id: interactiveId },
+                  metadata: { wa_message_id: msg.id, wa_timestamp: msg.timestamp, interactive_id: interactiveId, referral: msg.referral || null },
                 })
                 .select("id").single();
 
