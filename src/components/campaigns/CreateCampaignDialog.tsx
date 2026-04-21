@@ -139,6 +139,7 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
       onOpenChange(false);
       setForm({ name: "", type: "whatsapp", template_id: "", segment_id: "", scheduled_at: "", sending_speed: "100" });
       setVarMap({});
+      setCarouselMap({});
     }
   };
 
@@ -210,6 +211,60 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
                   ) : (
                     <span className="text-xs text-muted-foreground italic">from contact</span>
                   )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Carousel cards mapping */}
+          {carouselCards.length > 0 && (
+            <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-3">
+              <p className="text-xs font-medium text-foreground flex items-center gap-1">
+                <Info className="w-3.5 h-3.5 text-primary" /> Carousel cards ({carouselCards.length})
+              </p>
+              <p className="text-[11px] text-muted-foreground -mt-1">
+                Map each card to a contact field key (e.g. <code className="bg-muted px-1 rounded">vehicle_model</code>) and an image URL.
+              </p>
+              {carouselCards.map((card) => (
+                <div key={card.index} className="rounded border border-border/60 bg-background p-2 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-foreground">Card {card.index + 1}</span>
+                    {card.variables.length > 0 && (
+                      <span className="text-[10px] text-muted-foreground">
+                        vars: {card.variables.map((v) => `{{${v}}}`).join(", ")}
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      className="h-8 text-xs"
+                      placeholder="Variable key (e.g. model_name)"
+                      value={carouselMap[String(card.index)]?.variable_key || ""}
+                      onChange={(e) =>
+                        setCarouselMap({
+                          ...carouselMap,
+                          [String(card.index)]: {
+                            variable_key: e.target.value,
+                            image_url: carouselMap[String(card.index)]?.image_url || "",
+                          },
+                        })
+                      }
+                    />
+                    <Input
+                      className="h-8 text-xs"
+                      placeholder="Image URL (https://…)"
+                      value={carouselMap[String(card.index)]?.image_url || ""}
+                      onChange={(e) =>
+                        setCarouselMap({
+                          ...carouselMap,
+                          [String(card.index)]: {
+                            variable_key: carouselMap[String(card.index)]?.variable_key || "",
+                            image_url: e.target.value,
+                          },
+                        })
+                      }
+                    />
+                  </div>
                 </div>
               ))}
             </div>
