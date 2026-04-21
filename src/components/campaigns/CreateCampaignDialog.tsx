@@ -114,7 +114,7 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
     }
     // Validate carousel cards: every card must have a variable key + image URL
     if (carouselCards.length > 0) {
-      const urlRe = /^https?:\/\/.+/i;
+      const urlRe = /^https:\/\/.+/i;
       for (const card of carouselCards) {
         const m = carouselMap[String(card.index)];
         const key = m?.variable_key?.trim();
@@ -128,7 +128,7 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
           return;
         }
         if (!urlRe.test(url)) {
-          toast.error(`Card ${card.index + 1}: Image URL must start with http:// or https://`);
+          toast.error(`Card ${card.index + 1}: Image URL must start with https://`);
           return;
         }
       }
