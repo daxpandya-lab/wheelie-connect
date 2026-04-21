@@ -81,15 +81,30 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
     [templates, form.template_id],
   );
   const variables = useMemo(() => (selectedTemplate ? extractVariables(selectedTemplate.components) : []), [selectedTemplate]);
+  const carouselCards = useMemo(
+    () => (selectedTemplate ? extractCarouselCards(selectedTemplate.components) : []),
+    [selectedTemplate],
+  );
+  // carouselMap: { "0": { variable_key: "vehicle_model", image_url: "https://..." } }
+  const [carouselMap, setCarouselMap] = useState<Record<string, { variable_key: string; image_url: string }>>({});
 
   // Reset variable map and provide a sensible default ({{1}} → name) when template changes
   useEffect(() => {
-    if (variables.length === 0) { setVarMap({}); return; }
-    const next: Record<string, { source: string; value?: string }> = {};
-    variables.forEach((v, idx) => {
-      next[v] = idx === 0 ? { source: "name" } : { source: "static", value: "" };
-    });
-    setVarMap(next);
+    if (variables.length === 0) { setVarMap({}); }
+    else {
+      const next: Record<string, { source: string; value?: string }> = {};
+      variables.forEach((v, idx) => {
+        next[v] = idx === 0 ? { source: "name" } : { source: "static", value: "" };
+      });
+      setVarMap(next);
+    }
+    // Reset carousel mapping
+    if (carouselCards.length === 0) { setCarouselMap({}); }
+    else {
+      const next: Record<string, { variable_key: string; image_url: string }> = {};
+      carouselCards.forEach((c) => { next[String(c.index)] = { variable_key: "", image_url: "" }; });
+      setCarouselMap(next);
+    }
   }, [form.template_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCreate = async () => {
@@ -103,6 +118,7 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
     };
     if (form.segment_id) audience_filter.segment_id = form.segment_id;
     if (variables.length) audience_filter.variable_mapping = varMap;
+    if (carouselCards.length) audience_filter.carousel_mapping = carouselMap;
 
     const { error } = await supabase.from("campaigns").insert({
       tenant_id: tenantId,
