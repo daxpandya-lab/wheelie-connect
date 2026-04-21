@@ -507,7 +507,7 @@ async function processChatbotFlow(
       customer_name: (collectedData.customer_name as string) || customerPhone,
       phone_number: customerPhone,
       email: (collectedData.email as string) || null,
-      source: "whatsapp",
+      source: adSource ? "campaign" : "whatsapp",
       vehicle_interest: (collectedData.vehicle_model as string) || null,
       status: "new",
       metadata: cleanMetadata,
