@@ -117,6 +117,19 @@ interface WhatsAppMessage {
   type: string;
   text?: { body: string };
   interactive?: { type: string; button_reply?: { id: string; title: string }; list_reply?: { id: string; title: string } };
+  referral?: {
+    source_url?: string;
+    source_id?: string;
+    source_type?: string;
+    headline?: string;
+    body?: string;
+    media_type?: string;
+    image_url?: string;
+    video_url?: string;
+    thumbnail_url?: string;
+    ctwa_clid?: string;
+    source_ad_name?: string;
+  };
 }
 
 Deno.serve(async (req) => {
