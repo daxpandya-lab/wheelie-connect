@@ -31,6 +31,17 @@ function extractVariables(components: any): string[] {
   return nums.sort((a, b) => Number(a) - Number(b));
 }
 
+/** Detect a CAROUSEL component and return its cards with their body variables. */
+function extractCarouselCards(components: any): { index: number; variables: string[] }[] {
+  if (!Array.isArray(components)) return [];
+  const carousel = components.find((c: any) => (c?.type || "").toUpperCase() === "CAROUSEL");
+  if (!carousel?.cards || !Array.isArray(carousel.cards)) return [];
+  return carousel.cards.map((card: any, idx: number) => ({
+    index: idx,
+    variables: extractVariables(card.components || []),
+  }));
+}
+
 const VARIABLE_FIELDS = [
   { value: "name", label: "Contact name" },
   { value: "phone", label: "Phone number" },
