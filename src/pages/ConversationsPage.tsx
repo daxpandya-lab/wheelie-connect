@@ -226,8 +226,19 @@ export default function ConversationsPage() {
                   {(selectedConvo?.customer_name || "?")[0].toUpperCase()}
                 </div>
                 <div className="flex-1">
-                  <p className="font-medium text-foreground text-sm">{selectedConvo?.customer_name}</p>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-medium text-foreground text-sm">{selectedConvo?.customer_name}</p>
+                    {(selectedConvo?.metadata as any)?.ad_source && (
+                      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-accent/15 text-accent-foreground border border-accent/30">
+                        <Megaphone className="w-3 h-3" />
+                        Source: FB Ad
+                        {(selectedConvo?.metadata as any)?.ad_source?.source_ad_name && (
+                          <span className="font-medium">— {(selectedConvo?.metadata as any).ad_source.source_ad_name}</span>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground"></div>
                     <span className="capitalize">{selectedConvo?.channel}</span>
                     <span>·</span>
                     <span>{selectedConvo?.phone_number}</span>
