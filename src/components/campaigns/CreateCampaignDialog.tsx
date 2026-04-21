@@ -112,6 +112,27 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
       toast.error("Campaign name is required");
       return;
     }
+    // Validate carousel cards: every card must have a variable key + image URL
+    if (carouselCards.length > 0) {
+      const urlRe = /^https?:\/\/.+/i;
+      for (const card of carouselCards) {
+        const m = carouselMap[String(card.index)];
+        const key = m?.variable_key?.trim();
+        const url = m?.image_url?.trim();
+        if (!key) {
+          toast.error(`Card ${card.index + 1}: Variable Key is required`);
+          return;
+        }
+        if (!url) {
+          toast.error(`Card ${card.index + 1}: Image URL is required`);
+          return;
+        }
+        if (!urlRe.test(url)) {
+          toast.error(`Card ${card.index + 1}: Image URL must start with http:// or https://`);
+          return;
+        }
+      }
+    }
     setLoading(true);
     const audience_filter: any = {
       sending_speed_per_hour: Number(form.sending_speed) || 100,
