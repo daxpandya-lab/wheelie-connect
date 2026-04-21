@@ -465,6 +465,12 @@ async function processChatbotFlow(
     }
     cleanMetadata.flow_id = flowId;
     cleanMetadata.captured_at = new Date().toISOString();
+    // Carry CTWA ad attribution from conversation metadata onto the lead/booking
+    const adSource = (metadata as any)?.ad_source;
+    if (adSource) {
+      cleanMetadata.ad_source = adSource;
+      cleanMetadata.source_ad_name = adSource.source_ad_name || adSource.source_ad_headline || null;
+    }
 
     if (node.metadata.action === "create_service_booking") {
       await supabase.from("service_bookings").insert({
