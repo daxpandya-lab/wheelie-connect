@@ -128,7 +128,7 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
           return;
         }
         if (!urlRe.test(url)) {
-          toast.error(`Card ${card.index + 1}: Image URL must start with http:// or https://`);
+          toast.error(`Card ${card.index + 1}: Image URL must start with https://`);
           return;
         }
       }
