@@ -238,7 +238,7 @@ export default function ConversationsPage() {
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground"></div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <span className="capitalize">{selectedConvo?.channel}</span>
                     <span>·</span>
                     <span>{selectedConvo?.phone_number}</span>
