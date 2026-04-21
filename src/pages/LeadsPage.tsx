@@ -3,7 +3,7 @@ import TopBar from "@/components/TopBar";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Upload, Loader2, Settings2, LayoutGrid, List as ListIcon } from "lucide-react";
+import { Upload, Loader2, Settings2, LayoutGrid, List as ListIcon, Megaphone } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -156,14 +156,25 @@ export default function LeadsPage() {
                     </span>
                   </div>
                   <div className="space-y-3">
-                    {stageLeads.map((lead) => (
-                      <div key={lead.id} className="glass-card rounded-xl p-4 hover:shadow-md transition-shadow">
-                        <p className="font-medium text-foreground text-sm">{lead.customer_name}</p>
-                        <p className="text-xs text-muted-foreground mb-1">{lead.vehicle_interest || "—"}</p>
-                        <p className="text-xs text-muted-foreground font-mono">{lead.phone_number}</p>
-                        <p className="text-[10px] text-muted-foreground mt-2 capitalize">{lead.source}</p>
-                      </div>
-                    ))}
+                    {stageLeads.map((lead) => {
+                      const adName = (lead.metadata as any)?.source_ad_name || (lead.metadata as any)?.ad_source?.source_ad_name;
+                      return (
+                        <div key={lead.id} className="glass-card rounded-xl p-4 hover:shadow-md transition-shadow">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="font-medium text-foreground text-sm">{lead.customer_name}</p>
+                            {adName && (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] px-1 py-0.5 rounded bg-accent/15 text-accent-foreground border border-accent/30 shrink-0" title={adName}>
+                                <Megaphone className="w-2.5 h-2.5" />
+                                FB Ad
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mb-1">{lead.vehicle_interest || "—"}</p>
+                          <p className="text-xs text-muted-foreground font-mono">{lead.phone_number}</p>
+                          <p className="text-[10px] text-muted-foreground mt-2 capitalize">{lead.source}</p>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );
