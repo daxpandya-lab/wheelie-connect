@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { Send, Bot, User, Search, MessageSquare, Loader2, Phone } from "lucide-react";
+import { Send, Bot, User, Search, MessageSquare, Loader2, Phone, Megaphone } from "lucide-react";
 
 type Conversation = {
   id: string;
@@ -193,7 +193,15 @@ export default function ConversationsPage() {
                       <Phone className="w-3 h-3 text-muted-foreground" />
                       <span className="text-xs text-muted-foreground truncate">{c.phone_number || "N/A"}</span>
                     </div>
-                    <span className="text-[10px] text-muted-foreground">{format(new Date(c.started_at), "MMM d, h:mm a")}</span>
+                    <div className="flex items-center justify-between mt-0.5 gap-1">
+                      <span className="text-[10px] text-muted-foreground">{format(new Date(c.started_at), "MMM d, h:mm a")}</span>
+                      {(c.metadata as any)?.ad_source && (
+                        <span className="inline-flex items-center gap-0.5 text-[9px] px-1 py-0.5 rounded bg-accent/15 text-accent-foreground border border-accent/30">
+                          <Megaphone className="w-2.5 h-2.5" />
+                          FB Ad
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </button>
               ))
@@ -218,7 +226,18 @@ export default function ConversationsPage() {
                   {(selectedConvo?.customer_name || "?")[0].toUpperCase()}
                 </div>
                 <div className="flex-1">
-                  <p className="font-medium text-foreground text-sm">{selectedConvo?.customer_name}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-medium text-foreground text-sm">{selectedConvo?.customer_name}</p>
+                    {(selectedConvo?.metadata as any)?.ad_source && (
+                      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-accent/15 text-accent-foreground border border-accent/30">
+                        <Megaphone className="w-3 h-3" />
+                        Source: FB Ad
+                        {(selectedConvo?.metadata as any)?.ad_source?.source_ad_name && (
+                          <span className="font-medium">— {(selectedConvo?.metadata as any).ad_source.source_ad_name}</span>
+                        )}
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <span className="capitalize">{selectedConvo?.channel}</span>
                     <span>·</span>
