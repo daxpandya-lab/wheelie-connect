@@ -23,6 +23,7 @@ interface ChatMessage {
   sender: "bot" | "user";
   text: string;
   options?: { label: string; value: string }[];
+  multiSelect?: boolean;
   // For bot messages: keep raw node ref so we can re-render on language change
   nodeId?: string;
   data?: ChatbotCollectedData;
@@ -98,6 +99,7 @@ export default function PublicChatPage() {
   const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
   const [collectedData, setCollectedData] = useState<ChatbotCollectedData>({});
   const [isComplete, setIsComplete] = useState(false);
+  const [pendingMultiSelect, setPendingMultiSelect] = useState<Set<string>>(new Set());
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const availableLanguages = useMemo(
@@ -261,10 +263,94 @@ export default function PublicChatPage() {
         sender: "bot",
         text,
         options,
+        multiSelect: node.multiSelect,
         nodeId: node.id,
         data,
       },
     ]);
+    if (node.multiSelect) setPendingMultiSelect(new Set());
+  };
+
+  const advanceTo = useCallback(
+    (nodeId: string, data: ChatbotCollectedData) => {
+      if (!flow) return;
+      const node = flow.nodes.find((n) => n.id === nodeId);
+      if (!node) return;
+      setCurrentNodeId(node.id);
+      pushBotMessage(node, data, language);
+      persistSession({ current_node_id: node.id, collected_data: data });
+
+      // Auto-execute non-interactive nodes (api_check / condition)
+      if (node.type === "api_check") {
+        setTimeout(() => runApiCheck(node, data), 600);
+      } else if (node.type === "greeting" && node.nextNodeId) {
+        setTimeout(() => advanceTo(node.nextNodeId!, data), 700);
+      } else if (node.type === "end") {
+        const finalData = { ...data, booking_id: `BK-${Date.now().toString(36).toUpperCase()}` };
+        setCollectedData(finalData);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.nodeId === node.id && m.sender === "bot"
+              ? { ...m, text: interpolate(getNodeMessage(node, finalData, language), finalData), data: finalData }
+              : m
+          )
+        );
+        setIsComplete(true);
+        persistSession({ current_node_id: node.id, collected_data: finalData, is_complete: true });
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [flow, language, persistSession]
+  );
+
+  // ---------- API check (slot availability) ----------
+  const runApiCheck = async (node: FlowNode, data: ChatbotCollectedData) => {
+    if (!flow || !dealer) return;
+    const checkType = (node.metadata?.checkType as string) || "slot_availability";
+
+    if (checkType === "slot_availability") {
+      const date = String(data.preferred_date || "");
+      // Try to parse various formats; rely on Postgres if ISO already
+      let isoDate = date;
+      const m = date.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/); // DD-MM-YYYY or DD/MM/YYYY
+      if (m) isoDate = `${m[3]}-${m[2]}-${m[1]}`;
+
+      const { data: result, error: rpcErr } = await supabase.rpc("check_booking_availability", {
+        _tenant_id: dealer.id,
+        _date: isoDate,
+      });
+
+      const available = !rpcErr && (result as { available?: boolean })?.available !== false;
+
+      // Find condition successor based on outcome
+      const condNode = node.nextNodeId ? flow.nodes.find((n) => n.id === node.nextNodeId) : null;
+      let nextId: string | undefined;
+      if (condNode && condNode.options?.length) {
+        const matchVal = available ? "available" : "full";
+        const matched = condNode.options.find((o) => o.value === matchVal);
+        nextId = (matched || condNode.options[0]).nextNodeId;
+      } else {
+        nextId = node.nextNodeId;
+      }
+
+      if (!available) {
+        // Insert "fully booked" message before looping back
+        const friendly =
+          language === "hi"
+            ? `क्षमा करें, हम ${date} के लिए पूरी तरह बुक हैं। कृपया कोई और तारीख चुनें।`
+            : language === "ar"
+            ? `عذرًا، نحن محجوزون بالكامل في ${date}. يرجى اختيار تاريخ آخر.`
+            : `Sorry, we are fully booked for ${date}. Please select another date.`;
+        setMessages((prev) => [
+          ...prev,
+          { id: `bot-${Date.now()}-full`, sender: "bot", text: friendly },
+        ]);
+      }
+
+      if (nextId) setTimeout(() => advanceTo(nextId!, data), 500);
+    } else if (node.nextNodeId) {
+      setTimeout(() => advanceTo(node.nextNodeId!, data), 500);
+    }
   };
 
   const startFlow = (f: FlowData, lang: string) => {
@@ -284,12 +370,12 @@ export default function PublicChatPage() {
     }
   };
 
-  const processAnswer = (answer: string) => {
+  const processAnswer = (answer: string, displayLabel?: string) => {
     if (!flow || !currentNodeId || isComplete) return;
     const currentNode = flow.nodes.find((n) => n.id === currentNodeId);
     if (!currentNode) return;
 
-    setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: answer }]);
+    setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? answer }]);
 
     const newData = { ...collectedData };
     if (currentNode.dataField) {
@@ -303,38 +389,34 @@ export default function PublicChatPage() {
 
     let nextNodeId: string | undefined;
     if (currentNode.options) {
-      const selected = currentNode.options.find((o) => o.value === answer || o.label === answer);
+      // For multi-select, route via the first selected value's nextNodeId (all options usually share next)
+      const firstVal = currentNode.multiSelect ? answer.split(",")[0]?.trim() : answer;
+      const selected = currentNode.options.find((o) => o.value === firstVal || o.label === firstVal);
       nextNodeId = selected?.nextNodeId || currentNode.nextNodeId;
     } else nextNodeId = currentNode.nextNodeId;
 
-    if (currentNode.type === "api_check" || currentNode.type === "condition") {
-      nextNodeId = currentNode.options?.[0]?.nextNodeId || currentNode.nextNodeId;
-    }
-
     if (!nextNodeId) return;
-    const nextNode = flow.nodes.find((n) => n.id === nextNodeId);
-    if (!nextNode) return;
+    setTimeout(() => advanceTo(nextNodeId!, newData), 500);
+  };
 
-    setTimeout(() => {
-      setCurrentNodeId(nextNode.id);
-      if (nextNode.type === "end") {
-        const finalData = { ...newData, booking_id: `BK-${Date.now().toString(36).toUpperCase()}` };
-        setCollectedData(finalData);
-        const text = interpolate(
-          nextNode.message[language] || nextNode.message["en"] || "",
-          finalData
-        );
-        setMessages((prev) => [
-          ...prev,
-          { id: `bot-${Date.now()}`, sender: "bot", text, nodeId: nextNode.id, data: finalData },
-        ]);
-        setIsComplete(true);
-        persistSession({ current_node_id: nextNode.id, collected_data: finalData, is_complete: true });
-      } else {
-        pushBotMessage(nextNode, newData, language);
-        persistSession({ current_node_id: nextNode.id, collected_data: newData });
-      }
-    }, 500);
+  const submitMultiSelect = () => {
+    if (!flow || !currentNodeId || pendingMultiSelect.size === 0) return;
+    const node = flow.nodes.find((n) => n.id === currentNodeId);
+    if (!node?.options) return;
+    const selectedOpts = node.options.filter((o) => pendingMultiSelect.has(o.value));
+    const valueStr = selectedOpts.map((o) => o.value).join(",");
+    const labelStr = selectedOpts.map((o) => o.label).join(", ");
+    setPendingMultiSelect(new Set());
+    processAnswer(valueStr, labelStr);
+  };
+
+  const toggleMultiSelectOption = (value: string) => {
+    setPendingMultiSelect((prev) => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
   };
 
   const handleSend = () => {
@@ -427,7 +509,11 @@ export default function PublicChatPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {messages.map((msg) => (
+        {messages.map((msg, idx) => {
+          const isLast = idx === messages.length - 1;
+          const isActiveOptions =
+            isLast && !isComplete && msg.sender === "bot" && msg.nodeId === currentNodeId;
+          return (
           <div key={msg.id} className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
             <div className="flex items-start gap-2 max-w-[85%]">
               {msg.sender === "bot" && (
@@ -445,14 +531,49 @@ export default function PublicChatPage() {
                 >
                   {msg.text}
                 </div>
-                {msg.options && msg.sender === "bot" && (
+                {msg.options && msg.sender === "bot" && msg.multiSelect && isActiveOptions && (
+                  <div className="mt-2 space-y-1.5">
+                    <div className="flex flex-col gap-1">
+                      {msg.options.map((opt) => {
+                        const checked = pendingMultiSelect.has(opt.value);
+                        return (
+                          <label
+                            key={opt.value}
+                            className={`flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg border cursor-pointer transition-colors ${
+                              checked
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border hover:bg-muted"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleMultiSelectOption(opt.value)}
+                              className="accent-primary"
+                            />
+                            <span>{opt.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={submitMultiSelect}
+                      disabled={pendingMultiSelect.size === 0}
+                      className="h-7 text-xs"
+                    >
+                      Done ({pendingMultiSelect.size})
+                    </Button>
+                  </div>
+                )}
+                {msg.options && msg.sender === "bot" && !msg.multiSelect && (
                   <div className="flex flex-wrap gap-1.5 mt-2">
                     {msg.options.map((opt) => (
                       <button
                         key={opt.value}
-                        onClick={() => processAnswer(opt.value)}
-                        disabled={isComplete}
-                        className="px-3 py-1.5 text-xs rounded-full border border-primary/30 text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+                        onClick={() => isActiveOptions && processAnswer(opt.value, opt.label)}
+                        disabled={isComplete || !isActiveOptions}
+                        className="px-3 py-1.5 text-xs rounded-full border border-primary/30 text-primary hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {opt.label}
                       </button>
@@ -467,7 +588,8 @@ export default function PublicChatPage() {
               )}
             </div>
           </div>
-        ))}
+          );
+        })}
         <div ref={bottomRef} />
       </div>
 

@@ -1384,6 +1384,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      check_booking_availability: {
+        Args: { _date: string; _tenant_id: string }
+        Returns: Json
+      }
       check_rate_limit: {
         Args: {
           _key: string
