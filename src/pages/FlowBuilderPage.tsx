@@ -13,7 +13,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Save, Play, ZoomIn, ZoomOut, Maximize2,
   MessageSquare, Car, Loader2, Plus, ChevronLeft,
-  ArrowUp, ArrowDown, Trash2, Copy,
+  ArrowUp, ArrowDown, Trash2, Copy, Share2,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { FlowData, FlowNode, NodeType } from "@/types/chatbot-flow";
@@ -293,6 +293,18 @@ export default function FlowBuilderPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const url = `${window.location.origin}/chat/${tenantId}/${f.id}`;
+                          navigator.clipboard.writeText(url);
+                          toast.success("Share link copied!", { description: url });
+                        }}
+                        title="Copy share link for this flow"
+                      >
+                        <Share2 className="w-4 h-4" />
+                      </Button>
                       <Button variant="outline" size="sm" onClick={() => toggleActive(f.id, f.is_active)}>
                         {f.is_active ? "Deactivate" : "Activate"}
                       </Button>
@@ -353,7 +365,7 @@ export default function FlowBuilderPage() {
               onClick={() => setShowPreview(!showPreview)}
               className="h-8"
             >
-              <Play className="w-3.5 h-3.5" /> Preview
+              <Play className="w-3.5 h-3.5" /> Test Bot
             </Button>
             <Button size="sm" onClick={saveFlow} disabled={saving} className="h-8">
               {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}

@@ -272,6 +272,57 @@ export type Database = {
           },
         ]
       }
+      chat_sessions: {
+        Row: {
+          collected_data: Json
+          created_at: string
+          current_node_id: string | null
+          flow_id: string
+          id: string
+          is_complete: boolean
+          tenant_id: string
+          updated_at: string
+          visitor_token: string
+        }
+        Insert: {
+          collected_data?: Json
+          created_at?: string
+          current_node_id?: string | null
+          flow_id: string
+          id?: string
+          is_complete?: boolean
+          tenant_id: string
+          updated_at?: string
+          visitor_token: string
+        }
+        Update: {
+          collected_data?: Json
+          created_at?: string
+          current_node_id?: string | null
+          flow_id?: string
+          id?: string
+          is_complete?: boolean
+          tenant_id?: string
+          updated_at?: string
+          visitor_token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_sessions_flow_id_fkey"
+            columns: ["flow_id"]
+            isOneToOne: false
+            referencedRelation: "chatbot_flows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_sessions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chatbot_conversations: {
         Row: {
           assigned_agent: string | null

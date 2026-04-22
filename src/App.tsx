@@ -54,6 +54,7 @@ const App = () => (
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/chat/:dealerId" element={<PublicChatPage />} />
+            <Route path="/chat/:tenantSlug/:flowId" element={<PublicChatPage />} />
 
             {/* Subscription expired */}
             <Route element={<ProtectedRoute />}>
