@@ -99,6 +99,7 @@ export default function PublicChatPage() {
   const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
   const [collectedData, setCollectedData] = useState<ChatbotCollectedData>({});
   const [isComplete, setIsComplete] = useState(false);
+  const [pendingMultiSelect, setPendingMultiSelect] = useState<Set<string>>(new Set());
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const availableLanguages = useMemo(
@@ -262,10 +263,94 @@ export default function PublicChatPage() {
         sender: "bot",
         text,
         options,
+        multiSelect: node.multiSelect,
         nodeId: node.id,
         data,
       },
     ]);
+    if (node.multiSelect) setPendingMultiSelect(new Set());
+  };
+
+  const advanceTo = useCallback(
+    (nodeId: string, data: ChatbotCollectedData) => {
+      if (!flow) return;
+      const node = flow.nodes.find((n) => n.id === nodeId);
+      if (!node) return;
+      setCurrentNodeId(node.id);
+      pushBotMessage(node, data, language);
+      persistSession({ current_node_id: node.id, collected_data: data });
+
+      // Auto-execute non-interactive nodes (api_check / condition)
+      if (node.type === "api_check") {
+        setTimeout(() => runApiCheck(node, data), 600);
+      } else if (node.type === "greeting" && node.nextNodeId) {
+        setTimeout(() => advanceTo(node.nextNodeId!, data), 700);
+      } else if (node.type === "end") {
+        const finalData = { ...data, booking_id: `BK-${Date.now().toString(36).toUpperCase()}` };
+        setCollectedData(finalData);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.nodeId === node.id && m.sender === "bot"
+              ? { ...m, text: interpolate(getNodeMessage(node, finalData, language), finalData), data: finalData }
+              : m
+          )
+        );
+        setIsComplete(true);
+        persistSession({ current_node_id: node.id, collected_data: finalData, is_complete: true });
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [flow, language, persistSession]
+  );
+
+  // ---------- API check (slot availability) ----------
+  const runApiCheck = async (node: FlowNode, data: ChatbotCollectedData) => {
+    if (!flow || !dealer) return;
+    const checkType = (node.metadata?.checkType as string) || "slot_availability";
+
+    if (checkType === "slot_availability") {
+      const date = String(data.preferred_date || "");
+      // Try to parse various formats; rely on Postgres if ISO already
+      let isoDate = date;
+      const m = date.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/); // DD-MM-YYYY or DD/MM/YYYY
+      if (m) isoDate = `${m[3]}-${m[2]}-${m[1]}`;
+
+      const { data: result, error: rpcErr } = await supabase.rpc("check_booking_availability", {
+        _tenant_id: dealer.id,
+        _date: isoDate,
+      });
+
+      const available = !rpcErr && (result as { available?: boolean })?.available !== false;
+
+      // Find condition successor based on outcome
+      const condNode = node.nextNodeId ? flow.nodes.find((n) => n.id === node.nextNodeId) : null;
+      let nextId: string | undefined;
+      if (condNode && condNode.options?.length) {
+        const matchVal = available ? "available" : "full";
+        const matched = condNode.options.find((o) => o.value === matchVal);
+        nextId = (matched || condNode.options[0]).nextNodeId;
+      } else {
+        nextId = node.nextNodeId;
+      }
+
+      if (!available) {
+        // Insert "fully booked" message before looping back
+        const friendly =
+          language === "hi"
+            ? `क्षमा करें, हम ${date} के लिए पूरी तरह बुक हैं। कृपया कोई और तारीख चुनें।`
+            : language === "ar"
+            ? `عذرًا، نحن محجوزون بالكامل في ${date}. يرجى اختيار تاريخ آخر.`
+            : `Sorry, we are fully booked for ${date}. Please select another date.`;
+        setMessages((prev) => [
+          ...prev,
+          { id: `bot-${Date.now()}-full`, sender: "bot", text: friendly },
+        ]);
+      }
+
+      if (nextId) setTimeout(() => advanceTo(nextId!, data), 500);
+    } else if (node.nextNodeId) {
+      setTimeout(() => advanceTo(node.nextNodeId!, data), 500);
+    }
   };
 
   const startFlow = (f: FlowData, lang: string) => {
