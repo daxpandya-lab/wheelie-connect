@@ -30,6 +30,8 @@ export interface FlowNode {
   dataField?: string; // maps to a field in the booking/lead record
   validationType?: "text" | "phone" | "number" | "date" | "email" | "selection";
   options?: FlowNodeOption[];
+  /** When true on a selection question, visitor can pick multiple options. Stored as comma-separated string. */
+  multiSelect?: boolean;
   nextNodeId?: string;
   position: FlowNodePosition;
   metadata?: Record<string, unknown>;
@@ -185,6 +187,7 @@ export const SERVICE_BOOKING_FLOW: FlowData = {
       },
       dataField: "service_type",
       validationType: "selection",
+      multiSelect: true,
       options: [
         { label: "Regular Service", value: "regular", nextNodeId: "ask_issue" },
         { label: "Oil Change", value: "oil_change", nextNodeId: "ask_issue" },

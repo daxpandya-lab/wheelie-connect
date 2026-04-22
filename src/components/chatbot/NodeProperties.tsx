@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { X, Plus, Trash2 } from "lucide-react";
 
 interface NodePropertiesProps {
@@ -134,6 +135,22 @@ export default function NodeProperties({ node, allNodes, onChange, onDelete, onC
                 <SelectItem value="selection">Selection (Options)</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+        )}
+
+        {/* Multi-select toggle (only for selection-type questions) */}
+        {node.type === "question" && node.validationType === "selection" && (
+          <div className="flex items-center justify-between rounded-md border border-border p-2.5">
+            <div className="space-y-0.5">
+              <Label className="text-xs">Allow multiple selections</Label>
+              <p className="text-[11px] text-muted-foreground">
+                Visitors can tick multiple options, then tap Done.
+              </p>
+            </div>
+            <Switch
+              checked={!!node.multiSelect}
+              onCheckedChange={(checked) => onChange({ ...node, multiSelect: checked })}
+            />
           </div>
         )}
 
