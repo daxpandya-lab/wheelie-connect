@@ -23,6 +23,7 @@ interface ChatMessage {
   sender: "bot" | "user";
   text: string;
   options?: { label: string; value: string }[];
+  multiSelect?: boolean;
   // For bot messages: keep raw node ref so we can re-render on language change
   nodeId?: string;
   data?: ChatbotCollectedData;
