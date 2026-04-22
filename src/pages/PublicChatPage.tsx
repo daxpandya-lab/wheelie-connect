@@ -370,12 +370,12 @@ export default function PublicChatPage() {
     }
   };
 
-  const processAnswer = (answer: string) => {
+  const processAnswer = (answer: string, displayLabel?: string) => {
     if (!flow || !currentNodeId || isComplete) return;
     const currentNode = flow.nodes.find((n) => n.id === currentNodeId);
     if (!currentNode) return;
 
-    setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: answer }]);
+    setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? answer }]);
 
     const newData = { ...collectedData };
     if (currentNode.dataField) {
@@ -389,38 +389,34 @@ export default function PublicChatPage() {
 
     let nextNodeId: string | undefined;
     if (currentNode.options) {
-      const selected = currentNode.options.find((o) => o.value === answer || o.label === answer);
+      // For multi-select, route via the first selected value's nextNodeId (all options usually share next)
+      const firstVal = currentNode.multiSelect ? answer.split(",")[0]?.trim() : answer;
+      const selected = currentNode.options.find((o) => o.value === firstVal || o.label === firstVal);
       nextNodeId = selected?.nextNodeId || currentNode.nextNodeId;
     } else nextNodeId = currentNode.nextNodeId;
 
-    if (currentNode.type === "api_check" || currentNode.type === "condition") {
-      nextNodeId = currentNode.options?.[0]?.nextNodeId || currentNode.nextNodeId;
-    }
-
     if (!nextNodeId) return;
-    const nextNode = flow.nodes.find((n) => n.id === nextNodeId);
-    if (!nextNode) return;
+    setTimeout(() => advanceTo(nextNodeId!, newData), 500);
+  };
 
-    setTimeout(() => {
-      setCurrentNodeId(nextNode.id);
-      if (nextNode.type === "end") {
-        const finalData = { ...newData, booking_id: `BK-${Date.now().toString(36).toUpperCase()}` };
-        setCollectedData(finalData);
-        const text = interpolate(
-          nextNode.message[language] || nextNode.message["en"] || "",
-          finalData
-        );
-        setMessages((prev) => [
-          ...prev,
-          { id: `bot-${Date.now()}`, sender: "bot", text, nodeId: nextNode.id, data: finalData },
-        ]);
-        setIsComplete(true);
-        persistSession({ current_node_id: nextNode.id, collected_data: finalData, is_complete: true });
-      } else {
-        pushBotMessage(nextNode, newData, language);
-        persistSession({ current_node_id: nextNode.id, collected_data: newData });
-      }
-    }, 500);
+  const submitMultiSelect = () => {
+    if (!flow || !currentNodeId || pendingMultiSelect.size === 0) return;
+    const node = flow.nodes.find((n) => n.id === currentNodeId);
+    if (!node?.options) return;
+    const selectedOpts = node.options.filter((o) => pendingMultiSelect.has(o.value));
+    const valueStr = selectedOpts.map((o) => o.value).join(",");
+    const labelStr = selectedOpts.map((o) => o.label).join(", ");
+    setPendingMultiSelect(new Set());
+    processAnswer(valueStr, labelStr);
+  };
+
+  const toggleMultiSelectOption = (value: string) => {
+    setPendingMultiSelect((prev) => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
   };
 
   const handleSend = () => {
