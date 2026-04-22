@@ -509,7 +509,11 @@ export default function PublicChatPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {messages.map((msg) => (
+        {messages.map((msg, idx) => {
+          const isLast = idx === messages.length - 1;
+          const isActiveOptions =
+            isLast && !isComplete && msg.sender === "bot" && msg.nodeId === currentNodeId;
+          return (
           <div key={msg.id} className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
             <div className="flex items-start gap-2 max-w-[85%]">
               {msg.sender === "bot" && (
@@ -527,14 +531,49 @@ export default function PublicChatPage() {
                 >
                   {msg.text}
                 </div>
-                {msg.options && msg.sender === "bot" && (
+                {msg.options && msg.sender === "bot" && msg.multiSelect && isActiveOptions && (
+                  <div className="mt-2 space-y-1.5">
+                    <div className="flex flex-col gap-1">
+                      {msg.options.map((opt) => {
+                        const checked = pendingMultiSelect.has(opt.value);
+                        return (
+                          <label
+                            key={opt.value}
+                            className={`flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg border cursor-pointer transition-colors ${
+                              checked
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border hover:bg-muted"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleMultiSelectOption(opt.value)}
+                              className="accent-primary"
+                            />
+                            <span>{opt.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={submitMultiSelect}
+                      disabled={pendingMultiSelect.size === 0}
+                      className="h-7 text-xs"
+                    >
+                      Done ({pendingMultiSelect.size})
+                    </Button>
+                  </div>
+                )}
+                {msg.options && msg.sender === "bot" && !msg.multiSelect && (
                   <div className="flex flex-wrap gap-1.5 mt-2">
                     {msg.options.map((opt) => (
                       <button
                         key={opt.value}
-                        onClick={() => processAnswer(opt.value)}
-                        disabled={isComplete}
-                        className="px-3 py-1.5 text-xs rounded-full border border-primary/30 text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+                        onClick={() => isActiveOptions && processAnswer(opt.value, opt.label)}
+                        disabled={isComplete || !isActiveOptions}
+                        className="px-3 py-1.5 text-xs rounded-full border border-primary/30 text-primary hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {opt.label}
                       </button>
@@ -549,7 +588,8 @@ export default function PublicChatPage() {
               )}
             </div>
           </div>
-        ))}
+          );
+        })}
         <div ref={bottomRef} />
       </div>
 
