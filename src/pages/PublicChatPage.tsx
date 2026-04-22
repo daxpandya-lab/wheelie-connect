@@ -1,9 +1,16 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Car, Send, Loader2, Bot, User as UserIcon } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Car, Send, Loader2, Bot, User as UserIcon, Languages } from "lucide-react";
 import type { FlowData, FlowNode, ChatbotCollectedData } from "@/types/chatbot-flow";
 
 interface DealerInfo {
@@ -16,10 +23,22 @@ interface ChatMessage {
   sender: "bot" | "user";
   text: string;
   options?: { label: string; value: string }[];
+  // For bot messages: keep raw node ref so we can re-render on language change
+  nodeId?: string;
+  data?: ChatbotCollectedData;
 }
 
 const VISITOR_KEY_PREFIX = "wheelie_chat_visitor_";
 const SESSION_KEY_PREFIX = "wheelie_chat_session_";
+const LANG_KEY_PREFIX = "wheelie_chat_lang_";
+
+const LANGUAGE_LABELS: Record<string, string> = {
+  en: "English",
+  hi: "हिन्दी",
+  ar: "العربية",
+};
+
+const RTL_LANGUAGES = new Set(["ar", "he", "fa", "ur"]);
 
 function getVisitorToken(tenantId: string) {
   const key = VISITOR_KEY_PREFIX + tenantId;
@@ -31,6 +50,36 @@ function getVisitorToken(tenantId: string) {
   return token;
 }
 
+function detectBrowserLanguage(available: string[]): string {
+  const candidates = (navigator.languages && navigator.languages.length
+    ? navigator.languages
+    : [navigator.language || "en"]
+  ).map((l) => l.toLowerCase());
+
+  for (const c of candidates) {
+    const base = c.split("-")[0];
+    const match = available.find((a) => a.toLowerCase() === base);
+    if (match) return match;
+  }
+  return available.includes("en") ? "en" : available[0];
+}
+
+function extractAvailableLanguages(flow: FlowData): string[] {
+  const set = new Set<string>();
+  for (const node of flow.nodes) {
+    if (node.message) {
+      Object.keys(node.message).forEach((k) => set.add(k));
+    }
+  }
+  // Stable order: en, hi, ar first if present, then others
+  const preferred = ["en", "hi", "ar"];
+  const ordered = [
+    ...preferred.filter((p) => set.has(p)),
+    ...[...set].filter((l) => !preferred.includes(l)).sort(),
+  ];
+  return ordered.length ? ordered : ["en"];
+}
+
 export default function PublicChatPage() {
   const params = useParams<{ dealerId?: string; tenantSlug?: string; flowId?: string }>();
   const tenantParam = params.tenantSlug || params.dealerId; // backward-compat
@@ -38,9 +87,9 @@ export default function PublicChatPage() {
 
   const [dealer, setDealer] = useState<DealerInfo | null>(null);
   const [flow, setFlow] = useState<FlowData | null>(null);
-  const [flowId, setFlowId] = useState<string | null>(null);
+  const [, setFlowId] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [language] = useState("en");
+  const [language, setLanguage] = useState<string>("en");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -51,12 +100,16 @@ export default function PublicChatPage() {
   const [isComplete, setIsComplete] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  const availableLanguages = useMemo(
+    () => (flow ? extractAvailableLanguages(flow) : ["en"]),
+    [flow]
+  );
+
   // ---------- Load dealer + active flow ----------
   useEffect(() => {
     if (!tenantParam) { setError("Invalid link"); setLoading(false); return; }
 
     (async () => {
-      // Resolve tenant by id or slug
       const { data: tenantData, error: tenantErr } = await supabase
         .from("tenants")
         .select("id, name, status")
@@ -67,7 +120,6 @@ export default function PublicChatPage() {
       if (tenantData.status !== "active") { setError("This dealer is currently unavailable"); setLoading(false); return; }
       setDealer({ id: tenantData.id, name: tenantData.name });
 
-      // Resolve flow: requested id first, fall back to active
       let resolvedFlow: { id: string; flow_data: FlowData } | null = null;
       if (flowIdParam) {
         const { data } = await supabase
@@ -99,27 +151,43 @@ export default function PublicChatPage() {
       setFlow(resolvedFlow.flow_data);
       setFlowId(resolvedFlow.id);
 
+      const flowLangs = extractAvailableLanguages(resolvedFlow.flow_data);
+
       // Resume or create session
       const visitorToken = getVisitorToken(tenantData.id);
       const sessionStorageKey = `${SESSION_KEY_PREFIX}${tenantData.id}_${resolvedFlow.id}`;
+      const langStorageKey = `${LANG_KEY_PREFIX}${tenantData.id}_${resolvedFlow.id}`;
       const cached = localStorage.getItem(sessionStorageKey);
       let resumed = false;
+      let resolvedLang: string =
+        localStorage.getItem(langStorageKey) ||
+        detectBrowserLanguage(flowLangs);
+      if (!flowLangs.includes(resolvedLang)) resolvedLang = flowLangs[0];
 
       if (cached) {
         const { data: existing } = await supabase
           .from("chat_sessions")
-          .select("id, current_node_id, collected_data, is_complete")
+          .select("id, current_node_id, collected_data, is_complete, language")
           .eq("id", cached)
           .maybeSingle();
         if (existing) {
           setSessionId(existing.id);
-          setCollectedData((existing.collected_data as ChatbotCollectedData) || {});
+          const existingData = (existing.collected_data as ChatbotCollectedData) || {};
+          setCollectedData(existingData);
           setIsComplete(existing.is_complete);
+          // Prefer stored language if valid
+          const storedLang = (existing as { language?: string }).language;
+          if (storedLang && flowLangs.includes(storedLang)) {
+            resolvedLang = storedLang;
+          }
+          setLanguage(resolvedLang);
+          localStorage.setItem(langStorageKey, resolvedLang);
+
           if (existing.current_node_id) {
             const node = resolvedFlow.flow_data.nodes.find((n) => n.id === existing.current_node_id);
             if (node) {
               setCurrentNodeId(node.id);
-              pushBotMessage(node, (existing.collected_data as ChatbotCollectedData) || {});
+              pushBotMessage(node, existingData, resolvedLang);
               resumed = true;
             }
           }
@@ -131,6 +199,9 @@ export default function PublicChatPage() {
       }
 
       if (!resumed) {
+        setLanguage(resolvedLang);
+        localStorage.setItem(langStorageKey, resolvedLang);
+
         const { data: newSession } = await supabase
           .from("chat_sessions")
           .insert({
@@ -139,14 +210,15 @@ export default function PublicChatPage() {
             visitor_token: visitorToken,
             current_node_id: resolvedFlow.flow_data.startNodeId,
             collected_data: {},
-          } as any)
+            language: resolvedLang,
+          } as never)
           .select("id")
           .single();
         if (newSession) {
           setSessionId(newSession.id);
           localStorage.setItem(sessionStorageKey, newSession.id);
         }
-        startFlow(resolvedFlow.flow_data);
+        startFlow(resolvedFlow.flow_data, resolvedLang);
       }
 
       setLoading(false);
@@ -158,39 +230,54 @@ export default function PublicChatPage() {
 
   // ---------- Persist session updates ----------
   const persistSession = useCallback(
-    async (patch: { current_node_id?: string | null; collected_data?: ChatbotCollectedData; is_complete?: boolean }) => {
+    async (patch: {
+      current_node_id?: string | null;
+      collected_data?: ChatbotCollectedData;
+      is_complete?: boolean;
+      language?: string;
+    }) => {
       if (!sessionId) return;
-      await supabase.from("chat_sessions").update(patch as any).eq("id", sessionId);
+      await supabase.from("chat_sessions").update(patch as never).eq("id", sessionId);
     },
     [sessionId]
   );
 
-  // ---------- Flow execution (mirrors ChatPreview logic) ----------
+  // ---------- Flow execution ----------
   const interpolate = (text: string, data: ChatbotCollectedData) =>
     text.replace(/\{\{(\w+)\}\}/g, (_, k) => String(data[k] ?? `[${k}]`));
 
-  const getNodeMessage = (node: FlowNode, data: ChatbotCollectedData) => {
-    const msg = node.message[language] || node.message["en"] || "";
+  const getNodeMessage = (node: FlowNode, data: ChatbotCollectedData, lang: string) => {
+    const msg = node.message[lang] || node.message["en"] || Object.values(node.message)[0] || "";
     return interpolate(msg, data);
   };
 
-  const pushBotMessage = (node: FlowNode, data: ChatbotCollectedData) => {
-    const text = getNodeMessage(node, data);
+  const pushBotMessage = (node: FlowNode, data: ChatbotCollectedData, lang: string) => {
+    const text = getNodeMessage(node, data, lang);
     const options = node.options?.map((o) => ({ label: o.label, value: o.value }));
-    setMessages((prev) => [...prev, { id: `bot-${Date.now()}-${Math.random()}`, sender: "bot", text, options }]);
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `bot-${Date.now()}-${Math.random()}`,
+        sender: "bot",
+        text,
+        options,
+        nodeId: node.id,
+        data,
+      },
+    ]);
   };
 
-  const startFlow = (f: FlowData) => {
+  const startFlow = (f: FlowData, lang: string) => {
     const startNode = f.nodes.find((n) => n.id === f.startNodeId);
     if (!startNode) return;
     setCurrentNodeId(startNode.id);
-    pushBotMessage(startNode, {});
+    pushBotMessage(startNode, {}, lang);
     if (startNode.type === "greeting" && startNode.nextNodeId) {
       setTimeout(() => {
         const next = f.nodes.find((n) => n.id === startNode.nextNodeId);
         if (next) {
           setCurrentNodeId(next.id);
-          pushBotMessage(next, {});
+          pushBotMessage(next, {}, lang);
           persistSession({ current_node_id: next.id });
         }
       }, 700);
@@ -233,12 +320,18 @@ export default function PublicChatPage() {
       if (nextNode.type === "end") {
         const finalData = { ...newData, booking_id: `BK-${Date.now().toString(36).toUpperCase()}` };
         setCollectedData(finalData);
-        const text = interpolate(nextNode.message[language] || nextNode.message["en"] || "", finalData);
-        setMessages((prev) => [...prev, { id: `bot-${Date.now()}`, sender: "bot", text }]);
+        const text = interpolate(
+          nextNode.message[language] || nextNode.message["en"] || "",
+          finalData
+        );
+        setMessages((prev) => [
+          ...prev,
+          { id: `bot-${Date.now()}`, sender: "bot", text, nodeId: nextNode.id, data: finalData },
+        ]);
         setIsComplete(true);
         persistSession({ current_node_id: nextNode.id, collected_data: finalData, is_complete: true });
       } else {
-        pushBotMessage(nextNode, newData);
+        pushBotMessage(nextNode, newData, language);
         persistSession({ current_node_id: nextNode.id, collected_data: newData });
       }
     }, 500);
@@ -248,6 +341,34 @@ export default function PublicChatPage() {
     if (!input.trim() || isComplete) return;
     processAnswer(input.trim());
     setInput("");
+  };
+
+  // ---------- Language change ----------
+  const handleLanguageChange = (newLang: string) => {
+    if (!flow || newLang === language) return;
+    setLanguage(newLang);
+
+    if (dealer) {
+      const flowKey = Object.keys(localStorage).find((k) =>
+        k.startsWith(`${LANG_KEY_PREFIX}${dealer.id}_`)
+      );
+      if (flowKey) localStorage.setItem(flowKey, newLang);
+    }
+
+    // Re-render previous bot messages in the new language
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.sender !== "bot" || !m.nodeId) return m;
+        const node = flow.nodes.find((n) => n.id === m.nodeId);
+        if (!node) return m;
+        return {
+          ...m,
+          text: getNodeMessage(node, m.data || collectedData, newLang),
+        };
+      })
+    );
+
+    persistSession({ language: newLang });
   };
 
   // ---------- Render ----------
@@ -266,16 +387,43 @@ export default function PublicChatPage() {
     </div>
   );
 
+  const isRtl = RTL_LANGUAGES.has(language);
+
   return (
-    <div className="min-h-screen bg-background flex flex-col max-w-lg mx-auto">
+    <div
+      className="min-h-screen bg-background flex flex-col max-w-lg mx-auto"
+      dir={isRtl ? "rtl" : "ltr"}
+    >
       <div className="bg-primary text-primary-foreground px-4 py-3 flex items-center gap-3 shrink-0">
         <div className="w-10 h-10 rounded-full bg-primary-foreground/20 flex items-center justify-center">
           <Car className="w-5 h-5" />
         </div>
-        <div>
-          <p className="font-semibold text-sm">{dealer?.name}</p>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-sm truncate">{dealer?.name}</p>
           <p className="text-xs opacity-75">Online</p>
         </div>
+        {availableLanguages.length > 1 && (
+          <Select value={language} onValueChange={handleLanguageChange}>
+            <SelectTrigger
+              className="h-8 w-auto gap-1 bg-primary-foreground/15 border-0 text-primary-foreground hover:bg-primary-foreground/25 focus:ring-0 focus:ring-offset-0"
+              aria-label="Select language"
+            >
+              <Languages className="w-3.5 h-3.5" />
+              <SelectValue>
+                <span className="text-xs font-medium">
+                  {LANGUAGE_LABELS[language] || language.toUpperCase()}
+                </span>
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent align="end">
+              {availableLanguages.map((lang) => (
+                <SelectItem key={lang} value={lang}>
+                  {LANGUAGE_LABELS[lang] || lang.toUpperCase()}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">

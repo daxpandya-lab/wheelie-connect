@@ -280,6 +280,7 @@ export type Database = {
           flow_id: string
           id: string
           is_complete: boolean
+          language: string
           tenant_id: string
           updated_at: string
           visitor_token: string
@@ -291,6 +292,7 @@ export type Database = {
           flow_id: string
           id?: string
           is_complete?: boolean
+          language?: string
           tenant_id: string
           updated_at?: string
           visitor_token: string
@@ -302,6 +304,7 @@ export type Database = {
           flow_id?: string
           id?: string
           is_complete?: boolean
+          language?: string
           tenant_id?: string
           updated_at?: string
           visitor_token?: string
