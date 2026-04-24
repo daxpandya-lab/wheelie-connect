@@ -527,6 +527,14 @@ export default function PublicChatPage() {
     const currentNode = flow.nodes.find((n) => n.id === currentNodeId);
     if (!currentNode) return;
 
+    // Per-node validation: reject and re-prompt if invalid
+    const errKind = validateAnswer(currentNode, answer);
+    if (errKind) {
+      setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? answer }]);
+      rejectAnswer(currentNode, errKind);
+      return;
+    }
+
     setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? answer }]);
 
     const newData = { ...collectedData };
