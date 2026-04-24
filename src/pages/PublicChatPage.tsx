@@ -535,8 +535,19 @@ export default function PublicChatPage() {
   );
 
   const isRtl = RTL_LANGUAGES.has(language);
-
-  return (
+  const currentNode = flow?.nodes.find((n) => n.id === currentNodeId) || null;
+  const isDateNode =
+    !!currentNode &&
+    !isComplete &&
+    (currentNode.type === "date_buttons" || currentNode.validationType === "date");
+  const isSelectionNode =
+    !!currentNode &&
+    !isComplete &&
+    !!currentNode.options &&
+    currentNode.options.length > 0 &&
+    currentNode.type !== "api_check" &&
+    currentNode.type !== "condition";
+  const [datePickerOpen, setDatePickerOpenState] = [false, (_: boolean) => {}]; // placeholder, replaced below
     <div
       className="min-h-screen bg-background flex flex-col max-w-lg mx-auto"
       dir={isRtl ? "rtl" : "ltr"}
