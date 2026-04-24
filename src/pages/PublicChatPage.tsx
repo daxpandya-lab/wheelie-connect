@@ -547,7 +547,8 @@ export default function PublicChatPage() {
     currentNode.options.length > 0 &&
     currentNode.type !== "api_check" &&
     currentNode.type !== "condition";
-  const [datePickerOpen, setDatePickerOpenState] = [false, (_: boolean) => {}]; // placeholder, replaced below
+
+  return (
     <div
       className="min-h-screen bg-background flex flex-col max-w-lg mx-auto"
       dir={isRtl ? "rtl" : "ltr"}
