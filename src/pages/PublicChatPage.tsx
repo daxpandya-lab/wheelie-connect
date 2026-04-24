@@ -605,23 +605,25 @@ export default function PublicChatPage() {
     const currentNode = flow.nodes.find((n) => n.id === currentNodeId);
     if (!currentNode) return;
 
-    // Per-node validation: reject and re-prompt if invalid
-    const errKind = validateAnswer(currentNode, answer);
-    if (errKind) {
+    // Per-node validation (with fuzzy matching for option typos)
+    const result = validateAnswer(currentNode, answer);
+    if (!result.ok) {
       setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? answer }]);
-      rejectAnswer(currentNode, errKind);
+      rejectAnswer(currentNode, result.kind);
       return;
     }
+    // Use the canonicalized value (e.g. fuzzy-matched option value, normalized date)
+    const canonical = result.value;
 
     setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? answer }]);
 
     const newData = { ...collectedData };
     if (currentNode.dataField) {
-      if (currentNode.validationType === "number") newData[currentNode.dataField] = parseInt(answer) || 0;
+      if (currentNode.validationType === "number") newData[currentNode.dataField] = parseInt(canonical) || 0;
       else if (currentNode.dataField === "pickup_required") {
-        newData.pickup_required = answer === "both" || answer === "pickup";
-        newData.drop_required = answer === "both" || answer === "drop";
-      } else newData[currentNode.dataField] = answer;
+        newData.pickup_required = canonical === "both" || canonical === "pickup";
+        newData.drop_required = canonical === "both" || canonical === "drop";
+      } else newData[currentNode.dataField] = canonical;
     }
     setCollectedData(newData);
 
