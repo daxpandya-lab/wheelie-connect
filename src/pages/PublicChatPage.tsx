@@ -672,17 +672,66 @@ export default function PublicChatPage() {
       </div>
 
       <div className="border-t bg-background p-3 flex gap-2 shrink-0">
-        <Input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSend()}
-          placeholder={isComplete ? "Conversation complete" : "Type your answer..."}
-          className="flex-1"
-          disabled={isComplete}
-        />
-        <Button size="icon" onClick={handleSend} disabled={!input.trim() || isComplete}>
-          <Send className="w-4 h-4" />
-        </Button>
+        {isDateNode ? (
+          <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "flex-1 justify-start text-left font-normal",
+                  !input && "text-muted-foreground"
+                )}
+                disabled={isComplete}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {input ? format(new Date(input), "PPP") : "Pick a date"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={input ? new Date(input) : undefined}
+                onSelect={(d) => {
+                  if (!d) return;
+                  const iso = format(d, "yyyy-MM-dd");
+                  const display = format(d, "PPP");
+                  setInput(iso);
+                  setDatePickerOpen(false);
+                  // Submit immediately so the flow advances
+                  processAnswer(iso, display);
+                  setInput("");
+                }}
+                disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                initialFocus
+                className={cn("p-3 pointer-events-auto")}
+              />
+            </PopoverContent>
+          </Popover>
+        ) : (
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !isSelectionNode && handleSend()}
+            placeholder={
+              isComplete
+                ? "Conversation complete"
+                : isSelectionNode
+                ? "Please choose an option above ☝️"
+                : "Type your answer..."
+            }
+            className="flex-1"
+            disabled={isComplete || isSelectionNode}
+          />
+        )}
+        {!isDateNode && (
+          <Button
+            size="icon"
+            onClick={handleSend}
+            disabled={!input.trim() || isComplete || isSelectionNode}
+          >
+            <Send className="w-4 h-4" />
+          </Button>
+        )}
       </div>
     </div>
   );
