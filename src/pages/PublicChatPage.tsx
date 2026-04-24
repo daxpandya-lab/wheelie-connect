@@ -276,6 +276,92 @@ export default function PublicChatPage() {
     if (node.multiSelect) setPendingMultiSelect(new Set());
   };
 
+  const validationErrorMessage = (kind: string, lang: string): string => {
+    const msgs: Record<string, Record<string, string>> = {
+      selection: {
+        en: "⚠️ Please pick one of the options shown above.",
+        hi: "⚠️ कृपया ऊपर दिखाए गए विकल्पों में से एक चुनें।",
+        ar: "⚠️ يرجى اختيار أحد الخيارات المعروضة أعلاه.",
+      },
+      date: {
+        en: "⚠️ Please choose a valid date using the date picker.",
+        hi: "⚠️ कृपया डेट पिकर से एक वैध तारीख चुनें।",
+        ar: "⚠️ يرجى اختيار تاريخ صالح باستخدام منتقي التاريخ.",
+      },
+      phone: {
+        en: "⚠️ Please enter a valid phone number (7–15 digits).",
+        hi: "⚠️ कृपया एक वैध फोन नंबर दर्ज करें (7–15 अंक)।",
+        ar: "⚠️ يرجى إدخال رقم هاتف صالح (7–15 رقمًا).",
+      },
+      email: {
+        en: "⚠️ Please enter a valid email address.",
+        hi: "⚠️ कृपया एक वैध ईमेल पता दर्ज करें।",
+        ar: "⚠️ يرجى إدخال عنوان بريد إلكتروني صالح.",
+      },
+      number: {
+        en: "⚠️ Please enter a valid number.",
+        hi: "⚠️ कृपया एक वैध संख्या दर्ज करें।",
+        ar: "⚠️ يرجى إدخال رقم صالح.",
+      },
+      text: {
+        en: "⚠️ Please type a valid answer.",
+        hi: "⚠️ कृपया एक वैध उत्तर लिखें।",
+        ar: "⚠️ يرجى كتابة إجابة صالحة.",
+      },
+    };
+    return msgs[kind]?.[lang] || msgs[kind]?.en || msgs.text.en;
+  };
+
+  /** Returns null if valid, otherwise an error kind string for re-prompt. */
+  const validateAnswer = (node: FlowNode, raw: string): string | null => {
+    const value = raw.trim();
+    // If options exist, every value must match one of the options' value/label
+    if (node.options && node.options.length > 0) {
+      const tokens = node.multiSelect ? value.split(",").map((t) => t.trim()).filter(Boolean) : [value];
+      if (tokens.length === 0) return "selection";
+      const valid = tokens.every((t) =>
+        node.options!.some((o) => o.value === t || o.label === t)
+      );
+      return valid ? null : "selection";
+    }
+    if (!value) return node.validationType || "text";
+    switch (node.validationType) {
+      case "date": {
+        const iso = normalizeDate(value);
+        return /^\d{4}-\d{2}-\d{2}$/.test(iso) && !isNaN(new Date(iso).getTime()) ? null : "date";
+      }
+      case "phone": {
+        const digits = value.replace(/[^\d]/g, "");
+        return digits.length >= 7 && digits.length <= 15 ? null : "phone";
+      }
+      case "email":
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? null : "email";
+      case "number":
+        return /^-?\d+(\.\d+)?$/.test(value) ? null : "number";
+      default:
+        return null;
+    }
+  };
+
+  const rejectAnswer = (node: FlowNode, kind: string) => {
+    const errText = validationErrorMessage(kind, language);
+    setMessages((prev) => [
+      ...prev,
+      { id: `bot-err-${Date.now()}`, sender: "bot", text: errText },
+      // Re-show the current question so options/date picker remain the latest active bot message
+      {
+        id: `bot-reprompt-${Date.now()}`,
+        sender: "bot",
+        text: getNodeMessage(node, collectedData, language),
+        options: node.options?.map((o) => ({ label: o.label, value: o.value })),
+        multiSelect: node.multiSelect,
+        nodeId: node.id,
+        data: collectedData,
+      },
+    ]);
+    if (node.multiSelect) setPendingMultiSelect(new Set());
+  };
+
   const normalizeDate = (raw: string): string => {
     if (!raw) return raw;
     if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
