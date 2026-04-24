@@ -105,6 +105,8 @@ export default function PublicChatPage() {
   const [isComplete, setIsComplete] = useState(false);
   const [pendingMultiSelect, setPendingMultiSelect] = useState<Set<string>>(new Set());
   const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [fuzzyEnabled, setFuzzyEnabled] = useState(true);
+  const [fuzzyThreshold, setFuzzyThreshold] = useState(0.75);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const availableLanguages = useMemo(
