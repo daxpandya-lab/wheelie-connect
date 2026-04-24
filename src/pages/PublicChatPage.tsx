@@ -104,6 +104,7 @@ export default function PublicChatPage() {
   const [collectedData, setCollectedData] = useState<ChatbotCollectedData>({});
   const [isComplete, setIsComplete] = useState(false);
   const [pendingMultiSelect, setPendingMultiSelect] = useState<Set<string>>(new Set());
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const availableLanguages = useMemo(
