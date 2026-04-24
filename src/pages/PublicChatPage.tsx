@@ -275,6 +275,62 @@ export default function PublicChatPage() {
     if (node.multiSelect) setPendingMultiSelect(new Set());
   };
 
+  const normalizeDate = (raw: string): string => {
+    if (!raw) return raw;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    const m = raw.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    const d = new Date(raw);
+    if (!isNaN(d.getTime())) return format(d, "yyyy-MM-dd");
+    return raw;
+  };
+
+  const createBookingFromFlow = async (endNode: FlowNode, data: ChatbotCollectedData) => {
+    if (!dealer) return;
+    const action = (endNode.metadata?.action as string) || "";
+
+    if (action === "create_service_booking") {
+      const isoDate = normalizeDate(String(data.preferred_date || ""));
+      if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
+        console.warn("Skipping service_booking insert: invalid date", data.preferred_date);
+        return;
+      }
+      const vehicleParts = [data.vehicle_type, data.vehicle_model, data.registration_number]
+        .filter(Boolean)
+        .join(" • ");
+      await supabase.from("service_bookings").insert({
+        tenant_id: dealer.id,
+        customer_name: String(data.customer_name || "Chatbot Visitor"),
+        phone_number: String(data.phone_number || ""),
+        vehicle_model: vehicleParts || String(data.vehicle_model || "Unknown"),
+        kms_driven: typeof data.kms_driven === "number" ? data.kms_driven : null,
+        service_type: String(data.service_type || ""),
+        booking_date: isoDate,
+        preferred_time: data.preferred_time ? String(data.preferred_time) : null,
+        pickup_required: !!data.pickup_required,
+        drop_required: !!data.drop_required,
+        issue_description: data.issue_description ? String(data.issue_description) : null,
+        booking_source: "chatbot",
+        status: "pending",
+        metadata: { ...data, source_session_id: sessionId },
+      } as never);
+    } else if (action === "create_test_drive_booking") {
+      const isoDate = normalizeDate(String(data.preferred_date || ""));
+      if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return;
+      await supabase.from("test_drive_bookings").insert({
+        tenant_id: dealer.id,
+        customer_name: String(data.customer_name || "Chatbot Visitor"),
+        phone_number: String(data.phone_number || ""),
+        vehicle_model: String(data.vehicle_model || "Unknown"),
+        preferred_date: isoDate,
+        preferred_time: data.preferred_time ? String(data.preferred_time) : null,
+        booking_source: "chatbot",
+        status: "pending",
+        metadata: { ...data, source_session_id: sessionId },
+      } as never);
+    }
+  };
+
   const advanceTo = useCallback(
     (nodeId: string, data: ChatbotCollectedData) => {
       if (!flow) return;
