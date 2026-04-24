@@ -10,7 +10,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Car, Send, Loader2, Bot, User as UserIcon, Languages } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Car, Send, Loader2, Bot, User as UserIcon, Languages, CalendarIcon } from "lucide-react";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 import type { FlowData, FlowNode, ChatbotCollectedData } from "@/types/chatbot-flow";
 
 interface DealerInfo {
@@ -100,6 +104,7 @@ export default function PublicChatPage() {
   const [collectedData, setCollectedData] = useState<ChatbotCollectedData>({});
   const [isComplete, setIsComplete] = useState(false);
   const [pendingMultiSelect, setPendingMultiSelect] = useState<Set<string>>(new Set());
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const availableLanguages = useMemo(
@@ -271,6 +276,62 @@ export default function PublicChatPage() {
     if (node.multiSelect) setPendingMultiSelect(new Set());
   };
 
+  const normalizeDate = (raw: string): string => {
+    if (!raw) return raw;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    const m = raw.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    const d = new Date(raw);
+    if (!isNaN(d.getTime())) return format(d, "yyyy-MM-dd");
+    return raw;
+  };
+
+  const createBookingFromFlow = async (endNode: FlowNode, data: ChatbotCollectedData) => {
+    if (!dealer) return;
+    const action = (endNode.metadata?.action as string) || "";
+
+    if (action === "create_service_booking") {
+      const isoDate = normalizeDate(String(data.preferred_date || ""));
+      if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
+        console.warn("Skipping service_booking insert: invalid date", data.preferred_date);
+        return;
+      }
+      const vehicleParts = [data.vehicle_type, data.vehicle_model, data.registration_number]
+        .filter(Boolean)
+        .join(" • ");
+      await supabase.from("service_bookings").insert({
+        tenant_id: dealer.id,
+        customer_name: String(data.customer_name || "Chatbot Visitor"),
+        phone_number: String(data.phone_number || ""),
+        vehicle_model: vehicleParts || String(data.vehicle_model || "Unknown"),
+        kms_driven: typeof data.kms_driven === "number" ? data.kms_driven : null,
+        service_type: String(data.service_type || ""),
+        booking_date: isoDate,
+        preferred_time: data.preferred_time ? String(data.preferred_time) : null,
+        pickup_required: !!data.pickup_required,
+        drop_required: !!data.drop_required,
+        issue_description: data.issue_description ? String(data.issue_description) : null,
+        booking_source: "chatbot",
+        status: "pending",
+        metadata: { ...data, source_session_id: sessionId },
+      } as never);
+    } else if (action === "create_test_drive_booking") {
+      const isoDate = normalizeDate(String(data.preferred_date || ""));
+      if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return;
+      await supabase.from("test_drive_bookings").insert({
+        tenant_id: dealer.id,
+        customer_name: String(data.customer_name || "Chatbot Visitor"),
+        phone_number: String(data.phone_number || ""),
+        vehicle_model: String(data.vehicle_model || "Unknown"),
+        preferred_date: isoDate,
+        preferred_time: data.preferred_time ? String(data.preferred_time) : null,
+        booking_source: "chatbot",
+        status: "pending",
+        metadata: { ...data, source_session_id: sessionId },
+      } as never);
+    }
+  };
+
   const advanceTo = useCallback(
     (nodeId: string, data: ChatbotCollectedData) => {
       if (!flow) return;
@@ -286,8 +347,13 @@ export default function PublicChatPage() {
       } else if (node.type === "greeting" && node.nextNodeId) {
         setTimeout(() => advanceTo(node.nextNodeId!, data), 700);
       } else if (node.type === "end") {
-        const finalData = { ...data, booking_id: `BK-${Date.now().toString(36).toUpperCase()}` };
+        const bookingId = `BK-${Date.now().toString(36).toUpperCase()}`;
+        const finalData = { ...data, booking_id: bookingId };
         setCollectedData(finalData);
+        // Persist booking to the appropriate table based on node metadata action
+        createBookingFromFlow(node, finalData).catch((e) =>
+          console.error("Failed to create booking record:", e)
+        );
         setMessages((prev) =>
           prev.map((m) =>
             m.nodeId === node.id && m.sender === "bot"
@@ -470,6 +536,18 @@ export default function PublicChatPage() {
   );
 
   const isRtl = RTL_LANGUAGES.has(language);
+  const currentNode = flow?.nodes.find((n) => n.id === currentNodeId) || null;
+  const isDateNode =
+    !!currentNode &&
+    !isComplete &&
+    (currentNode.type === "date_buttons" || currentNode.validationType === "date");
+  const isSelectionNode =
+    !!currentNode &&
+    !isComplete &&
+    !!currentNode.options &&
+    currentNode.options.length > 0 &&
+    currentNode.type !== "api_check" &&
+    currentNode.type !== "condition";
 
   return (
     <div
@@ -594,17 +672,66 @@ export default function PublicChatPage() {
       </div>
 
       <div className="border-t bg-background p-3 flex gap-2 shrink-0">
-        <Input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSend()}
-          placeholder={isComplete ? "Conversation complete" : "Type your answer..."}
-          className="flex-1"
-          disabled={isComplete}
-        />
-        <Button size="icon" onClick={handleSend} disabled={!input.trim() || isComplete}>
-          <Send className="w-4 h-4" />
-        </Button>
+        {isDateNode ? (
+          <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "flex-1 justify-start text-left font-normal",
+                  !input && "text-muted-foreground"
+                )}
+                disabled={isComplete}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {input ? format(new Date(input), "PPP") : "Pick a date"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={input ? new Date(input) : undefined}
+                onSelect={(d) => {
+                  if (!d) return;
+                  const iso = format(d, "yyyy-MM-dd");
+                  const display = format(d, "PPP");
+                  setInput(iso);
+                  setDatePickerOpen(false);
+                  // Submit immediately so the flow advances
+                  processAnswer(iso, display);
+                  setInput("");
+                }}
+                disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                initialFocus
+                className={cn("p-3 pointer-events-auto")}
+              />
+            </PopoverContent>
+          </Popover>
+        ) : (
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !isSelectionNode && handleSend()}
+            placeholder={
+              isComplete
+                ? "Conversation complete"
+                : isSelectionNode
+                ? "Please choose an option above ☝️"
+                : "Type your answer..."
+            }
+            className="flex-1"
+            disabled={isComplete || isSelectionNode}
+          />
+        )}
+        {!isDateNode && (
+          <Button
+            size="icon"
+            onClick={handleSend}
+            disabled={!input.trim() || isComplete || isSelectionNode}
+          >
+            <Send className="w-4 h-4" />
+          </Button>
+        )}
       </div>
     </div>
   );
