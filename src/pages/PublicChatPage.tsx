@@ -357,7 +357,7 @@ export default function PublicChatPage() {
       for (const candidate of [o.value, o.label]) {
         const c = normalizeForMatch(candidate);
         if (!c) continue;
-        // Exact / contains shortcut
+        // Exact / contains shortcut (always allowed, even when fuzzy is disabled)
         if (c === q || c.includes(q) || q.includes(c)) {
           return o.value;
         }
@@ -367,9 +367,18 @@ export default function PublicChatPage() {
         if (!best || similarity > best.score) best = { value: o.value, score: similarity };
       }
     }
-    // Threshold: 0.75 similarity, or distance ≤ 2 for short strings
-    if (best && (best.score >= 0.75 || (q.length <= 6 && (1 - best.score) * Math.max(q.length, 1) <= 2))) {
-      return best.value;
+    // If fuzzy matching is disabled, only exact/contains matches count (handled above).
+    if (!fuzzyEnabled) return null;
+
+    // Per-dealer configurable threshold (clamped 0.5–1.0).
+    // Short-string forgiveness: when threshold ≤ 0.85, allow distance ≤ 2 for inputs of ≤6 chars.
+    const t = Math.min(1, Math.max(0.5, fuzzyThreshold));
+    if (best) {
+      if (best.score >= t) return best.value;
+      if (t <= 0.85 && q.length <= 6) {
+        const dist = (1 - best.score) * Math.max(q.length, 1);
+        if (dist <= 2) return best.value;
+      }
     }
     return null;
   };
