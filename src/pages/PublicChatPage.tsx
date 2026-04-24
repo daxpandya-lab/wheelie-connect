@@ -290,8 +290,13 @@ export default function PublicChatPage() {
       } else if (node.type === "greeting" && node.nextNodeId) {
         setTimeout(() => advanceTo(node.nextNodeId!, data), 700);
       } else if (node.type === "end") {
-        const finalData = { ...data, booking_id: `BK-${Date.now().toString(36).toUpperCase()}` };
+        const bookingId = `BK-${Date.now().toString(36).toUpperCase()}`;
+        const finalData = { ...data, booking_id: bookingId };
         setCollectedData(finalData);
+        // Persist booking to the appropriate table based on node metadata action
+        createBookingFromFlow(node, finalData).catch((e) =>
+          console.error("Failed to create booking record:", e)
+        );
         setMessages((prev) =>
           prev.map((m) =>
             m.nodeId === node.id && m.sender === "bot"
