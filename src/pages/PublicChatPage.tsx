@@ -119,13 +119,22 @@ export default function PublicChatPage() {
     (async () => {
       const { data: tenantData, error: tenantErr } = await supabase
         .from("tenants")
-        .select("id, name, status")
+        .select("id, name, status, settings")
         .or(`id.eq.${tenantParam},slug.eq.${tenantParam}`)
         .maybeSingle();
 
       if (tenantErr || !tenantData) { setError("Dealer not found"); setLoading(false); return; }
       if (tenantData.status !== "active") { setError("This dealer is currently unavailable"); setLoading(false); return; }
       setDealer({ id: tenantData.id, name: tenantData.name });
+
+      // Load per-dealer chatbot fuzzy-matching settings
+      const tSettings = (tenantData.settings as Record<string, unknown>) || {};
+      if (typeof tSettings.fuzzy_match_enabled === "boolean") {
+        setFuzzyEnabled(tSettings.fuzzy_match_enabled);
+      }
+      if (typeof tSettings.fuzzy_match_threshold === "number") {
+        setFuzzyThreshold(Math.min(1, Math.max(0.5, tSettings.fuzzy_match_threshold)));
+      }
 
       let resolvedFlow: { id: string; flow_data: FlowData } | null = null;
       if (flowIdParam) {
