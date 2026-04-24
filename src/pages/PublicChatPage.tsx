@@ -607,7 +607,7 @@ export default function PublicChatPage() {
 
     // Per-node validation (with fuzzy matching for option typos)
     const result = validateAnswer(currentNode, answer);
-    if (!result.ok) {
+    if (result.ok === false) {
       setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? answer }]);
       rejectAnswer(currentNode, result.kind);
       return;
