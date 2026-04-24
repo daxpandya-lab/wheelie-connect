@@ -312,34 +312,112 @@ export default function PublicChatPage() {
     return msgs[kind]?.[lang] || msgs[kind]?.en || msgs.text.en;
   };
 
-  /** Returns null if valid, otherwise an error kind string for re-prompt. */
-  const validateAnswer = (node: FlowNode, raw: string): string | null => {
-    const value = raw.trim();
-    // If options exist, every value must match one of the options' value/label
-    if (node.options && node.options.length > 0) {
-      const tokens = node.multiSelect ? value.split(",").map((t) => t.trim()).filter(Boolean) : [value];
-      if (tokens.length === 0) return "selection";
-      const valid = tokens.every((t) =>
-        node.options!.some((o) => o.value === t || o.label === t)
-      );
-      return valid ? null : "selection";
+  // ---------- Fuzzy matching for option typos ----------
+  const normalizeForMatch = (s: string) =>
+    s.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+
+  const levenshtein = (a: string, b: string): number => {
+    if (a === b) return 0;
+    if (!a.length) return b.length;
+    if (!b.length) return a.length;
+    const m = a.length, n = b.length;
+    let prev = new Array(n + 1);
+    for (let j = 0; j <= n; j++) prev[j] = j;
+    for (let i = 1; i <= m; i++) {
+      const curr = [i];
+      for (let j = 1; j <= n; j++) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+      }
+      prev = curr;
     }
-    if (!value) return node.validationType || "text";
+    return prev[n];
+  };
+
+  /** Returns the canonical option value if a fuzzy match is found, else null. */
+  const fuzzyMatchOption = (
+    raw: string,
+    options: { label: string; value: string }[]
+  ): string | null => {
+    const q = normalizeForMatch(raw);
+    if (!q) return null;
+    let best: { value: string; score: number } | null = null;
+    for (const o of options) {
+      for (const candidate of [o.value, o.label]) {
+        const c = normalizeForMatch(candidate);
+        if (!c) continue;
+        // Exact / contains shortcut
+        if (c === q || c.includes(q) || q.includes(c)) {
+          return o.value;
+        }
+        const dist = levenshtein(q, c);
+        const maxLen = Math.max(q.length, c.length);
+        const similarity = 1 - dist / maxLen;
+        if (!best || similarity > best.score) best = { value: o.value, score: similarity };
+      }
+    }
+    // Threshold: 0.75 similarity, or distance ≤ 2 for short strings
+    if (best && (best.score >= 0.75 || (q.length <= 6 && (1 - best.score) * Math.max(q.length, 1) <= 2))) {
+      return best.value;
+    }
+    return null;
+  };
+
+  /**
+   * Validates the answer. Returns:
+   *   - { ok: true, value } with the (possibly canonicalized) value
+   *   - { ok: false, kind } with the error kind for re-prompt
+   */
+  const validateAnswer = (
+    node: FlowNode,
+    raw: string
+  ): { ok: true; value: string } | { ok: false; kind: string } => {
+    const value = raw.trim();
+    if (node.options && node.options.length > 0) {
+      const tokens = node.multiSelect
+        ? value.split(",").map((t) => t.trim()).filter(Boolean)
+        : [value];
+      if (tokens.length === 0) return { ok: false, kind: "selection" };
+      const canonical: string[] = [];
+      for (const t of tokens) {
+        const exact = node.options.find((o) => o.value === t || o.label === t);
+        if (exact) {
+          canonical.push(exact.value);
+          continue;
+        }
+        const fuzzy = fuzzyMatchOption(t, node.options);
+        if (fuzzy) {
+          canonical.push(fuzzy);
+          continue;
+        }
+        return { ok: false, kind: "selection" };
+      }
+      return { ok: true, value: canonical.join(",") };
+    }
+    if (!value) return { ok: false, kind: node.validationType || "text" };
     switch (node.validationType) {
       case "date": {
         const iso = normalizeDate(value);
-        return /^\d{4}-\d{2}-\d{2}$/.test(iso) && !isNaN(new Date(iso).getTime()) ? null : "date";
+        return /^\d{4}-\d{2}-\d{2}$/.test(iso) && !isNaN(new Date(iso).getTime())
+          ? { ok: true, value: iso }
+          : { ok: false, kind: "date" };
       }
       case "phone": {
         const digits = value.replace(/[^\d]/g, "");
-        return digits.length >= 7 && digits.length <= 15 ? null : "phone";
+        return digits.length >= 7 && digits.length <= 15
+          ? { ok: true, value }
+          : { ok: false, kind: "phone" };
       }
       case "email":
-        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? null : "email";
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+          ? { ok: true, value }
+          : { ok: false, kind: "email" };
       case "number":
-        return /^-?\d+(\.\d+)?$/.test(value) ? null : "number";
+        return /^-?\d+(\.\d+)?$/.test(value)
+          ? { ok: true, value }
+          : { ok: false, kind: "number" };
       default:
-        return null;
+        return { ok: true, value };
     }
   };
 
