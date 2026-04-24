@@ -630,7 +630,7 @@ export default function PublicChatPage() {
     let nextNodeId: string | undefined;
     if (currentNode.options) {
       // For multi-select, route via the first selected value's nextNodeId (all options usually share next)
-      const firstVal = currentNode.multiSelect ? answer.split(",")[0]?.trim() : answer;
+      const firstVal = currentNode.multiSelect ? canonical.split(",")[0]?.trim() : canonical;
       const selected = currentNode.options.find((o) => o.value === firstVal || o.label === firstVal);
       nextNodeId = selected?.nextNodeId || currentNode.nextNodeId;
     } else nextNodeId = currentNode.nextNodeId;
