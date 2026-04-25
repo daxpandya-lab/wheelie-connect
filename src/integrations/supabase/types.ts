@@ -954,6 +954,56 @@ export type Database = {
           },
         ]
       }
+      session_debug: {
+        Row: {
+          created_at: string
+          details: Json
+          event: string
+          flow_id: string | null
+          id: string
+          node_id: string | null
+          reason: string | null
+          session_id: string | null
+          tenant_id: string
+          user_agent: string | null
+          visitor_token: string | null
+        }
+        Insert: {
+          created_at?: string
+          details?: Json
+          event: string
+          flow_id?: string | null
+          id?: string
+          node_id?: string | null
+          reason?: string | null
+          session_id?: string | null
+          tenant_id: string
+          user_agent?: string | null
+          visitor_token?: string | null
+        }
+        Update: {
+          created_at?: string
+          details?: Json
+          event?: string
+          flow_id?: string | null
+          id?: string
+          node_id?: string | null
+          reason?: string | null
+          session_id?: string | null
+          tenant_id?: string
+          user_agent?: string | null
+          visitor_token?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_debug_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenants: {
         Row: {
           address: string | null
