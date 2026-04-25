@@ -45,6 +45,34 @@ const LANGUAGE_LABELS: Record<string, string> = {
 
 const RTL_LANGUAGES = new Set(["ar", "he", "fa", "ur"]);
 
+async function logSessionDebug(params: {
+  tenantId: string;
+  flowId?: string | null;
+  sessionId?: string | null;
+  visitorToken?: string | null;
+  event: string;
+  reason?: string;
+  nodeId?: string | null;
+  details?: Record<string, unknown>;
+}) {
+  try {
+    await supabase.from("session_debug" as never).insert({
+      tenant_id: params.tenantId,
+      flow_id: params.flowId ?? null,
+      session_id: params.sessionId ?? null,
+      visitor_token: params.visitorToken ?? null,
+      event: params.event,
+      reason: params.reason ?? null,
+      node_id: params.nodeId ?? null,
+      details: params.details ?? {},
+      user_agent:
+        typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 500) : null,
+    } as never);
+  } catch {
+    // Best-effort logging; never break chat UX on logging failure.
+  }
+}
+
 function getVisitorToken(tenantId: string) {
   const key = VISITOR_KEY_PREFIX + tenantId;
   let token = localStorage.getItem(key);
