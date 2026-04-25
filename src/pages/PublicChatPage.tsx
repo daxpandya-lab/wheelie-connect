@@ -224,6 +224,15 @@ export default function PublicChatPage() {
         if (existingErr) {
           // On any DB error, fail safe: drop pointer and start fresh from greeting.
           localStorage.removeItem(sessionStorageKey);
+          logSessionDebug({
+            tenantId: tenantData.id,
+            flowId: resolvedFlow.id,
+            sessionId: cached,
+            visitorToken,
+            event: "reset_db_error",
+            reason: existingErr.message,
+            details: { code: existingErr.code },
+          });
         }
         if (existing) {
           const existingData = (existing.collected_data as ChatbotCollectedData) || {};
@@ -236,6 +245,15 @@ export default function PublicChatPage() {
             // Previous session already finished — auto-start a fresh conversation
             // instead of stranding the user on the "complete, refresh to start over" screen.
             localStorage.removeItem(sessionStorageKey);
+            logSessionDebug({
+              tenantId: tenantData.id,
+              flowId: resolvedFlow.id,
+              sessionId: existing.id,
+              visitorToken,
+              event: "reset_completed",
+              reason: "Previous session was already marked complete",
+              nodeId: existing.current_node_id,
+            });
           } else {
             const node = existing.current_node_id
               ? resolvedFlow.flow_data.nodes.find((n) => n.id === existing.current_node_id)
@@ -254,14 +272,41 @@ export default function PublicChatPage() {
               setCurrentNodeId(node.id);
               pushBotMessage(node, existingData, resolvedLang);
               resumed = true;
+              logSessionDebug({
+                tenantId: tenantData.id,
+                flowId: resolvedFlow.id,
+                sessionId: existing.id,
+                visitorToken,
+                event: "resumed",
+                nodeId: node.id,
+                details: { nodeType: node.type, language: resolvedLang },
+              });
             } else {
               // Stale / stuck session — clear pointer; fall through to create new session
               localStorage.removeItem(sessionStorageKey);
+              logSessionDebug({
+                tenantId: tenantData.id,
+                flowId: resolvedFlow.id,
+                sessionId: existing.id,
+                visitorToken,
+                event: "reset_background_node",
+                reason: "Saved pointer was on a non-interactive node",
+                nodeId: existing.current_node_id,
+                details: { nodeType: node?.type ?? "unknown" },
+              });
             }
           }
-        } else {
+        } else if (!existingErr) {
           // Cached session id no longer exists in DB — clear it
           localStorage.removeItem(sessionStorageKey);
+          logSessionDebug({
+            tenantId: tenantData.id,
+            flowId: resolvedFlow.id,
+            sessionId: cached,
+            visitorToken,
+            event: "reset_missing",
+            reason: "Cached session id not found (or already complete) in database",
+          });
         }
       }
 
@@ -284,6 +329,15 @@ export default function PublicChatPage() {
         if (newSession) {
           setSessionId(newSession.id);
           localStorage.setItem(sessionStorageKey, newSession.id);
+          logSessionDebug({
+            tenantId: tenantData.id,
+            flowId: resolvedFlow.id,
+            sessionId: newSession.id,
+            visitorToken,
+            event: "created",
+            nodeId: resolvedFlow.flow_data.startNodeId,
+            details: { language: resolvedLang, hadCachedPointer: !!cached },
+          });
         }
         startFlow(resolvedFlow.flow_data, resolvedLang);
       }
