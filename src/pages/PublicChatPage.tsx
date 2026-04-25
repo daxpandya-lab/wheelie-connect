@@ -183,11 +183,20 @@ export default function PublicChatPage() {
       if (!flowLangs.includes(resolvedLang)) resolvedLang = flowLangs[0];
 
       if (cached) {
-        const { data: existing } = await supabase
+        // Backend-aligned reset: only resume sessions that are NOT complete.
+        // Filtering by is_complete=false at the query level guarantees that
+        // any completed/archived session is treated as stale even if the
+        // frontend cleanup was skipped (e.g. different device, cleared cache).
+        const { data: existing, error: existingErr } = await supabase
           .from("chat_sessions")
           .select("id, current_node_id, collected_data, is_complete, language")
           .eq("id", cached)
+          .eq("is_complete", false)
           .maybeSingle();
+        if (existingErr) {
+          // On any DB error, fail safe: drop pointer and start fresh from greeting.
+          localStorage.removeItem(sessionStorageKey);
+        }
         if (existing) {
           const existingData = (existing.collected_data as ChatbotCollectedData) || {};
           const storedLang = (existing as { language?: string }).language;
