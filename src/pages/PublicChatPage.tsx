@@ -196,13 +196,9 @@ export default function PublicChatPage() {
           }
 
           if (existing.is_complete) {
-            setSessionId(existing.id);
-            setCollectedData(existingData);
-            setIsComplete(true);
-            setLanguage(resolvedLang);
-            localStorage.setItem(langStorageKey, resolvedLang);
-            setMessages([{ id: "done", sender: "bot", text: "✅ Your previous session is complete. Refresh to start over." }]);
-            resumed = true;
+            // Previous session already finished — auto-start a fresh conversation
+            // instead of stranding the user on the "complete, refresh to start over" screen.
+            localStorage.removeItem(sessionStorageKey);
           } else {
             const node = existing.current_node_id
               ? resolvedFlow.flow_data.nodes.find((n) => n.id === existing.current_node_id)
