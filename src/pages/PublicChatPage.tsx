@@ -888,7 +888,7 @@ export default function PublicChatPage() {
                 onSelect={(d) => {
                   if (!d) return;
                   const iso = format(d, "yyyy-MM-dd");
-                  const display = format(d, "PPP");
+                  const display = format(d, "dd-MM-yyyy");
                   setInput(iso);
                   setDatePickerOpen(false);
                   // Submit immediately so the flow advances
