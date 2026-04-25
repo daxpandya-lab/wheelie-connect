@@ -878,7 +878,7 @@ export default function PublicChatPage() {
                 disabled={isComplete}
               >
                 <CalendarIcon className="mr-2 h-4 w-4" />
-                {input ? format(new Date(input), "PPP") : "Pick a date"}
+                {input ? format(new Date(input), "dd-MM-yyyy") : "Pick a date (DD-MM-YYYY)"}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
@@ -888,7 +888,7 @@ export default function PublicChatPage() {
                 onSelect={(d) => {
                   if (!d) return;
                   const iso = format(d, "yyyy-MM-dd");
-                  const display = format(d, "PPP");
+                  const display = format(d, "dd-MM-yyyy");
                   setInput(iso);
                   setDatePickerOpen(false);
                   // Submit immediately so the flow advances
