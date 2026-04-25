@@ -525,9 +525,22 @@ export default function PublicChatPage() {
       pushBotMessage(node, data, language);
       persistSession({ current_node_id: node.id, collected_data: data });
 
-      // Auto-execute non-interactive nodes (api_check / condition)
+      // Auto-execute non-interactive (background) nodes — never wait for user input
       if (node.type === "api_check") {
-        setTimeout(() => runApiCheck(node, data), 600);
+        // Trigger SQL availability check and auto-transition within ~700ms
+        setTimeout(() => runApiCheck(node, data), 500);
+      } else if (node.type === "condition") {
+        // Route via first matching option (or default nextNodeId) without user input
+        setTimeout(() => {
+          let nextId: string | undefined = node.nextNodeId;
+          if (node.options?.length) {
+            const conditionField = (node.metadata?.field as string) || "";
+            const currentVal = conditionField ? String(data[conditionField] ?? "") : "";
+            const matched = node.options.find((o) => o.value === currentVal) || node.options[0];
+            nextId = matched.nextNodeId || nextId;
+          }
+          if (nextId) advanceTo(nextId, data);
+        }, 400);
       } else if (node.type === "greeting" && node.nextNodeId) {
         setTimeout(() => advanceTo(node.nextNodeId!, data), 700);
       } else if (node.type === "end") {
