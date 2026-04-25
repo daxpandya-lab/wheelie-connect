@@ -189,30 +189,46 @@ export default function PublicChatPage() {
           .eq("id", cached)
           .maybeSingle();
         if (existing) {
-          setSessionId(existing.id);
           const existingData = (existing.collected_data as ChatbotCollectedData) || {};
-          setCollectedData(existingData);
-          setIsComplete(existing.is_complete);
-          // Prefer stored language if valid
           const storedLang = (existing as { language?: string }).language;
           if (storedLang && flowLangs.includes(storedLang)) {
             resolvedLang = storedLang;
           }
-          setLanguage(resolvedLang);
-          localStorage.setItem(langStorageKey, resolvedLang);
 
-          if (existing.current_node_id) {
-            const node = resolvedFlow.flow_data.nodes.find((n) => n.id === existing.current_node_id);
-            if (node) {
+          if (existing.is_complete) {
+            setSessionId(existing.id);
+            setCollectedData(existingData);
+            setIsComplete(true);
+            setLanguage(resolvedLang);
+            localStorage.setItem(langStorageKey, resolvedLang);
+            setMessages([{ id: "done", sender: "bot", text: "✅ Your previous session is complete. Refresh to start over." }]);
+            resumed = true;
+          } else {
+            const node = existing.current_node_id
+              ? resolvedFlow.flow_data.nodes.find((n) => n.id === existing.current_node_id)
+              : null;
+            // Only resume on interactive question nodes; if the saved pointer
+            // is on a background api_check / condition node, restart from the
+            // greeting so users are never stuck on non-interactive logic nodes.
+            const isInteractive =
+              !!node && node.type !== "api_check" && node.type !== "condition";
+
+            if (isInteractive && node) {
+              setSessionId(existing.id);
+              setCollectedData(existingData);
+              setLanguage(resolvedLang);
+              localStorage.setItem(langStorageKey, resolvedLang);
               setCurrentNodeId(node.id);
               pushBotMessage(node, existingData, resolvedLang);
               resumed = true;
+            } else {
+              // Stale / stuck session — clear pointer; fall through to create new session
+              localStorage.removeItem(sessionStorageKey);
             }
           }
-          if (existing.is_complete) {
-            setMessages([{ id: "done", sender: "bot", text: "✅ Your previous session is complete. Refresh to start over." }]);
-            resumed = true;
-          }
+        } else {
+          // Cached session id no longer exists in DB — clear it
+          localStorage.removeItem(sessionStorageKey);
         }
       }
 
@@ -525,9 +541,22 @@ export default function PublicChatPage() {
       pushBotMessage(node, data, language);
       persistSession({ current_node_id: node.id, collected_data: data });
 
-      // Auto-execute non-interactive nodes (api_check / condition)
+      // Auto-execute non-interactive (background) nodes — never wait for user input
       if (node.type === "api_check") {
-        setTimeout(() => runApiCheck(node, data), 600);
+        // Trigger SQL availability check and auto-transition within ~700ms
+        setTimeout(() => runApiCheck(node, data), 500);
+      } else if (node.type === "condition") {
+        // Route via first matching option (or default nextNodeId) without user input
+        setTimeout(() => {
+          let nextId: string | undefined = node.nextNodeId;
+          if (node.options?.length) {
+            const conditionField = (node.metadata?.field as string) || "";
+            const currentVal = conditionField ? String(data[conditionField] ?? "") : "";
+            const matched = node.options.find((o) => o.value === currentVal) || node.options[0];
+            nextId = matched.nextNodeId || nextId;
+          }
+          if (nextId) advanceTo(nextId, data);
+        }, 400);
       } else if (node.type === "greeting" && node.nextNodeId) {
         setTimeout(() => advanceTo(node.nextNodeId!, data), 700);
       } else if (node.type === "end") {
