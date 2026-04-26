@@ -981,6 +981,19 @@ export default function PublicChatPage() {
           </div>
           );
         })}
+        {isCheckingAvailability && (
+          <div className="flex justify-start">
+            <div className="flex items-start gap-2 max-w-[85%]">
+              <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                <Bot className="w-4 h-4 text-primary" />
+              </div>
+              <div className="px-3 py-2 rounded-2xl rounded-bl-md text-sm bg-muted text-foreground flex items-center gap-2">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Checking availability…</span>
+              </div>
+            </div>
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
 
