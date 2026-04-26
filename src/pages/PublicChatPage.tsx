@@ -681,19 +681,19 @@ export default function PublicChatPage() {
 
     if (checkType === "slot_availability") {
       const date = String(data.preferred_date || "");
-      // Try to parse various formats; rely on Postgres if ISO already
       let isoDate = date;
-      const m = date.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/); // DD-MM-YYYY or DD/MM/YYYY
+      const m = date.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/);
       if (m) isoDate = `${m[3]}-${m[2]}-${m[1]}`;
 
+      setIsCheckingAvailability(true);
       const { data: result, error: rpcErr } = await supabase.rpc("check_booking_availability", {
         _tenant_id: dealer.id,
         _date: isoDate,
       });
+      setIsCheckingAvailability(false);
 
       const available = !rpcErr && (result as { available?: boolean })?.available !== false;
 
-      // Find condition successor based on outcome
       const condNode = node.nextNodeId ? flow.nodes.find((n) => n.id === node.nextNodeId) : null;
       let nextId: string | undefined;
       if (condNode && condNode.options?.length) {
@@ -705,7 +705,6 @@ export default function PublicChatPage() {
       }
 
       if (!available) {
-        // Insert "fully booked" message before looping back
         const friendly =
           language === "hi"
             ? `क्षमा करें, हम ${date} के लिए पूरी तरह बुक हैं। कृपया कोई और तारीख चुनें।`
