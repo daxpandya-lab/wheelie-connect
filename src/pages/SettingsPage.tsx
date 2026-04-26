@@ -194,6 +194,15 @@ export default function SettingsPage() {
     );
   }
 
+  if (activeSection === "reminders") {
+    return (
+      <>
+        <TopBar title="Booking Reminders" />
+        <div className="flex-1 overflow-y-auto p-6"><div className="max-w-3xl">{renderBack()}<ReminderSettings /></div></div>
+      </>
+    );
+  }
+
   return (
     <>
       <TopBar title="Settings" />
