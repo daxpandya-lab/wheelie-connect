@@ -785,10 +785,10 @@ export default function PublicChatPage() {
     const node = flow.nodes.find((n) => n.id === currentNodeId);
     if (!node?.options) return;
     const selectedOpts = node.options.filter((o) => pendingMultiSelect.has(o.value));
-    const valueStr = selectedOpts.map((o) => o.value).join(",");
+    // Send labels joined by ", " so it stores as e.g. "Oil Change, Brake Service".
     const labelStr = selectedOpts.map((o) => o.label).join(", ");
     setPendingMultiSelect(new Set());
-    processAnswer(valueStr, labelStr);
+    processAnswer(labelStr, labelStr);
   };
 
   const toggleMultiSelectOption = (value: string) => {
