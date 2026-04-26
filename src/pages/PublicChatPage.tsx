@@ -13,6 +13,7 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Car, Send, Loader2, Bot, User as UserIcon, Languages, CalendarIcon } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { FlowData, FlowNode, ChatbotCollectedData } from "@/types/chatbot-flow";
@@ -135,6 +136,7 @@ export default function PublicChatPage() {
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [fuzzyEnabled, setFuzzyEnabled] = useState(true);
   const [fuzzyThreshold, setFuzzyThreshold] = useState(0.75);
+  const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const availableLanguages = useMemo(
@@ -505,17 +507,20 @@ export default function PublicChatPage() {
       for (const t of tokens) {
         const exact = node.options.find((o) => o.value === t || o.label === t);
         if (exact) {
-          canonical.push(exact.value);
+          // For multi-select, store the human-readable label so downstream
+          // consumers (service_bookings.service_type) get e.g. "Oil Change, Brake Service".
+          canonical.push(node.multiSelect ? exact.label : exact.value);
           continue;
         }
         const fuzzy = fuzzyMatchOption(t, node.options);
         if (fuzzy) {
-          canonical.push(fuzzy);
+          const opt = node.options.find((o) => o.value === fuzzy);
+          canonical.push(node.multiSelect && opt ? opt.label : fuzzy);
           continue;
         }
         return { ok: false, kind: "selection" };
       }
-      return { ok: true, value: canonical.join(",") };
+      return { ok: true, value: node.multiSelect ? canonical.join(", ") : canonical.join(",") };
     }
     if (!value) return { ok: false, kind: node.validationType || "text" };
     switch (node.validationType) {
@@ -676,19 +681,19 @@ export default function PublicChatPage() {
 
     if (checkType === "slot_availability") {
       const date = String(data.preferred_date || "");
-      // Try to parse various formats; rely on Postgres if ISO already
       let isoDate = date;
-      const m = date.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/); // DD-MM-YYYY or DD/MM/YYYY
+      const m = date.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/);
       if (m) isoDate = `${m[3]}-${m[2]}-${m[1]}`;
 
+      setIsCheckingAvailability(true);
       const { data: result, error: rpcErr } = await supabase.rpc("check_booking_availability", {
         _tenant_id: dealer.id,
         _date: isoDate,
       });
+      setIsCheckingAvailability(false);
 
       const available = !rpcErr && (result as { available?: boolean })?.available !== false;
 
-      // Find condition successor based on outcome
       const condNode = node.nextNodeId ? flow.nodes.find((n) => n.id === node.nextNodeId) : null;
       let nextId: string | undefined;
       if (condNode && condNode.options?.length) {
@@ -700,7 +705,6 @@ export default function PublicChatPage() {
       }
 
       if (!available) {
-        // Insert "fully booked" message before looping back
         const friendly =
           language === "hi"
             ? `क्षमा करें, हम ${date} के लिए पूरी तरह बुक हैं। कृपया कोई और तारीख चुनें।`
@@ -780,10 +784,10 @@ export default function PublicChatPage() {
     const node = flow.nodes.find((n) => n.id === currentNodeId);
     if (!node?.options) return;
     const selectedOpts = node.options.filter((o) => pendingMultiSelect.has(o.value));
-    const valueStr = selectedOpts.map((o) => o.value).join(",");
+    // Send labels joined by ", " so it stores as e.g. "Oil Change, Brake Service".
     const labelStr = selectedOpts.map((o) => o.label).join(", ");
     setPendingMultiSelect(new Set());
-    processAnswer(valueStr, labelStr);
+    processAnswer(labelStr, labelStr);
   };
 
   const toggleMultiSelectOption = (value: string) => {
@@ -920,38 +924,37 @@ export default function PublicChatPage() {
                   {msg.text}
                 </div>
                 {msg.options && msg.sender === "bot" && msg.multiSelect && isActiveOptions && (
-                  <div className="mt-2 space-y-1.5">
+                  <div className="mt-2 space-y-2">
                     <div className="flex flex-col gap-1">
                       {msg.options.map((opt) => {
                         const checked = pendingMultiSelect.has(opt.value);
                         return (
                           <label
                             key={opt.value}
-                            className={`flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg border cursor-pointer transition-colors ${
+                            className={`flex items-center gap-2 px-3 py-2 text-xs rounded-lg border cursor-pointer transition-colors ${
                               checked
                                 ? "border-primary bg-primary/10 text-primary"
                                 : "border-border hover:bg-muted"
                             }`}
                           >
-                            <input
-                              type="checkbox"
+                            <Checkbox
                               checked={checked}
-                              onChange={() => toggleMultiSelectOption(opt.value)}
-                              className="accent-primary"
+                              onCheckedChange={() => toggleMultiSelectOption(opt.value)}
                             />
                             <span>{opt.label}</span>
                           </label>
                         );
                       })}
                     </div>
-                    <Button
-                      size="sm"
-                      onClick={submitMultiSelect}
-                      disabled={pendingMultiSelect.size === 0}
-                      className="h-7 text-xs"
-                    >
-                      Done ({pendingMultiSelect.size})
-                    </Button>
+                    {pendingMultiSelect.size > 0 && (
+                      <Button
+                        size="sm"
+                        onClick={submitMultiSelect}
+                        className="h-8 text-xs w-full"
+                      >
+                        Confirm Selection ({pendingMultiSelect.size})
+                      </Button>
+                    )}
                   </div>
                 )}
                 {msg.options && msg.sender === "bot" && !msg.multiSelect && (
@@ -978,6 +981,19 @@ export default function PublicChatPage() {
           </div>
           );
         })}
+        {isCheckingAvailability && (
+          <div className="flex justify-start">
+            <div className="flex items-start gap-2 max-w-[85%]">
+              <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                <Bot className="w-4 h-4 text-primary" />
+              </div>
+              <div className="px-3 py-2 rounded-2xl rounded-bl-md text-sm bg-muted text-foreground flex items-center gap-2">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Checking availability…</span>
+              </div>
+            </div>
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
 
