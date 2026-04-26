@@ -1,1 +1,4 @@
 project_id = "vnxjqhlyddouyicwqsjc"
+
+[functions.dispatch-booking-reminders]
+verify_jwt = false
