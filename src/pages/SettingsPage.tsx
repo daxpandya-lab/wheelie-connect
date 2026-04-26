@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import TopBar from "@/components/TopBar";
 import WhatsAppConfig from "@/components/whatsapp/WhatsAppConfig";
-import { Building2, Globe, Palette, Bell, Shield, CreditCard, ChevronLeft, Car, Bot } from "lucide-react";
+import ReminderSettings from "@/components/settings/ReminderSettings";
+import { Building2, Globe, Palette, Bell, Shield, CreditCard, ChevronLeft, Car, Bot, BellRing } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +14,7 @@ import { toast } from "sonner";
 
 const sections = [
   { id: "whatsapp", icon: Globe, title: "WhatsApp Configuration", desc: "Connect your WhatsApp Business API" },
+  { id: "reminders", icon: BellRing, title: "Booking Reminders", desc: "Automated WhatsApp follow-ups for service & test drives" },
   { id: "capacity", icon: Car, title: "Service Capacity", desc: "Set daily vehicle booking limits" },
   { id: "chatbot", icon: Bot, title: "Chatbot Behavior", desc: "Fuzzy matching strictness for option answers" },
   { id: "dealership", icon: Building2, title: "Dealership Info", desc: "Business name, address, contact details" },
