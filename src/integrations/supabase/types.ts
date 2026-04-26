@@ -127,6 +127,141 @@ export type Database = {
           },
         ]
       }
+      booking_reminder_rules: {
+        Row: {
+          anchor: string
+          booking_type: string
+          created_at: string
+          enabled: boolean
+          id: string
+          message_body: string | null
+          name: string
+          offset_days: number
+          send_time_of_day: string
+          stop_on_statuses: string[]
+          template_name: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          anchor?: string
+          booking_type: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          message_body?: string | null
+          name: string
+          offset_days: number
+          send_time_of_day?: string
+          stop_on_statuses?: string[]
+          template_name?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          anchor?: string
+          booking_type?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          message_body?: string | null
+          name?: string
+          offset_days?: number
+          send_time_of_day?: string
+          stop_on_statuses?: string[]
+          template_name?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_reminder_rules_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      booking_reminders: {
+        Row: {
+          attempts: number
+          booking_id: string
+          booking_type: string
+          created_at: string
+          error_message: string | null
+          id: string
+          last_attempt_at: string | null
+          queue_message_id: string | null
+          recipient_phone: string
+          rendered_body: string | null
+          rule_id: string
+          scheduled_for: string
+          sent_at: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          booking_id: string
+          booking_type: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          last_attempt_at?: string | null
+          queue_message_id?: string | null
+          recipient_phone: string
+          rendered_body?: string | null
+          rule_id: string
+          scheduled_for: string
+          sent_at?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          booking_id?: string
+          booking_type?: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          last_attempt_at?: string | null
+          queue_message_id?: string | null
+          recipient_phone?: string
+          rendered_body?: string | null
+          rule_id?: string
+          scheduled_for?: string
+          sent_at?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_reminders_queue_message_id_fkey"
+            columns: ["queue_message_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_message_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_reminders_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "booking_reminder_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_reminders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaign_recipients: {
         Row: {
           campaign_id: string
@@ -1459,6 +1594,18 @@ export type Database = {
       is_tenant_active: { Args: never; Returns: boolean }
       is_tenant_id_active: { Args: { _tenant_id: string }; Returns: boolean }
       is_user_tenant: { Args: { _tenant_id: string }; Returns: boolean }
+      schedule_booking_reminders: {
+        Args: {
+          _booking_date: string
+          _booking_id: string
+          _booking_type: string
+          _created_at: string
+          _phone: string
+          _status: string
+          _tenant_id: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role: "super_admin" | "tenant_admin" | "staff"
