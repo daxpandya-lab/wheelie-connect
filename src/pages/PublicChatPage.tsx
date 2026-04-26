@@ -924,38 +924,37 @@ export default function PublicChatPage() {
                   {msg.text}
                 </div>
                 {msg.options && msg.sender === "bot" && msg.multiSelect && isActiveOptions && (
-                  <div className="mt-2 space-y-1.5">
+                  <div className="mt-2 space-y-2">
                     <div className="flex flex-col gap-1">
                       {msg.options.map((opt) => {
                         const checked = pendingMultiSelect.has(opt.value);
                         return (
                           <label
                             key={opt.value}
-                            className={`flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg border cursor-pointer transition-colors ${
+                            className={`flex items-center gap-2 px-3 py-2 text-xs rounded-lg border cursor-pointer transition-colors ${
                               checked
                                 ? "border-primary bg-primary/10 text-primary"
                                 : "border-border hover:bg-muted"
                             }`}
                           >
-                            <input
-                              type="checkbox"
+                            <Checkbox
                               checked={checked}
-                              onChange={() => toggleMultiSelectOption(opt.value)}
-                              className="accent-primary"
+                              onCheckedChange={() => toggleMultiSelectOption(opt.value)}
                             />
                             <span>{opt.label}</span>
                           </label>
                         );
                       })}
                     </div>
-                    <Button
-                      size="sm"
-                      onClick={submitMultiSelect}
-                      disabled={pendingMultiSelect.size === 0}
-                      className="h-7 text-xs"
-                    >
-                      Done ({pendingMultiSelect.size})
-                    </Button>
+                    {pendingMultiSelect.size > 0 && (
+                      <Button
+                        size="sm"
+                        onClick={submitMultiSelect}
+                        className="h-8 text-xs w-full"
+                      >
+                        Confirm Selection ({pendingMultiSelect.size})
+                      </Button>
+                    )}
                   </div>
                 )}
                 {msg.options && msg.sender === "bot" && !msg.multiSelect && (
