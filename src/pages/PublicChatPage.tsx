@@ -507,17 +507,20 @@ export default function PublicChatPage() {
       for (const t of tokens) {
         const exact = node.options.find((o) => o.value === t || o.label === t);
         if (exact) {
-          canonical.push(exact.value);
+          // For multi-select, store the human-readable label so downstream
+          // consumers (service_bookings.service_type) get e.g. "Oil Change, Brake Service".
+          canonical.push(node.multiSelect ? exact.label : exact.value);
           continue;
         }
         const fuzzy = fuzzyMatchOption(t, node.options);
         if (fuzzy) {
-          canonical.push(fuzzy);
+          const opt = node.options.find((o) => o.value === fuzzy);
+          canonical.push(node.multiSelect && opt ? opt.label : fuzzy);
           continue;
         }
         return { ok: false, kind: "selection" };
       }
-      return { ok: true, value: canonical.join(",") };
+      return { ok: true, value: node.multiSelect ? canonical.join(", ") : canonical.join(",") };
     }
     if (!value) return { ok: false, kind: node.validationType || "text" };
     switch (node.validationType) {
