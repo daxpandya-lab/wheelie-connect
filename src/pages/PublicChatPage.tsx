@@ -621,6 +621,47 @@ export default function PublicChatPage() {
         status: "pending",
         metadata: { ...data, source_session_id: sessionId },
       } as never);
+    } else if (action === "reschedule_service_booking") {
+      const isoDate = normalizeDate(String(data.preferred_date || ""));
+      const originalId = String(data._existing_booking_id || "");
+      if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate) || !originalId) {
+        console.warn("Skipping reschedule: missing date or original booking id");
+        return;
+      }
+      // 1) Cancel original booking, recording the link to the new one in metadata.
+      await supabase
+        .from("service_bookings")
+        .update({
+          status: "cancelled",
+          metadata: {
+            ...(data._existing_metadata as Record<string, unknown> || {}),
+            rescheduled_at: new Date().toISOString(),
+            rescheduled_via: "chatbot",
+            rescheduled_session_id: sessionId,
+          },
+        } as never)
+        .eq("id", originalId)
+        .eq("tenant_id", dealer.id);
+
+      // 2) Insert a fresh booking carrying over identity + service details.
+      await supabase.from("service_bookings").insert({
+        tenant_id: dealer.id,
+        customer_name: String(data.existing_customer_name || data.customer_name || "Chatbot Visitor"),
+        phone_number: String(data.phone_number || ""),
+        vehicle_model: String(data.existing_vehicle_model || data.vehicle_model || "Unknown"),
+        service_type: String(data.existing_service_type || data.service_type || ""),
+        booking_date: isoDate,
+        pickup_required: !!data.pickup_required,
+        drop_required: !!data.drop_required,
+        notes: data.pickup_address ? `Pickup/Drop address: ${data.pickup_address}` : null,
+        booking_source: "chatbot",
+        status: "pending",
+        metadata: {
+          ...data,
+          rescheduled_from: originalId,
+          source_session_id: sessionId,
+        },
+      } as never);
     }
   };
 
