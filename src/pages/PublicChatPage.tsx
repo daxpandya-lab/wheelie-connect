@@ -670,9 +670,10 @@ export default function PublicChatPage() {
         pickup_required: !!data.pickup_required,
         drop_required: !!data.drop_required,
         issue_description: data.issue_description ? String(data.issue_description) : null,
+        notes: needsAddress ? `Pickup/Drop address: ${addressClean}` : null,
         booking_source: "chatbot",
         status: "pending",
-        metadata: { ...data, source_session_id: sessionId },
+        metadata: { ...data, ...addressMeta, source_session_id: sessionId },
       } as never);
     } else if (action === "create_test_drive_booking") {
       const isoDate = normalizeDate(String(data.preferred_date || ""));
