@@ -721,11 +721,12 @@ export default function PublicChatPage() {
         booking_date: isoDate,
         pickup_required: !!data.pickup_required,
         drop_required: !!data.drop_required,
-        notes: data.pickup_address ? `Pickup/Drop address: ${data.pickup_address}` : null,
+        notes: needsAddress ? `Pickup/Drop address: ${addressClean}` : null,
         booking_source: "chatbot",
         status: "pending",
         metadata: {
           ...data,
+          ...addressMeta,
           rescheduled_from: originalId,
           source_session_id: sessionId,
         },
