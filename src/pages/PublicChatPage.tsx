@@ -706,6 +706,9 @@ export default function PublicChatPage() {
     const needsAddress = !!data.pickup_required || !!data.drop_required;
     let geo: { lat: number; lon: number; display_name: string } | null = null;
     let addressClean = "";
+    let addressNormalized = "";
+    let addressHashKey = "";
+    let addressDeduped = false;
     if (needsAddress) {
       const r = validateAddress(String(data.pickup_address || ""));
       if (!r.ok) {
@@ -721,11 +724,28 @@ export default function PublicChatPage() {
         return;
       }
       addressClean = r.value;
-      geo = await geocodeAddress(addressClean);
+      addressNormalized = normalizeAddress(addressClean);
+      addressHashKey = addressHash(addressNormalized);
+
+      // Dedupe: if this customer used the same normalized address before,
+      // reuse the prior canonical form + geocoding result.
+      const phone = String(data.phone_number || "");
+      const prior = await findCanonicalAddress(phone, addressNormalized, addressHashKey);
+      if (prior) {
+        addressClean = prior.canonical;
+        geo = prior.geo;
+        addressDeduped = true;
+      } else {
+        geo = await geocodeAddress(addressClean);
+      }
     }
     const addressMeta: Record<string, unknown> = needsAddress
       ? {
           pickup_address: addressClean,
+          pickup_address_canonical: addressClean,
+          pickup_address_normalized: addressNormalized,
+          pickup_address_hash: addressHashKey,
+          pickup_address_deduped: addressDeduped,
           pickup_address_geocoded: !!geo,
           ...(geo ? { pickup_lat: geo.lat, pickup_lon: geo.lon, pickup_resolved: geo.display_name } : {}),
         }
