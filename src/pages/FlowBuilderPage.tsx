@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { FlowData, FlowNode, NodeType } from "@/types/chatbot-flow";
-import { SERVICE_BOOKING_FLOW, TEST_DRIVE_FLOW, NODE_TYPE_CONFIG, createBlankNode } from "@/types/chatbot-flow";
+import { SERVICE_BOOKING_FLOW, TEST_DRIVE_FLOW, RESCHEDULE_SERVICE_FLOW, NODE_TYPE_CONFIG, createBlankNode } from "@/types/chatbot-flow";
 
 type FlowRecord = {
   id: string;
@@ -81,6 +81,7 @@ export default function FlowBuilderPage() {
     const seeds = [
       { name: "Service Booking", description: "14-step vehicle service booking chatbot", flow_data: SERVICE_BOOKING_FLOW, channel: "both" as const, language: "en" },
       { name: "Test Drive", description: "Test drive booking chatbot with lead capture", flow_data: TEST_DRIVE_FLOW, channel: "both" as const, language: "en" },
+      { name: "Reschedule Service", description: "Lookup an existing service booking by phone and move it to a new date", flow_data: RESCHEDULE_SERVICE_FLOW, channel: "both" as const, language: "en" },
     ];
     for (const s of seeds) {
       await supabase.from("chatbot_flows").insert({
