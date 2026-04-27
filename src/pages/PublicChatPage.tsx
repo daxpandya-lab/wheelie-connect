@@ -621,6 +621,47 @@ export default function PublicChatPage() {
         status: "pending",
         metadata: { ...data, source_session_id: sessionId },
       } as never);
+    } else if (action === "reschedule_service_booking") {
+      const isoDate = normalizeDate(String(data.preferred_date || ""));
+      const originalId = String(data._existing_booking_id || "");
+      if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate) || !originalId) {
+        console.warn("Skipping reschedule: missing date or original booking id");
+        return;
+      }
+      // 1) Cancel original booking, recording the link to the new one in metadata.
+      await supabase
+        .from("service_bookings")
+        .update({
+          status: "cancelled",
+          metadata: {
+            ...(data._existing_metadata as Record<string, unknown> || {}),
+            rescheduled_at: new Date().toISOString(),
+            rescheduled_via: "chatbot",
+            rescheduled_session_id: sessionId,
+          },
+        } as never)
+        .eq("id", originalId)
+        .eq("tenant_id", dealer.id);
+
+      // 2) Insert a fresh booking carrying over identity + service details.
+      await supabase.from("service_bookings").insert({
+        tenant_id: dealer.id,
+        customer_name: String(data.existing_customer_name || data.customer_name || "Chatbot Visitor"),
+        phone_number: String(data.phone_number || ""),
+        vehicle_model: String(data.existing_vehicle_model || data.vehicle_model || "Unknown"),
+        service_type: String(data.existing_service_type || data.service_type || ""),
+        booking_date: isoDate,
+        pickup_required: !!data.pickup_required,
+        drop_required: !!data.drop_required,
+        notes: data.pickup_address ? `Pickup/Drop address: ${data.pickup_address}` : null,
+        booking_source: "chatbot",
+        status: "pending",
+        metadata: {
+          ...data,
+          rescheduled_from: originalId,
+          source_session_id: sessionId,
+        },
+      } as never);
     }
   };
 
@@ -718,6 +759,71 @@ export default function PublicChatPage() {
       }
 
       if (nextId) setTimeout(() => advanceTo(nextId!, data), 500);
+    } else if (checkType === "lookup_booking") {
+      // Look up the most recent upcoming non-cancelled service booking for this phone.
+      const phone = String(data.phone_number || "").trim();
+      const today = format(new Date(), "yyyy-MM-dd");
+      let lookupResult: "found" | "not_found" = "not_found";
+      const newData: ChatbotCollectedData = { ...data };
+      if (phone) {
+        const { data: rows } = await supabase
+          .from("service_bookings")
+          .select("id, customer_name, vehicle_model, service_type, booking_date, pickup_required, drop_required, metadata")
+          .eq("tenant_id", dealer.id)
+          .eq("phone_number", phone)
+          .neq("status", "cancelled")
+          .gte("booking_date", today)
+          .order("booking_date", { ascending: true })
+          .limit(1);
+        const row = rows?.[0];
+        if (row) {
+          lookupResult = "found";
+          newData._existing_booking_id = row.id;
+          newData._existing_metadata = row.metadata as Record<string, unknown>;
+          newData.existing_customer_name = row.customer_name;
+          newData.existing_vehicle_model = row.vehicle_model;
+          newData.existing_service_type = row.service_type;
+          newData.existing_booking_date = row.booking_date;
+        }
+      }
+      newData._lookup_result = lookupResult;
+      setCollectedData(newData);
+      persistSession({ collected_data: newData });
+      if (node.nextNodeId) setTimeout(() => advanceTo(node.nextNodeId!, newData), 400);
+    } else if (checkType === "available_dates") {
+      // Build the next 5 calendar days that have capacity, then rewrite the
+      // next node's options so the user can pick one.
+      const desiredCount = Math.max(1, Math.min(10, Number(node.metadata?.count) || 5));
+      const found: { iso: string; label: string }[] = [];
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      // Skip "today" so the customer always reschedules to a future date.
+      for (let i = 1; found.length < desiredCount && i <= 30; i++) {
+        const d = new Date(start);
+        d.setDate(start.getDate() + i);
+        const iso = format(d, "yyyy-MM-dd");
+        const { data: result, error: rpcErr } = await supabase.rpc("check_booking_availability", {
+          _tenant_id: dealer.id,
+          _date: iso,
+        });
+        if (!rpcErr && (result as { available?: boolean })?.available !== false) {
+          found.push({ iso, label: format(d, "EEE, dd MMM") });
+        }
+      }
+
+      if (flow && node.nextNodeId) {
+        const nextNode = flow.nodes.find((n) => n.id === node.nextNodeId);
+        if (nextNode) {
+          // Mutate next node's options in our flow state so the rendered
+          // question shows the freshly-computed dates as buttons.
+          const fallback = nextNode.options?.[0]?.nextNodeId || "";
+          nextNode.options = found.length
+            ? found.map((d) => ({ label: d.label, value: d.iso, nextNodeId: fallback }))
+            : [{ label: "No dates available — try again later", value: "_none", nextNodeId: fallback }];
+          setFlow({ ...flow });
+        }
+        setTimeout(() => advanceTo(node.nextNodeId!, data), 400);
+      }
     } else if (node.nextNodeId) {
       setTimeout(() => advanceTo(node.nextNodeId!, data), 500);
     }

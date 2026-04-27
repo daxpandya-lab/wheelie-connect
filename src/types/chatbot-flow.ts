@@ -463,6 +463,215 @@ export const TEST_DRIVE_FLOW: FlowData = {
   ],
 };
 
+// ============================================================
+// Reschedule Service Booking flow
+// Uses metadata.checkType = "lookup_booking" / "available_dates"
+// and metadata.action = "reschedule_service_booking" on the end node.
+// ============================================================
+export const RESCHEDULE_SERVICE_FLOW: FlowData = {
+  version: 1,
+  startNodeId: "rs_greeting",
+  nodes: [
+    {
+      id: "rs_greeting",
+      type: "greeting",
+      label: "Greeting",
+      message: {
+        en: "🔄 Let's reschedule your service booking. I'll just need a couple of details.",
+        hi: "🔄 चलिए आपकी सर्विस बुकिंग को रीशेड्यूल करते हैं।",
+        ar: "🔄 لنقم بإعادة جدولة حجز الخدمة الخاص بك.",
+      },
+      nextNodeId: "rs_ask_phone",
+      position: { x: 400, y: 50 },
+    },
+    {
+      id: "rs_ask_phone",
+      type: "question",
+      label: "Ask Phone",
+      message: {
+        en: "Please share the phone number used when booking.",
+        hi: "कृपया वह फोन नंबर साझा करें जो बुकिंग के समय इस्तेमाल हुआ था।",
+        ar: "يرجى مشاركة رقم الهاتف المستخدم عند الحجز.",
+      },
+      dataField: "phone_number",
+      validationType: "phone",
+      nextNodeId: "rs_lookup",
+      position: { x: 400, y: 140 },
+    },
+    {
+      id: "rs_lookup",
+      type: "api_check",
+      label: "Lookup Existing Booking",
+      message: {
+        en: "Looking up your latest service booking…",
+        hi: "आपकी हालिया बुकिंग ढूंढ रहा हूं…",
+        ar: "جارٍ البحث عن حجزك الأخير…",
+      },
+      nextNodeId: "rs_lookup_decision",
+      position: { x: 400, y: 230 },
+      metadata: { checkType: "lookup_booking" },
+    },
+    {
+      id: "rs_lookup_decision",
+      type: "condition",
+      label: "Booking Found?",
+      message: { en: "", hi: "", ar: "" },
+      options: [
+        { label: "Found", value: "found", nextNodeId: "rs_show_current" },
+        { label: "Not found", value: "not_found", nextNodeId: "rs_not_found" },
+      ],
+      metadata: { field: "_lookup_result" },
+      position: { x: 400, y: 320 },
+    },
+    {
+      id: "rs_not_found",
+      type: "end",
+      label: "No Booking Found",
+      message: {
+        en: "❌ I couldn't find an upcoming service booking for {{phone_number}}. Please contact us directly so we can help.",
+        hi: "❌ {{phone_number}} के लिए कोई आगामी बुकिंग नहीं मिली।",
+        ar: "❌ لم أعثر على حجز قادم للرقم {{phone_number}}.",
+      },
+      position: { x: 700, y: 320 },
+    },
+    {
+      id: "rs_show_current",
+      type: "question",
+      label: "Show Current Booking",
+      message: {
+        en: "I found your booking:\n\n🚗 **Vehicle:** {{existing_vehicle_model}}\n🔧 **Service:** {{existing_service_type}}\n📅 **Current date:** {{existing_booking_date}}\n\nWould you like to reschedule this one?",
+        hi: "आपकी बुकिंग मिल गई:\n\n🚗 {{existing_vehicle_model}}\n🔧 {{existing_service_type}}\n📅 {{existing_booking_date}}\n\nक्या आप इसे रीशेड्यूल करना चाहेंगे?",
+        ar: "وجدت حجزك:\n\n🚗 {{existing_vehicle_model}}\n🔧 {{existing_service_type}}\n📅 {{existing_booking_date}}\n\nهل تريد إعادة جدولته؟",
+      },
+      validationType: "selection",
+      options: [
+        { label: "Yes, reschedule", value: "yes", nextNodeId: "rs_find_dates" },
+        { label: "No, cancel", value: "no", nextNodeId: "rs_aborted" },
+      ],
+      position: { x: 400, y: 410 },
+    },
+    {
+      id: "rs_aborted",
+      type: "end",
+      label: "Aborted",
+      message: {
+        en: "👍 No problem — your existing booking is unchanged.",
+        hi: "👍 कोई बात नहीं — आपकी बुकिंग वही रहेगी।",
+        ar: "👍 لا مشكلة — حجزك لم يتغير.",
+      },
+      position: { x: 700, y: 410 },
+    },
+    {
+      id: "rs_find_dates",
+      type: "api_check",
+      label: "Find Available Dates",
+      message: {
+        en: "Finding the next available dates…",
+        hi: "अगली उपलब्ध तारीखें ढूंढ रहा हूं…",
+        ar: "جارٍ العثور على التواريخ المتاحة التالية…",
+      },
+      nextNodeId: "rs_pick_date",
+      position: { x: 400, y: 500 },
+      metadata: { checkType: "available_dates", count: 5 },
+    },
+    {
+      id: "rs_pick_date",
+      type: "question",
+      label: "Pick New Date",
+      message: {
+        en: "Pick a new date that works for you 👇",
+        hi: "अपने लिए एक नई तारीख चुनें 👇",
+        ar: "اختر التاريخ الجديد المناسب لك 👇",
+      },
+      dataField: "preferred_date",
+      validationType: "selection",
+      // Options are dynamically replaced at runtime by the available_dates check.
+      options: [
+        { label: "(loading)", value: "_placeholder", nextNodeId: "rs_ask_pickup" },
+      ],
+      position: { x: 400, y: 590 },
+      metadata: { dynamicOptions: "available_dates" },
+    },
+    {
+      id: "rs_ask_pickup",
+      type: "question",
+      label: "Ask Pickup/Drop",
+      message: {
+        en: "Do you need vehicle pickup and drop service for the new appointment?",
+        hi: "क्या आपको नई अपॉइंटमेंट के लिए पिकअप/ड्रॉप चाहिए?",
+        ar: "هل تحتاج إلى خدمة استلام/تسليم للموعد الجديد؟",
+      },
+      dataField: "pickup_required",
+      validationType: "selection",
+      options: [
+        { label: "Yes, both pickup & drop", value: "both", nextNodeId: "rs_ask_address" },
+        { label: "Pickup only", value: "pickup", nextNodeId: "rs_ask_address" },
+        { label: "Drop only", value: "drop", nextNodeId: "rs_ask_address" },
+        { label: "No, I'll bring it myself", value: "none", nextNodeId: "rs_confirm" },
+      ],
+      position: { x: 400, y: 680 },
+    },
+    {
+      id: "rs_ask_address",
+      type: "question",
+      label: "Pickup/Drop Address",
+      message: {
+        en: "Please share the pickup/drop address.",
+        hi: "कृपया पिकअप/ड्रॉप का पता साझा करें।",
+        ar: "يرجى مشاركة عنوان الاستلام/التسليم.",
+      },
+      dataField: "pickup_address",
+      validationType: "text",
+      nextNodeId: "rs_confirm",
+      position: { x: 400, y: 770 },
+    },
+    {
+      id: "rs_confirm",
+      type: "confirmation",
+      label: "Confirm Reschedule",
+      message: {
+        en: "Please confirm your new appointment:\n\n🚗 **Vehicle:** {{existing_vehicle_model}}\n🔧 **Service:** {{existing_service_type}}\n📅 **New date:** {{preferred_date}}\n🚚 **Pickup/Drop:** {{pickup_required}}\n\nShall I confirm?",
+        hi: "कृपया अपनी नई अपॉइंटमेंट की पुष्टि करें:\n\n📅 {{preferred_date}}\n🚚 {{pickup_required}}",
+        ar: "يرجى تأكيد موعدك الجديد:\n\n📅 {{preferred_date}}\n🚚 {{pickup_required}}",
+      },
+      validationType: "selection",
+      options: [
+        { label: "Yes, confirm", value: "confirm", nextNodeId: "rs_complete" },
+        { label: "Pick another date", value: "redo", nextNodeId: "rs_find_dates" },
+      ],
+      position: { x: 400, y: 860 },
+    },
+    {
+      id: "rs_complete",
+      type: "end",
+      label: "Reschedule Complete",
+      message: {
+        en: "✅ Your booking has been rescheduled to {{preferred_date}}. New booking ID: {{booking_id}}. See you then!",
+        hi: "✅ आपकी बुकिंग {{preferred_date}} के लिए रीशेड्यूल हो गई है।",
+        ar: "✅ تم إعادة جدولة حجزك إلى {{preferred_date}}.",
+      },
+      position: { x: 400, y: 950 },
+      metadata: { action: "reschedule_service_booking" },
+    },
+  ],
+  connections: [
+    { id: "rsc1", sourceId: "rs_greeting", targetId: "rs_ask_phone" },
+    { id: "rsc2", sourceId: "rs_ask_phone", targetId: "rs_lookup" },
+    { id: "rsc3", sourceId: "rs_lookup", targetId: "rs_lookup_decision" },
+    { id: "rsc4", sourceId: "rs_lookup_decision", targetId: "rs_show_current", label: "Found" },
+    { id: "rsc5", sourceId: "rs_lookup_decision", targetId: "rs_not_found", label: "Not found" },
+    { id: "rsc6", sourceId: "rs_show_current", targetId: "rs_find_dates", label: "Yes" },
+    { id: "rsc7", sourceId: "rs_show_current", targetId: "rs_aborted", label: "No" },
+    { id: "rsc8", sourceId: "rs_find_dates", targetId: "rs_pick_date" },
+    { id: "rsc9", sourceId: "rs_pick_date", targetId: "rs_ask_pickup" },
+    { id: "rsc10", sourceId: "rs_ask_pickup", targetId: "rs_ask_address", label: "with pickup" },
+    { id: "rsc11", sourceId: "rs_ask_pickup", targetId: "rs_confirm", label: "no pickup" },
+    { id: "rsc12", sourceId: "rs_ask_address", targetId: "rs_confirm" },
+    { id: "rsc13", sourceId: "rs_confirm", targetId: "rs_complete", label: "Confirm" },
+    { id: "rsc14", sourceId: "rs_confirm", targetId: "rs_find_dates", label: "Redo" },
+  ],
+};
+
 // Node type display config
 export const NODE_TYPE_CONFIG: Record<NodeType, { color: string; icon: string; label: string }> = {
   greeting: { color: "hsl(var(--success))", icon: "👋", label: "Greeting" },
