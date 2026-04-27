@@ -619,6 +619,36 @@ export default function PublicChatPage() {
     if (!dealer) return;
     const action = (endNode.metadata?.action as string) || "";
 
+    // Shared pickup/drop address pre-flight: required when pickup or drop is requested,
+    // length-checked, and (best-effort) geocoded so coords are persisted in metadata.
+    const needsAddress = !!data.pickup_required || !!data.drop_required;
+    let geo: { lat: number; lon: number; display_name: string } | null = null;
+    let addressClean = "";
+    if (needsAddress) {
+      const r = validateAddress(String(data.pickup_address || ""));
+      if (!r.ok) {
+        console.warn("Skipping booking insert: invalid pickup/drop address", data.pickup_address);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `bot-addr-${Date.now()}`,
+            sender: "bot",
+            text: validationErrorMessage("address", language),
+          },
+        ]);
+        return;
+      }
+      addressClean = r.value;
+      geo = await geocodeAddress(addressClean);
+    }
+    const addressMeta: Record<string, unknown> = needsAddress
+      ? {
+          pickup_address: addressClean,
+          pickup_address_geocoded: !!geo,
+          ...(geo ? { pickup_lat: geo.lat, pickup_lon: geo.lon, pickup_resolved: geo.display_name } : {}),
+        }
+      : {};
+
     if (action === "create_service_booking") {
       const isoDate = normalizeDate(String(data.preferred_date || ""));
       if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
