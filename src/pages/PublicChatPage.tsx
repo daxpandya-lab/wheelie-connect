@@ -444,6 +444,88 @@ export default function PublicChatPage() {
     return { ok: true, value: v };
   };
 
+  // Normalize an address for dedupe: lowercase, strip diacritics, expand a few
+  // common abbreviations (st./str./rd./ave./apt./bldg.), collapse punctuation
+  // and whitespace. The output is stable across casing/punctuation/abbrev tweaks.
+  const ADDRESS_ABBREV: Array<[RegExp, string]> = [
+    [/\bst\.?\b/g, "street"],
+    [/\bstr\.?\b/g, "street"],
+    [/\brd\.?\b/g, "road"],
+    [/\bave\.?\b/g, "avenue"],
+    [/\bblvd\.?\b/g, "boulevard"],
+    [/\bln\.?\b/g, "lane"],
+    [/\bapt\.?\b/g, "apartment"],
+    [/\bbldg\.?\b/g, "building"],
+    [/\bfl\.?\b/g, "floor"],
+    [/\bno\.?\b/g, "number"],
+    [/\bnr\.?\b/g, "near"],
+    [/\bopp\.?\b/g, "opposite"],
+  ];
+  const normalizeAddress = (raw: string): string => {
+    const lowered = (raw || "")
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "");
+    let out = lowered;
+    for (const [re, rep] of ADDRESS_ABBREV) out = out.replace(re, rep);
+    return out
+      .replace(/[.,;:#\-_/\\()|]+/g, " ")
+      .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  };
+
+  // Stable short hash (FNV-1a, hex) — used as the dedupe key in metadata.
+  const addressHash = (normalized: string): string => {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < normalized.length; i++) {
+      h ^= normalized.charCodeAt(i);
+      h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+    }
+    return h.toString(16).padStart(8, "0");
+  };
+
+  // Look back through this tenant + phone's prior bookings; if the same
+  // normalized address was used before, reuse the canonical (cleaned) form
+  // and any geocoding result — saves a network call and keeps history consistent.
+  const findCanonicalAddress = async (
+    phone: string,
+    normalized: string,
+    hash: string
+  ): Promise<{
+    canonical: string;
+    geo: { lat: number; lon: number; display_name: string } | null;
+  } | null> => {
+    if (!dealer || !phone || !normalized) return null;
+    try {
+      const { data: rows } = await supabase
+        .from("service_bookings")
+        .select("metadata")
+        .eq("tenant_id", dealer.id)
+        .eq("phone_number", phone)
+        .order("created_at", { ascending: false })
+        .limit(25);
+      for (const row of rows || []) {
+        const meta = (row as { metadata?: Record<string, unknown> }).metadata || {};
+        const prior = String(meta.pickup_address_canonical || meta.pickup_address || "");
+        if (!prior) continue;
+        const priorHash = String(meta.pickup_address_hash || addressHash(normalizeAddress(prior)));
+        if (priorHash === hash) {
+          const lat = typeof meta.pickup_lat === "number" ? meta.pickup_lat : null;
+          const lon = typeof meta.pickup_lon === "number" ? meta.pickup_lon : null;
+          const display = typeof meta.pickup_resolved === "string" ? meta.pickup_resolved : "";
+          return {
+            canonical: prior,
+            geo: lat != null && lon != null ? { lat, lon, display_name: display } : null,
+          };
+        }
+      }
+    } catch (e) {
+      console.warn("Address dedupe lookup failed", e);
+    }
+    return null;
+  };
+
   const geocodeAddress = async (
     addr: string
   ): Promise<{ lat: number; lon: number; display_name: string } | null> => {
