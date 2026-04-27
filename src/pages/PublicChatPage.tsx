@@ -422,10 +422,42 @@ export default function PublicChatPage() {
       text: {
         en: "⚠️ Please type a valid answer.",
         hi: "⚠️ कृपया एक वैध उत्तर लिखें।",
-        ar: "⚠️ يرجى كتابة إجابة صالحة.",
+        ar: "⚠️ يرجى كतابة إجابة صالحة.",
+      },
+      address: {
+        en: "⚠️ Please enter a valid pickup/drop address (10–250 characters).",
+        hi: "⚠️ कृपया एक वैध पिकअप/ड्रॉप पता दर्ज करें (10–250 वर्ण)।",
+        ar: "⚠️ يرجى إدخال عنوان استلام/تسليم صالح (10–250 حرفًا).",
       },
     };
     return msgs[kind]?.[lang] || msgs[kind]?.en || msgs.text.en;
+  };
+
+  // ---------- Address validation + optional geocoding ----------
+  const ADDRESS_MIN = 10;
+  const ADDRESS_MAX = 250;
+  const validateAddress = (raw: string): { ok: boolean; value: string } => {
+    const v = (raw || "").trim().replace(/\s+/g, " ");
+    if (v.length < ADDRESS_MIN || v.length > ADDRESS_MAX) return { ok: false, value: v };
+    // Must contain at least some letters and digits/word chars (basic sanity)
+    if (!/[A-Za-z\u0600-\u06FF\u0900-\u097F]/.test(v)) return { ok: false, value: v };
+    return { ok: true, value: v };
+  };
+
+  const geocodeAddress = async (
+    addr: string
+  ): Promise<{ lat: number; lon: number; display_name: string } | null> => {
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(addr)}`;
+      const res = await fetch(url, { headers: { Accept: "application/json" } });
+      if (!res.ok) return null;
+      const arr = (await res.json()) as Array<{ lat: string; lon: string; display_name: string }>;
+      if (!Array.isArray(arr) || arr.length === 0) return null;
+      const hit = arr[0];
+      return { lat: parseFloat(hit.lat), lon: parseFloat(hit.lon), display_name: hit.display_name };
+    } catch {
+      return null;
+    }
   };
 
   // ---------- Fuzzy matching for option typos ----------
@@ -522,6 +554,11 @@ export default function PublicChatPage() {
       }
       return { ok: true, value: node.multiSelect ? canonical.join(", ") : canonical.join(",") };
     }
+    // Address fields: required + length + character sanity (geocoding happens at submit)
+    if (node.dataField && /address/i.test(node.dataField)) {
+      const r = validateAddress(value);
+      return r.ok ? { ok: true, value: r.value } : { ok: false, kind: "address" };
+    }
     if (!value) return { ok: false, kind: node.validationType || "text" };
     switch (node.validationType) {
       case "date": {
@@ -582,6 +619,36 @@ export default function PublicChatPage() {
     if (!dealer) return;
     const action = (endNode.metadata?.action as string) || "";
 
+    // Shared pickup/drop address pre-flight: required when pickup or drop is requested,
+    // length-checked, and (best-effort) geocoded so coords are persisted in metadata.
+    const needsAddress = !!data.pickup_required || !!data.drop_required;
+    let geo: { lat: number; lon: number; display_name: string } | null = null;
+    let addressClean = "";
+    if (needsAddress) {
+      const r = validateAddress(String(data.pickup_address || ""));
+      if (!r.ok) {
+        console.warn("Skipping booking insert: invalid pickup/drop address", data.pickup_address);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `bot-addr-${Date.now()}`,
+            sender: "bot",
+            text: validationErrorMessage("address", language),
+          },
+        ]);
+        return;
+      }
+      addressClean = r.value;
+      geo = await geocodeAddress(addressClean);
+    }
+    const addressMeta: Record<string, unknown> = needsAddress
+      ? {
+          pickup_address: addressClean,
+          pickup_address_geocoded: !!geo,
+          ...(geo ? { pickup_lat: geo.lat, pickup_lon: geo.lon, pickup_resolved: geo.display_name } : {}),
+        }
+      : {};
+
     if (action === "create_service_booking") {
       const isoDate = normalizeDate(String(data.preferred_date || ""));
       if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
@@ -603,9 +670,10 @@ export default function PublicChatPage() {
         pickup_required: !!data.pickup_required,
         drop_required: !!data.drop_required,
         issue_description: data.issue_description ? String(data.issue_description) : null,
+        notes: needsAddress ? `Pickup/Drop address: ${addressClean}` : null,
         booking_source: "chatbot",
         status: "pending",
-        metadata: { ...data, source_session_id: sessionId },
+        metadata: { ...data, ...addressMeta, source_session_id: sessionId },
       } as never);
     } else if (action === "create_test_drive_booking") {
       const isoDate = normalizeDate(String(data.preferred_date || ""));
@@ -653,11 +721,12 @@ export default function PublicChatPage() {
         booking_date: isoDate,
         pickup_required: !!data.pickup_required,
         drop_required: !!data.drop_required,
-        notes: data.pickup_address ? `Pickup/Drop address: ${data.pickup_address}` : null,
+        notes: needsAddress ? `Pickup/Drop address: ${addressClean}` : null,
         booking_source: "chatbot",
         status: "pending",
         metadata: {
           ...data,
+          ...addressMeta,
           rescheduled_from: originalId,
           source_session_id: sessionId,
         },
