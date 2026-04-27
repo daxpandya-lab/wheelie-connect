@@ -422,10 +422,42 @@ export default function PublicChatPage() {
       text: {
         en: "⚠️ Please type a valid answer.",
         hi: "⚠️ कृपया एक वैध उत्तर लिखें।",
-        ar: "⚠️ يرجى كتابة إجابة صالحة.",
+        ar: "⚠️ يرجى كतابة إجابة صالحة.",
+      },
+      address: {
+        en: "⚠️ Please enter a valid pickup/drop address (10–250 characters).",
+        hi: "⚠️ कृपया एक वैध पिकअप/ड्रॉप पता दर्ज करें (10–250 वर्ण)।",
+        ar: "⚠️ يرجى إدخال عنوان استلام/تسليم صالح (10–250 حرفًا).",
       },
     };
     return msgs[kind]?.[lang] || msgs[kind]?.en || msgs.text.en;
+  };
+
+  // ---------- Address validation + optional geocoding ----------
+  const ADDRESS_MIN = 10;
+  const ADDRESS_MAX = 250;
+  const validateAddress = (raw: string): { ok: boolean; value: string } => {
+    const v = (raw || "").trim().replace(/\s+/g, " ");
+    if (v.length < ADDRESS_MIN || v.length > ADDRESS_MAX) return { ok: false, value: v };
+    // Must contain at least some letters and digits/word chars (basic sanity)
+    if (!/[A-Za-z\u0600-\u06FF\u0900-\u097F]/.test(v)) return { ok: false, value: v };
+    return { ok: true, value: v };
+  };
+
+  const geocodeAddress = async (
+    addr: string
+  ): Promise<{ lat: number; lon: number; display_name: string } | null> => {
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(addr)}`;
+      const res = await fetch(url, { headers: { Accept: "application/json" } });
+      if (!res.ok) return null;
+      const arr = (await res.json()) as Array<{ lat: string; lon: string; display_name: string }>;
+      if (!Array.isArray(arr) || arr.length === 0) return null;
+      const hit = arr[0];
+      return { lat: parseFloat(hit.lat), lon: parseFloat(hit.lon), display_name: hit.display_name };
+    } catch {
+      return null;
+    }
   };
 
   // ---------- Fuzzy matching for option typos ----------
