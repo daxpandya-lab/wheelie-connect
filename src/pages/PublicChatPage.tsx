@@ -554,6 +554,11 @@ export default function PublicChatPage() {
       }
       return { ok: true, value: node.multiSelect ? canonical.join(", ") : canonical.join(",") };
     }
+    // Address fields: required + length + character sanity (geocoding happens at submit)
+    if (node.dataField && /address/i.test(node.dataField)) {
+      const r = validateAddress(value);
+      return r.ok ? { ok: true, value: r.value } : { ok: false, kind: "address" };
+    }
     if (!value) return { ok: false, kind: node.validationType || "text" };
     switch (node.validationType) {
       case "date": {
