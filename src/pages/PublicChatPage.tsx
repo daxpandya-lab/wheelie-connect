@@ -712,6 +712,7 @@ export default function PublicChatPage() {
     let addressNormalized = "";
     let addressHashKey = "";
     let addressDeduped = false;
+    let reusedFromBookingId: string | null = null;
     if (needsAddress) {
       const r = validateAddress(String(data.pickup_address || ""));
       if (!r.ok) {
