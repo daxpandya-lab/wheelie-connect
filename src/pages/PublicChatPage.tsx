@@ -739,6 +739,7 @@ export default function PublicChatPage() {
         addressClean = prior.canonical;
         geo = prior.geo;
         addressDeduped = true;
+        reusedFromBookingId = prior.reusedFromBookingId;
       } else {
         geo = await geocodeAddress(addressClean);
       }
