@@ -19,10 +19,14 @@ export default function WhatsAppConfig() {
   const [copied, setCopied] = useState(false);
   const [flows, setFlows] = useState<Array<{ id: string; name: string; is_active: boolean }>>([]);
   const [activatingFlow, setActivatingFlow] = useState(false);
+  const [provider, setProvider] = useState<"meta" | "evolution">("meta");
   const [form, setForm] = useState({
     phoneNumberId: "",
     wabaId: "",
     accessToken: "",
+    evolutionUrl: "",
+    evolutionApiKey: "",
+    evolutionInstance: "",
   });
 
   const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || "";
