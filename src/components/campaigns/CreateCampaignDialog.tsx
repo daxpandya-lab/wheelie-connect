@@ -61,6 +61,7 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
     segment_id: "",
     scheduled_at: "",
     sending_speed: "100", // messages/hour
+    recipient_source: "segment" as "segment" | "service_bookings",
   });
   // varMap: { "1": { source: "name" | "phone" | "email" | "static", value?: string } }
   const [varMap, setVarMap] = useState<Record<string, { source: string; value?: string }>>({});
