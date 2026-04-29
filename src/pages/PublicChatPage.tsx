@@ -495,18 +495,20 @@ export default function PublicChatPage() {
   ): Promise<{
     canonical: string;
     geo: { lat: number; lon: number; display_name: string } | null;
+    reusedFromBookingId: string | null;
   } | null> => {
     if (!dealer || !phone || !normalized) return null;
     try {
       const { data: rows } = await supabase
         .from("service_bookings")
-        .select("metadata")
+        .select("id, metadata")
         .eq("tenant_id", dealer.id)
         .eq("phone_number", phone)
         .order("created_at", { ascending: false })
         .limit(25);
       for (const row of rows || []) {
-        const meta = (row as { metadata?: Record<string, unknown> }).metadata || {};
+        const r = row as { id?: string; metadata?: Record<string, unknown> };
+        const meta = r.metadata || {};
         const prior = String(meta.pickup_address_canonical || meta.pickup_address || "");
         if (!prior) continue;
         const priorHash = String(meta.pickup_address_hash || addressHash(normalizeAddress(prior)));
@@ -517,6 +519,7 @@ export default function PublicChatPage() {
           return {
             canonical: prior,
             geo: lat != null && lon != null ? { lat, lon, display_name: display } : null,
+            reusedFromBookingId: r.id ?? null,
           };
         }
       }
@@ -709,6 +712,7 @@ export default function PublicChatPage() {
     let addressNormalized = "";
     let addressHashKey = "";
     let addressDeduped = false;
+    let reusedFromBookingId: string | null = null;
     if (needsAddress) {
       const r = validateAddress(String(data.pickup_address || ""));
       if (!r.ok) {
@@ -735,6 +739,7 @@ export default function PublicChatPage() {
         addressClean = prior.canonical;
         geo = prior.geo;
         addressDeduped = true;
+        reusedFromBookingId = prior.reusedFromBookingId;
       } else {
         geo = await geocodeAddress(addressClean);
       }
@@ -786,6 +791,15 @@ export default function PublicChatPage() {
           pickup_address_hash: addressHashKey,
           pickup_address_deduped: addressDeduped,
           pickup_address_geocoded: !!geo,
+          // Explicit response keys so consumers can show exactly what was reused and why
+          canonicalAddress: addressClean,
+          normalizedAddressKey: addressHashKey,
+          reusedFromBookingId,
+          addressReuseReason: addressDeduped
+            ? "matched_prior_booking_hash"
+            : geo
+              ? "geocoded_fresh"
+              : "not_geocoded",
           ...(geo ? { pickup_lat: geo.lat, pickup_lon: geo.lon, pickup_resolved: geo.display_name } : {}),
         }
       : {};
