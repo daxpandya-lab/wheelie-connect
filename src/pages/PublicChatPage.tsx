@@ -738,6 +738,45 @@ export default function PublicChatPage() {
       } else {
         geo = await geocodeAddress(addressClean);
       }
+
+      // Surface a friendly indicator so the customer can confirm the address
+      // we'll save — including whether it was reused from a prior booking
+      // (deduped) and/or successfully geocoded.
+      const reusedLabel =
+        language === "hi"
+          ? "♻️ पता पुनः उपयोग किया गया"
+          : language === "ar"
+            ? "♻️ تم إعادة استخدام العنوان"
+            : "♻️ Address reused";
+      const verifiedLabel =
+        language === "hi"
+          ? "📍 पता सत्यापित"
+          : language === "ar"
+            ? "📍 تم التحقق من العنوان"
+            : "📍 Address verified";
+      const fromPriorNote =
+        language === "hi"
+          ? "हमने आपकी पिछली बुकिंग से यही पता और स्थान पुनः उपयोग किया।"
+          : language === "ar"
+            ? "أعدنا استخدام نفس العنوان والموقع من حجزك السابق."
+            : "We reused the same address and location from your previous booking.";
+      const tag = addressDeduped ? reusedLabel : geo ? verifiedLabel : "";
+      if (tag) {
+        const lines = [
+          tag,
+          addressClean,
+          ...(geo?.display_name && geo.display_name !== addressClean ? [`↳ ${geo.display_name}`] : []),
+          ...(addressDeduped ? [fromPriorNote] : []),
+        ];
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `bot-addr-reuse-${Date.now()}`,
+            sender: "bot",
+            text: lines.join("\n"),
+          },
+        ]);
+      }
     }
     const addressMeta: Record<string, unknown> = needsAddress
       ? {
