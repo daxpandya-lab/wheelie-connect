@@ -64,30 +64,58 @@ Deno.serve(async (req) => {
       });
     }
 
-    const waConfig = tenantData.whatsapp_config as Record<string, string> | null;
-    const accessToken = waConfig?.access_token;
+    const waConfig = (tenantData.whatsapp_config as Record<string, any>) || {};
+    const provider: "meta" | "evolution" = waConfig.provider === "evolution" ? "evolution" : "meta";
 
-    if (!accessToken) {
-      return new Response(JSON.stringify({ error: "WhatsApp access token not configured" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    // Meta credentials (with legacy fallbacks)
+    const metaAccessToken = waConfig.meta?.access_token || waConfig.access_token;
+    let metaPhoneNumberId: string | null = waConfig.meta?.phone_number_id || null;
+
+    // Evolution credentials
+    const evoUrl: string | undefined = waConfig.evolution?.instance_url;
+    const evoInstance: string | undefined = waConfig.evolution?.instance_name;
+    const evoApiKey: string | undefined = waConfig.evolution?.api_key;
+
+    if (provider === "meta") {
+      if (!metaAccessToken) {
+        return new Response(JSON.stringify({ error: "WhatsApp access token not configured" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (!metaPhoneNumberId) {
+        const { data: session } = await supabase
+          .from("whatsapp_sessions")
+          .select("phone_number_id")
+          .eq("tenant_id", tenant_id)
+          .eq("is_active", true)
+          .single();
+        if (!session) {
+          return new Response(JSON.stringify({ error: "No active WhatsApp session" }), {
+            status: 404,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        metaPhoneNumberId = session.phone_number_id;
+      }
+    } else {
+      if (!evoUrl || !evoInstance || !evoApiKey) {
+        return new Response(JSON.stringify({ error: "Evolution API not fully configured" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
-    // Get tenant's WhatsApp session
-    const { data: session } = await supabase
-      .from("whatsapp_sessions")
-      .select("phone_number_id")
-      .eq("tenant_id", tenant_id)
-      .eq("is_active", true)
-      .single();
-
-    if (!session) {
-      return new Response(JSON.stringify({ error: "No active WhatsApp session" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // Helper: replace {{name}}, {{phone}}, {{vehicle_model}}, {{booking_date}} placeholders
+    const renderVariables = (text: string, ctx: Record<string, string | null | undefined>): string => {
+      if (!text) return text;
+      return text.replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, key) => {
+        const v = ctx[key.toLowerCase()];
+        return v == null || v === "" ? `{{${key}}}` : String(v);
       });
-    }
+    };
+
 
     // Fetch queued messages
     const { data: messages } = await supabase
