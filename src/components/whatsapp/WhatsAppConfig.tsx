@@ -19,10 +19,14 @@ export default function WhatsAppConfig() {
   const [copied, setCopied] = useState(false);
   const [flows, setFlows] = useState<Array<{ id: string; name: string; is_active: boolean }>>([]);
   const [activatingFlow, setActivatingFlow] = useState(false);
+  const [provider, setProvider] = useState<"meta" | "evolution">("meta");
   const [form, setForm] = useState({
     phoneNumberId: "",
     wabaId: "",
     accessToken: "",
+    evolutionUrl: "",
+    evolutionApiKey: "",
+    evolutionInstance: "",
   });
 
   const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || "";
@@ -41,12 +45,23 @@ export default function WhatsAppConfig() {
 
     if (sessionData) {
       setSession(sessionData);
-      setForm({
-        phoneNumberId: sessionData.phone_number_id || "",
-        wabaId: sessionData.waba_id || "",
-        accessToken: "",
-      });
     }
+    // Load whatsapp_config to populate provider + creds
+    const { data: tenantRow } = await supabase
+      .from("tenants")
+      .select("whatsapp_config")
+      .eq("id", tenantId!)
+      .single();
+    const cfg = (tenantRow?.whatsapp_config as Record<string, any>) || {};
+    setProvider(cfg.provider === "evolution" ? "evolution" : "meta");
+    setForm({
+      phoneNumberId: sessionData?.phone_number_id || cfg.meta?.phone_number_id || "",
+      wabaId: sessionData?.waba_id || cfg.meta?.waba_id || "",
+      accessToken: "",
+      evolutionUrl: cfg.evolution?.instance_url || "",
+      evolutionApiKey: "",
+      evolutionInstance: cfg.evolution?.instance_name || "",
+    });
     if (flowsData) setFlows(flowsData);
     setLoading(false);
   };
@@ -65,42 +80,64 @@ export default function WhatsAppConfig() {
   };
 
   const handleSave = async () => {
-    if (!tenantId || !form.phoneNumberId.trim()) {
+    if (!tenantId) return;
+    if (provider === "meta" && !form.phoneNumberId.trim()) {
       toast.error("Phone Number ID is required");
+      return;
+    }
+    if (provider === "evolution" && (!form.evolutionUrl.trim() || !form.evolutionInstance.trim())) {
+      toast.error("Evolution Instance URL and Instance Name are required");
       return;
     }
     setSaving(true);
 
-    // Save WhatsApp session
-    const sessionData: any = {
-      tenant_id: tenantId,
-      phone_number_id: form.phoneNumberId.trim(),
-      waba_id: form.wabaId.trim() || null,
-      is_active: true,
+    // Load existing config to merge
+    const { data: tenant } = await supabase
+      .from("tenants")
+      .select("whatsapp_config")
+      .eq("id", tenantId)
+      .single();
+    const existingConfig = (tenant?.whatsapp_config as Record<string, any>) || {};
+    const nextConfig: Record<string, any> = {
+      ...existingConfig,
+      provider,
+      meta: { ...(existingConfig.meta || {}) },
+      evolution: { ...(existingConfig.evolution || {}) },
     };
 
-    if (session) {
-      await supabase.from("whatsapp_sessions").update(sessionData).eq("id", session.id);
+    if (provider === "meta") {
+      nextConfig.meta.phone_number_id = form.phoneNumberId.trim();
+      nextConfig.meta.waba_id = form.wabaId.trim() || null;
+      if (form.accessToken.trim()) {
+        nextConfig.meta.access_token = form.accessToken.trim();
+        // legacy field still read by some code paths
+        nextConfig.access_token = form.accessToken.trim();
+      }
+
+      // Keep whatsapp_sessions in sync for Meta
+      const sessionData: any = {
+        tenant_id: tenantId,
+        phone_number_id: form.phoneNumberId.trim(),
+        waba_id: form.wabaId.trim() || null,
+        is_active: true,
+      };
+      if (session) {
+        await supabase.from("whatsapp_sessions").update(sessionData).eq("id", session.id);
+      } else {
+        await supabase.from("whatsapp_sessions").insert(sessionData);
+      }
     } else {
-      await supabase.from("whatsapp_sessions").insert(sessionData);
+      nextConfig.evolution.instance_url = form.evolutionUrl.trim().replace(/\/+$/, "");
+      nextConfig.evolution.instance_name = form.evolutionInstance.trim();
+      if (form.evolutionApiKey.trim()) {
+        nextConfig.evolution.api_key = form.evolutionApiKey.trim();
+      }
     }
 
-    // Save access token in tenant's whatsapp_config
-    if (form.accessToken.trim()) {
-      const { data: tenant } = await supabase
-        .from("tenants")
-        .select("whatsapp_config")
-        .eq("id", tenantId)
-        .single();
-
-      const existingConfig = (tenant?.whatsapp_config as Record<string, unknown>) || {};
-      await supabase
-        .from("tenants")
-        .update({
-          whatsapp_config: { ...existingConfig, access_token: form.accessToken.trim() },
-        })
-        .eq("id", tenantId);
-    }
+    await supabase
+      .from("tenants")
+      .update({ whatsapp_config: nextConfig })
+      .eq("id", tenantId);
 
     setSaving(false);
     toast.success("WhatsApp configuration saved!");
@@ -208,46 +245,102 @@ export default function WhatsAppConfig() {
         </CardContent>
       </Card>
 
-      {/* API Configuration */}
+      {/* WhatsApp Gateway Provider */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm">API Configuration</CardTitle>
+          <CardTitle className="text-sm">WhatsApp Gateway</CardTitle>
           <CardDescription>
-            Get these values from your{" "}
-            <a href="https://developers.facebook.com" target="_blank" rel="noopener" className="text-primary hover:underline inline-flex items-center gap-1">
-              Meta Developer Console <ExternalLink className="w-3 h-3" />
-            </a>
+            Choose which provider sends messages for this tenant.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label>Phone Number ID</Label>
-            <Input
-              value={form.phoneNumberId}
-              onChange={(e) => setForm({ ...form, phoneNumberId: e.target.value })}
-              placeholder="e.g., 123456789012345"
-            />
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              type="button"
+              variant={provider === "meta" ? "default" : "outline"}
+              onClick={() => setProvider("meta")}
+            >
+              Official Meta API
+            </Button>
+            <Button
+              type="button"
+              variant={provider === "evolution" ? "default" : "outline"}
+              onClick={() => setProvider("evolution")}
+            >
+              Evolution API
+            </Button>
           </div>
-          <div className="space-y-2">
-            <Label>WhatsApp Business Account ID (optional)</Label>
-            <Input
-              value={form.wabaId}
-              onChange={(e) => setForm({ ...form, wabaId: e.target.value })}
-              placeholder="e.g., 987654321098765"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Access Token</Label>
-            <Input
-              type="password"
-              value={form.accessToken}
-              onChange={(e) => setForm({ ...form, accessToken: e.target.value })}
-              placeholder={session ? "••••••••• (saved, enter new to update)" : "Permanent access token"}
-            />
-          </div>
+
+          {provider === "meta" ? (
+            <>
+              <p className="text-xs text-muted-foreground">
+                Get these values from your{" "}
+                <a href="https://developers.facebook.com" target="_blank" rel="noopener" className="text-primary hover:underline inline-flex items-center gap-1">
+                  Meta Developer Console <ExternalLink className="w-3 h-3" />
+                </a>
+              </p>
+              <div className="space-y-2">
+                <Label>Phone Number ID</Label>
+                <Input
+                  value={form.phoneNumberId}
+                  onChange={(e) => setForm({ ...form, phoneNumberId: e.target.value })}
+                  placeholder="e.g., 123456789012345"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>WhatsApp Business Account ID (optional)</Label>
+                <Input
+                  value={form.wabaId}
+                  onChange={(e) => setForm({ ...form, wabaId: e.target.value })}
+                  placeholder="e.g., 987654321098765"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Permanent Access Token</Label>
+                <Input
+                  type="password"
+                  value={form.accessToken}
+                  onChange={(e) => setForm({ ...form, accessToken: e.target.value })}
+                  placeholder={session ? "••••••••• (saved, enter new to update)" : "Permanent access token"}
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-muted-foreground">
+                Configure your self-hosted Evolution API instance.
+              </p>
+              <div className="space-y-2">
+                <Label>Instance URL</Label>
+                <Input
+                  value={form.evolutionUrl}
+                  onChange={(e) => setForm({ ...form, evolutionUrl: e.target.value })}
+                  placeholder="https://evolution.yourdomain.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Instance Name</Label>
+                <Input
+                  value={form.evolutionInstance}
+                  onChange={(e) => setForm({ ...form, evolutionInstance: e.target.value })}
+                  placeholder="e.g., dealer1"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>API Key</Label>
+                <Input
+                  type="password"
+                  value={form.evolutionApiKey}
+                  onChange={(e) => setForm({ ...form, evolutionApiKey: e.target.value })}
+                  placeholder="Enter API key (leave blank to keep saved)"
+                />
+              </div>
+            </>
+          )}
+
           <Button onClick={handleSave} disabled={saving} className="w-full">
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-            {session ? "Update Configuration" : "Connect WhatsApp"}
+            Save Configuration
           </Button>
         </CardContent>
       </Card>

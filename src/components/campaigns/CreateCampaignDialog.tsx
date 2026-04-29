@@ -61,6 +61,7 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
     segment_id: "",
     scheduled_at: "",
     sending_speed: "100", // messages/hour
+    recipient_source: "segment" as "segment" | "service_bookings",
   });
   // varMap: { "1": { source: "name" | "phone" | "email" | "static", value?: string } }
   const [varMap, setVarMap] = useState<Record<string, { source: string; value?: string }>>({});
@@ -141,27 +142,56 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
     if (variables.length) audience_filter.variable_mapping = varMap;
     if (carouselCards.length) audience_filter.carousel_mapping = carouselMap;
 
-    const { error } = await supabase.from("campaigns").insert({
+    const { data: created, error } = await supabase.from("campaigns").insert({
       tenant_id: tenantId,
       name: form.name.trim(),
       type: form.type,
       template_id: form.template_id || null,
-      segment_id: form.segment_id || null,
+      segment_id: form.recipient_source === "segment" ? (form.segment_id || null) : null,
       scheduled_at: form.scheduled_at || null,
       status: form.scheduled_at ? "scheduled" : "draft",
       audience_filter,
-    });
-    setLoading(false);
-    if (error) {
+    }).select("id").single();
+    if (error || !created) {
+      setLoading(false);
       toast.error("Failed to create campaign");
+      return;
+    }
+
+    // Optionally seed recipients from service_bookings (deduped by phone)
+    if (form.recipient_source === "service_bookings") {
+      const { data: bookings } = await supabase
+        .from("service_bookings")
+        .select("phone_number, customer_name, customer_id")
+        .eq("tenant_id", tenantId)
+        .not("phone_number", "is", null);
+      const seen = new Set<string>();
+      const recipients = (bookings || [])
+        .map((b) => ({ phone: (b.phone_number || "").trim(), name: b.customer_name, customer_id: b.customer_id }))
+        .filter((b) => b.phone && !seen.has(b.phone) && (seen.add(b.phone), true))
+        .map((b) => ({
+          tenant_id: tenantId,
+          campaign_id: created.id,
+          phone_number: b.phone,
+          customer_name: b.name,
+          customer_id: b.customer_id,
+          status: "pending",
+        }));
+      if (recipients.length > 0) {
+        await supabase.from("campaign_recipients").insert(recipients);
+        await supabase.from("campaigns").update({ recipient_count: recipients.length }).eq("id", created.id);
+      }
+      toast.success(`Campaign created with ${recipients.length} recipients from bookings`);
     } else {
       toast.success(form.scheduled_at ? "Campaign scheduled" : "Campaign created");
-      onCreated();
-      onOpenChange(false);
-      setForm({ name: "", type: "whatsapp", template_id: "", segment_id: "", scheduled_at: "", sending_speed: "100" });
-      setVarMap({});
-      setCarouselMap({});
     }
+
+    setLoading(false);
+    onCreated();
+    onOpenChange(false);
+    setForm({ name: "", type: "whatsapp", template_id: "", segment_id: "", scheduled_at: "", sending_speed: "100", recipient_source: "segment" });
+    setVarMap({});
+    setCarouselMap({});
   };
 
   return (
@@ -292,16 +322,38 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
           )}
 
           <div>
-            <Label>Audience Segment</Label>
-            <Select value={form.segment_id} onValueChange={(v) => setForm({ ...form, segment_id: v })}>
-              <SelectTrigger><SelectValue placeholder="Select segment" /></SelectTrigger>
+            <Label>Recipients Source</Label>
+            <Select
+              value={form.recipient_source}
+              onValueChange={(v) => setForm({ ...form, recipient_source: v as "segment" | "service_bookings" })}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {segments.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>{s.name} ({s.customer_count} contacts)</SelectItem>
-                ))}
+                <SelectItem value="segment">Audience Segment</SelectItem>
+                <SelectItem value="service_bookings">Import from Service Bookings (deduped)</SelectItem>
               </SelectContent>
             </Select>
           </div>
+
+          {form.recipient_source === "segment" && (
+            <div>
+              <Label>Audience Segment</Label>
+              <Select value={form.segment_id} onValueChange={(v) => setForm({ ...form, segment_id: v })}>
+                <SelectTrigger><SelectValue placeholder="Select segment" /></SelectTrigger>
+                <SelectContent>
+                  {segments.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.name} ({s.customer_count} contacts)</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {form.recipient_source === "service_bookings" && (
+            <p className="text-xs text-muted-foreground">
+              All unique phone numbers from your service bookings will be added as recipients when the campaign is created.
+            </p>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div>

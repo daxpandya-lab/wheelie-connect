@@ -64,30 +64,58 @@ Deno.serve(async (req) => {
       });
     }
 
-    const waConfig = tenantData.whatsapp_config as Record<string, string> | null;
-    const accessToken = waConfig?.access_token;
+    const waConfig = (tenantData.whatsapp_config as Record<string, any>) || {};
+    const provider: "meta" | "evolution" = waConfig.provider === "evolution" ? "evolution" : "meta";
 
-    if (!accessToken) {
-      return new Response(JSON.stringify({ error: "WhatsApp access token not configured" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    // Meta credentials (with legacy fallbacks)
+    const metaAccessToken = waConfig.meta?.access_token || waConfig.access_token;
+    let metaPhoneNumberId: string | null = waConfig.meta?.phone_number_id || null;
+
+    // Evolution credentials
+    const evoUrl: string | undefined = waConfig.evolution?.instance_url;
+    const evoInstance: string | undefined = waConfig.evolution?.instance_name;
+    const evoApiKey: string | undefined = waConfig.evolution?.api_key;
+
+    if (provider === "meta") {
+      if (!metaAccessToken) {
+        return new Response(JSON.stringify({ error: "WhatsApp access token not configured" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (!metaPhoneNumberId) {
+        const { data: session } = await supabase
+          .from("whatsapp_sessions")
+          .select("phone_number_id")
+          .eq("tenant_id", tenant_id)
+          .eq("is_active", true)
+          .single();
+        if (!session) {
+          return new Response(JSON.stringify({ error: "No active WhatsApp session" }), {
+            status: 404,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        metaPhoneNumberId = session.phone_number_id;
+      }
+    } else {
+      if (!evoUrl || !evoInstance || !evoApiKey) {
+        return new Response(JSON.stringify({ error: "Evolution API not fully configured" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
-    // Get tenant's WhatsApp session
-    const { data: session } = await supabase
-      .from("whatsapp_sessions")
-      .select("phone_number_id")
-      .eq("tenant_id", tenant_id)
-      .eq("is_active", true)
-      .single();
-
-    if (!session) {
-      return new Response(JSON.stringify({ error: "No active WhatsApp session" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // Helper: replace {{name}}, {{phone}}, {{vehicle_model}}, {{booking_date}} placeholders
+    const renderVariables = (text: string, ctx: Record<string, string | null | undefined>): string => {
+      if (!text) return text;
+      return text.replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, key) => {
+        const v = ctx[key.toLowerCase()];
+        return v == null || v === "" ? `{{${key}}}` : String(v);
       });
-    }
+    };
+
 
     // Fetch queued messages
     const { data: messages } = await supabase
@@ -115,58 +143,109 @@ Deno.serve(async (req) => {
         .eq("id", msg.id);
 
       try {
-        let waBody: Record<string, unknown>;
+        // Build variable context for placeholder substitution.
+        // Look up customer + most recent service booking by phone number.
+        const ctx: Record<string, string> = {
+          phone: msg.recipient_phone || "",
+        };
+        const { data: cust } = await supabase
+          .from("customers")
+          .select("name")
+          .eq("tenant_id", tenant_id)
+          .eq("phone", msg.recipient_phone)
+          .limit(1)
+          .maybeSingle();
+        if (cust?.name) ctx.name = cust.name;
 
-        if (msg.template_name) {
-          waBody = {
-            messaging_product: "whatsapp",
-            to: msg.recipient_phone,
-            type: "template",
-            template: {
-              name: msg.template_name,
-              language: { code: "en" },
-              components: msg.template_params || [],
+        const { data: booking } = await supabase
+          .from("service_bookings")
+          .select("customer_name, vehicle_model, booking_date")
+          .eq("tenant_id", tenant_id)
+          .eq("phone_number", msg.recipient_phone)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (booking) {
+          if (!ctx.name && booking.customer_name) ctx.name = booking.customer_name;
+          if (booking.vehicle_model) ctx.vehicle_model = booking.vehicle_model;
+          if (booking.booking_date) ctx.booking_date = booking.booking_date;
+        }
+        if (!ctx.name) ctx.name = "there";
+
+        const renderedContent = msg.content ? renderVariables(msg.content, ctx) : msg.content;
+
+        let response: Response;
+        let result: any;
+
+        if (provider === "meta") {
+          let waBody: Record<string, unknown>;
+          if (msg.template_name) {
+            waBody = {
+              messaging_product: "whatsapp",
+              to: msg.recipient_phone,
+              type: "template",
+              template: {
+                name: msg.template_name,
+                language: { code: "en" },
+                components: msg.template_params || [],
+              },
+            };
+          } else {
+            waBody = {
+              messaging_product: "whatsapp",
+              to: msg.recipient_phone,
+              type: "text",
+              text: { body: renderedContent },
+            };
+          }
+
+          const metaUrl = `https://graph.facebook.com/v21.0/${metaPhoneNumberId}/messages`;
+          console.log(`[BATCH-SEND][META] POST ${metaUrl}`);
+          response = await fetch(metaUrl, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${metaAccessToken}`,
+              "Content-Type": "application/json",
             },
-          };
+            body: JSON.stringify(waBody),
+          });
+          result = await response.json();
         } else {
-          waBody = {
-            messaging_product: "whatsapp",
-            to: msg.recipient_phone,
-            type: "text",
-            text: { body: msg.content },
+          // Evolution API: POST {instance_url}/message/sendText/{instance_name}
+          const evoEndpoint = `${evoUrl}/message/sendText/${encodeURIComponent(evoInstance!)}`;
+          const evoBody = {
+            number: msg.recipient_phone,
+            text: renderedContent ?? "",
           };
+          console.log(`[BATCH-SEND][EVOLUTION] POST ${evoEndpoint}`);
+          response = await fetch(evoEndpoint, {
+            method: "POST",
+            headers: {
+              apikey: evoApiKey!,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(evoBody),
+          });
+          result = await response.json().catch(() => ({}));
         }
 
-        const metaUrl = `https://graph.facebook.com/v21.0/${session.phone_number_id}/messages`;
-        console.log(`[BATCH-SEND] POST ${metaUrl}`);
-        console.log(`[BATCH-SEND] Payload: ${JSON.stringify(waBody)}`);
-        console.log(`[BATCH-SEND] Auth: Bearer ${accessToken.substring(0, 8)}...`);
+        console.log(`[BATCH-SEND] Response ${response.status}: ${JSON.stringify(result).slice(0, 500)}`);
 
-        const response = await fetch(metaUrl, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(waBody),
-        });
+        const externalId =
+          provider === "meta"
+            ? result?.messages?.[0]?.id
+            : result?.key?.id || result?.id;
 
-        const result = await response.json();
-        console.log(`[BATCH-SEND] Meta response status: ${response.status} ${response.statusText}`);
-        console.log(`[BATCH-SEND] Meta response body: ${JSON.stringify(result)}`);
-
-        if (response.ok && result.messages?.[0]?.id) {
-          console.log(`[BATCH-SEND] ✅ Sent to ${msg.recipient_phone}: ${result.messages[0].id}`);
+        if (response.ok && externalId) {
           await supabase
             .from("whatsapp_message_queue")
-            .update({ status: "sent", external_message_id: result.messages[0].id })
+            .update({ status: "sent", external_message_id: externalId })
             .eq("id", msg.id);
           sent++;
         } else {
-          console.error(`[BATCH-SEND] ❌ Failed for ${msg.recipient_phone}: ${JSON.stringify(result.error || result)}`);
           await supabase
             .from("whatsapp_message_queue")
-            .update({ status: "failed", error_message: JSON.stringify(result.error || result) })
+            .update({ status: "failed", error_message: JSON.stringify(result?.error || result || { status: response.status }) })
             .eq("id", msg.id);
           failed++;
         }
