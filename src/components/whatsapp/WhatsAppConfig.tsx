@@ -80,42 +80,64 @@ export default function WhatsAppConfig() {
   };
 
   const handleSave = async () => {
-    if (!tenantId || !form.phoneNumberId.trim()) {
+    if (!tenantId) return;
+    if (provider === "meta" && !form.phoneNumberId.trim()) {
       toast.error("Phone Number ID is required");
+      return;
+    }
+    if (provider === "evolution" && (!form.evolutionUrl.trim() || !form.evolutionInstance.trim())) {
+      toast.error("Evolution Instance URL and Instance Name are required");
       return;
     }
     setSaving(true);
 
-    // Save WhatsApp session
-    const sessionData: any = {
-      tenant_id: tenantId,
-      phone_number_id: form.phoneNumberId.trim(),
-      waba_id: form.wabaId.trim() || null,
-      is_active: true,
+    // Load existing config to merge
+    const { data: tenant } = await supabase
+      .from("tenants")
+      .select("whatsapp_config")
+      .eq("id", tenantId)
+      .single();
+    const existingConfig = (tenant?.whatsapp_config as Record<string, any>) || {};
+    const nextConfig: Record<string, any> = {
+      ...existingConfig,
+      provider,
+      meta: { ...(existingConfig.meta || {}) },
+      evolution: { ...(existingConfig.evolution || {}) },
     };
 
-    if (session) {
-      await supabase.from("whatsapp_sessions").update(sessionData).eq("id", session.id);
+    if (provider === "meta") {
+      nextConfig.meta.phone_number_id = form.phoneNumberId.trim();
+      nextConfig.meta.waba_id = form.wabaId.trim() || null;
+      if (form.accessToken.trim()) {
+        nextConfig.meta.access_token = form.accessToken.trim();
+        // legacy field still read by some code paths
+        nextConfig.access_token = form.accessToken.trim();
+      }
+
+      // Keep whatsapp_sessions in sync for Meta
+      const sessionData: any = {
+        tenant_id: tenantId,
+        phone_number_id: form.phoneNumberId.trim(),
+        waba_id: form.wabaId.trim() || null,
+        is_active: true,
+      };
+      if (session) {
+        await supabase.from("whatsapp_sessions").update(sessionData).eq("id", session.id);
+      } else {
+        await supabase.from("whatsapp_sessions").insert(sessionData);
+      }
     } else {
-      await supabase.from("whatsapp_sessions").insert(sessionData);
+      nextConfig.evolution.instance_url = form.evolutionUrl.trim().replace(/\/+$/, "");
+      nextConfig.evolution.instance_name = form.evolutionInstance.trim();
+      if (form.evolutionApiKey.trim()) {
+        nextConfig.evolution.api_key = form.evolutionApiKey.trim();
+      }
     }
 
-    // Save access token in tenant's whatsapp_config
-    if (form.accessToken.trim()) {
-      const { data: tenant } = await supabase
-        .from("tenants")
-        .select("whatsapp_config")
-        .eq("id", tenantId)
-        .single();
-
-      const existingConfig = (tenant?.whatsapp_config as Record<string, unknown>) || {};
-      await supabase
-        .from("tenants")
-        .update({
-          whatsapp_config: { ...existingConfig, access_token: form.accessToken.trim() },
-        })
-        .eq("id", tenantId);
-    }
+    await supabase
+      .from("tenants")
+      .update({ whatsapp_config: nextConfig })
+      .eq("id", tenantId);
 
     setSaving(false);
     toast.success("WhatsApp configuration saved!");
