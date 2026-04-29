@@ -791,6 +791,15 @@ export default function PublicChatPage() {
           pickup_address_hash: addressHashKey,
           pickup_address_deduped: addressDeduped,
           pickup_address_geocoded: !!geo,
+          // Explicit response keys so consumers can show exactly what was reused and why
+          canonicalAddress: addressClean,
+          normalizedAddressKey: addressHashKey,
+          reusedFromBookingId,
+          addressReuseReason: addressDeduped
+            ? "matched_prior_booking_hash"
+            : geo
+              ? "geocoded_fresh"
+              : "not_geocoded",
           ...(geo ? { pickup_lat: geo.lat, pickup_lon: geo.lon, pickup_resolved: geo.display_name } : {}),
         }
       : {};
