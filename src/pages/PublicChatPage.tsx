@@ -495,18 +495,20 @@ export default function PublicChatPage() {
   ): Promise<{
     canonical: string;
     geo: { lat: number; lon: number; display_name: string } | null;
+    reusedFromBookingId: string | null;
   } | null> => {
     if (!dealer || !phone || !normalized) return null;
     try {
       const { data: rows } = await supabase
         .from("service_bookings")
-        .select("metadata")
+        .select("id, metadata")
         .eq("tenant_id", dealer.id)
         .eq("phone_number", phone)
         .order("created_at", { ascending: false })
         .limit(25);
       for (const row of rows || []) {
-        const meta = (row as { metadata?: Record<string, unknown> }).metadata || {};
+        const r = row as { id?: string; metadata?: Record<string, unknown> };
+        const meta = r.metadata || {};
         const prior = String(meta.pickup_address_canonical || meta.pickup_address || "");
         if (!prior) continue;
         const priorHash = String(meta.pickup_address_hash || addressHash(normalizeAddress(prior)));
@@ -517,6 +519,7 @@ export default function PublicChatPage() {
           return {
             canonical: prior,
             geo: lat != null && lon != null ? { lat, lon, display_name: display } : null,
+            reusedFromBookingId: r.id ?? null,
           };
         }
       }
