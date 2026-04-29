@@ -45,12 +45,23 @@ export default function WhatsAppConfig() {
 
     if (sessionData) {
       setSession(sessionData);
-      setForm({
-        phoneNumberId: sessionData.phone_number_id || "",
-        wabaId: sessionData.waba_id || "",
-        accessToken: "",
-      });
     }
+    // Load whatsapp_config to populate provider + creds
+    const { data: tenantRow } = await supabase
+      .from("tenants")
+      .select("whatsapp_config")
+      .eq("id", tenantId!)
+      .single();
+    const cfg = (tenantRow?.whatsapp_config as Record<string, any>) || {};
+    setProvider(cfg.provider === "evolution" ? "evolution" : "meta");
+    setForm({
+      phoneNumberId: sessionData?.phone_number_id || cfg.meta?.phone_number_id || "",
+      wabaId: sessionData?.waba_id || cfg.meta?.waba_id || "",
+      accessToken: "",
+      evolutionUrl: cfg.evolution?.instance_url || "",
+      evolutionApiKey: "",
+      evolutionInstance: cfg.evolution?.instance_name || "",
+    });
     if (flowsData) setFlows(flowsData);
     setLoading(false);
   };
