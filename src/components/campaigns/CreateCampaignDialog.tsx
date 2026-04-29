@@ -322,16 +322,38 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
           )}
 
           <div>
-            <Label>Audience Segment</Label>
-            <Select value={form.segment_id} onValueChange={(v) => setForm({ ...form, segment_id: v })}>
-              <SelectTrigger><SelectValue placeholder="Select segment" /></SelectTrigger>
+            <Label>Recipients Source</Label>
+            <Select
+              value={form.recipient_source}
+              onValueChange={(v) => setForm({ ...form, recipient_source: v as "segment" | "service_bookings" })}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {segments.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>{s.name} ({s.customer_count} contacts)</SelectItem>
-                ))}
+                <SelectItem value="segment">Audience Segment</SelectItem>
+                <SelectItem value="service_bookings">Import from Service Bookings (deduped)</SelectItem>
               </SelectContent>
             </Select>
           </div>
+
+          {form.recipient_source === "segment" && (
+            <div>
+              <Label>Audience Segment</Label>
+              <Select value={form.segment_id} onValueChange={(v) => setForm({ ...form, segment_id: v })}>
+                <SelectTrigger><SelectValue placeholder="Select segment" /></SelectTrigger>
+                <SelectContent>
+                  {segments.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.name} ({s.customer_count} contacts)</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {form.recipient_source === "service_bookings" && (
+            <p className="text-xs text-muted-foreground">
+              All unique phone numbers from your service bookings will be added as recipients when the campaign is created.
+            </p>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div>
