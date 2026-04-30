@@ -506,6 +506,19 @@ async function processChatbotFlow(
   const currentNodeId = metadata.current_node_id as string | null;
   const collectedData = (metadata.collected_data as Record<string, unknown>) || {};
 
+  // --- Auto language detection ---
+  // Lock in the language on the first inbound text and reuse for the whole conversation.
+  // Interactive button/list replies are language-agnostic, so skip detection for those.
+  let lang: Lang = (collectedData.preferred_language as Lang) || "en";
+  if (!collectedData.preferred_language && userMessage && !interactiveId) {
+    const detected = detectLanguage(userMessage);
+    if (detected && SUPPORTED_LANGS.includes(detected)) {
+      lang = detected;
+      collectedData.preferred_language = detected;
+      console.log(`[FLOW] auto-detected language=${detected} for ${customerPhone}`);
+    }
+  }
+
   let flowId = currentFlowId;
   let flowData: any = null;
 
