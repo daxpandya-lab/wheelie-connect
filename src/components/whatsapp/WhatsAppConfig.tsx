@@ -248,9 +248,9 @@ export default function WhatsAppConfig() {
       {/* WhatsApp Gateway Provider */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm">WhatsApp Gateway</CardTitle>
+          <CardTitle className="text-sm">Primary Gateway for Chatbot</CardTitle>
           <CardDescription>
-            Choose which provider sends messages for this tenant.
+            Choose which provider receives webhooks and sends replies for this tenant's chatbot.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
