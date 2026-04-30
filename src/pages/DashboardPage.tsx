@@ -3,9 +3,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import TopBar from "@/components/TopBar";
 import KpiCard from "@/components/KpiCard";
-import { Users, Wrench, Car, MessageSquare, TrendingUp, Clock, CheckCircle, Target, AlertTriangle } from "lucide-react";
+import { Users, Wrench, Car, MessageSquare, TrendingUp, Clock, CheckCircle, Target, AlertTriangle, Wifi, WifiOff } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { format, isToday } from "date-fns";
+
+type GatewayStatus = {
+  provider: "meta" | "evolution";
+  connected: boolean;
+  detail: string;
+};
 
 export default function DashboardPage() {
   const { tenantId } = useAuth();
@@ -13,6 +19,7 @@ export default function DashboardPage() {
   const [weeklyBookings, setWeeklyBookings] = useState<{ day: string; bookings: number }[]>([]);
   const [recentBookings, setRecentBookings] = useState<any[]>([]);
   const [maxPerDay, setMaxPerDay] = useState<number | null>(null);
+  const [gatewayStatus, setGatewayStatus] = useState<GatewayStatus | null>(null);
 
   const fetchDashboard = useCallback(async () => {
     if (!tenantId) return;
