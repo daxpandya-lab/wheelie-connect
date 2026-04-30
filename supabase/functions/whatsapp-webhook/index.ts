@@ -724,7 +724,7 @@ async function processChatbotFlow(
   }
 
   if (node) {
-    let replyText = node.message?.en || "";
+    let replyText = pickLang(node.message, lang);
     replyText = replyText.replace(/\{\{(\w+)\}\}/g, (_: string, key: string) => {
       if (key === "booking_id") return `BK-${Date.now().toString(36).toUpperCase()}`;
       return String(collectedData[key] ?? `[${key}]`);
@@ -739,7 +739,7 @@ async function processChatbotFlow(
         body: replyText,
         buttons: node.options.slice(0, 3).map((o: any, i: number) => ({
           id: o.value || `opt_${i}`,
-          title: (o.label || "").substring(0, 20),
+          title: (pickLang(o.label, lang) || "").substring(0, 20),
         })),
       });
     } else {
