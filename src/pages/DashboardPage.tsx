@@ -30,11 +30,34 @@ export default function DashboardPage() {
       supabase.from("test_drive_bookings").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
       supabase.from("chatbot_conversations").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("status", "active"),
       supabase.from("leads").select("id, status").eq("tenant_id", tenantId),
-      supabase.from("tenants").select("settings").eq("id", tenantId).single(),
+      supabase.from("tenants").select("settings, whatsapp_config").eq("id", tenantId).single(),
     ]);
 
     const settings = tenantRes.data?.settings as Record<string, unknown> | null;
     if (settings?.max_vehicles_per_day) setMaxPerDay(Number(settings.max_vehicles_per_day));
+
+    // Gateway connection status
+    const wa = (tenantRes.data?.whatsapp_config as Record<string, any> | null) || {};
+    const provider: "meta" | "evolution" = wa.provider === "evolution" ? "evolution" : "meta";
+    if (provider === "evolution") {
+      const evo = wa.evolution || {};
+      const ok = !!(evo.instance_url && evo.instance_name && evo.api_key);
+      setGatewayStatus({
+        provider,
+        connected: ok,
+        detail: ok ? `Evolution · ${evo.instance_name}` : "Evolution API not fully configured",
+      });
+    } else {
+      const meta = wa.meta || {};
+      const token = meta.access_token || wa.access_token;
+      const phoneId = meta.phone_number_id;
+      const ok = !!(token && phoneId);
+      setGatewayStatus({
+        provider,
+        connected: ok,
+        detail: ok ? `Meta Cloud API · ${phoneId}` : "Meta token or Phone Number ID missing",
+      });
+    }
 
     const bookings = bookingsRes.data || [];
     const leads = leadsRes.data || [];
