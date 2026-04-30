@@ -163,6 +163,160 @@ Deno.serve(async (req) => {
   if (req.method === "POST") {
     try {
       const body = await req.json();
+
+      // -------- Evolution API webhook (message.upsert / messages.upsert) --------
+      // Evolution payload shape (varies slightly by version):
+      // { event: "messages.upsert", instance: "<instance_name>",
+      //   data: { key: { remoteJid: "5511...@s.whatsapp.net", id, fromMe },
+      //           message: { conversation, extendedTextMessage:{text}, buttonsResponseMessage:{...}, listResponseMessage:{...} },
+      //           pushName: "Customer Name" } }
+      const evtName = (body.event || body.eventName || "").toString().toLowerCase().replace(/_/g, ".");
+      const isEvolution =
+        !!body.instance &&
+        (evtName.includes("messages.upsert") || evtName.includes("message.upsert") ||
+         evtName.includes("messages.update") || !!body.data?.key);
+
+      if (isEvolution) {
+        const instanceName = String(body.instance || "").trim();
+        const data = body.data || {};
+        const key = data.key || {};
+        if (key.fromMe) {
+          return new Response(JSON.stringify({ success: true, skipped: "fromMe" }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Extract phone from remoteJid (strip @s.whatsapp.net / @c.us, drop group msgs)
+        const remoteJid: string = key.remoteJid || "";
+        if (!remoteJid || remoteJid.includes("@g.us")) {
+          return new Response(JSON.stringify({ success: true, skipped: "group_or_empty" }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const customerPhone = remoteJid.split("@")[0].replace(/\D/g, "");
+        if (!customerPhone) {
+          return new Response(JSON.stringify({ success: true, skipped: "no_phone" }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const customerName = data.pushName || customerPhone;
+
+        // Extract message text + interactive id
+        const m = data.message || {};
+        let messageText = "";
+        let interactiveId: string | null = null;
+        if (typeof m.conversation === "string") messageText = m.conversation;
+        else if (m.extendedTextMessage?.text) messageText = m.extendedTextMessage.text;
+        else if (m.buttonsResponseMessage) {
+          messageText = m.buttonsResponseMessage.selectedDisplayText || m.buttonsResponseMessage.selectedButtonId || "";
+          interactiveId = m.buttonsResponseMessage.selectedButtonId || null;
+        } else if (m.listResponseMessage) {
+          messageText = m.listResponseMessage.title || m.listResponseMessage.singleSelectReply?.selectedRowId || "";
+          interactiveId = m.listResponseMessage.singleSelectReply?.selectedRowId || null;
+        } else if (m.templateButtonReplyMessage) {
+          messageText = m.templateButtonReplyMessage.selectedDisplayText || "";
+          interactiveId = m.templateButtonReplyMessage.selectedId || null;
+        }
+
+        if (!messageText && !interactiveId) {
+          // Non-text payload (image/audio/etc.) — acknowledge and ignore for now
+          return new Response(JSON.stringify({ success: true, skipped: "non_text" }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Resolve tenant by Evolution instance_name in whatsapp_config
+        const { data: tenantRow } = await supabase
+          .from("tenants")
+          .select("id, status, whatsapp_config")
+          .eq("status", "active")
+          .filter("whatsapp_config->evolution->>instance_name", "eq", instanceName)
+          .maybeSingle();
+
+        if (!tenantRow) {
+          console.error(`[EVO] No tenant for instance="${instanceName}"`);
+          return new Response(JSON.stringify({ success: true, skipped: "no_tenant" }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const tenantId = tenantRow.id;
+
+        const allowed = await checkRateLimit(supabase, `webhook:evo:${tenantId}`, 120, 60);
+        if (!allowed) {
+          return new Response(JSON.stringify({ success: true, rate_limited: true }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Stamp last_webhook_at on whatsapp_sessions if one exists (for status indicator)
+        await supabase.from("whatsapp_sessions")
+          .update({ last_webhook_at: new Date().toISOString() })
+          .eq("tenant_id", tenantId);
+
+        // Find / create customer
+        let customerId: string | null = null;
+        const { data: existingCustomer } = await supabase
+          .from("customers").select("id")
+          .eq("tenant_id", tenantId).eq("phone", customerPhone).maybeSingle();
+        if (existingCustomer) customerId = existingCustomer.id;
+        else {
+          const { data: newCustomer } = await supabase.from("customers")
+            .insert({ tenant_id: tenantId, name: customerName, phone: customerPhone })
+            .select("id").single();
+          customerId = newCustomer?.id || null;
+        }
+
+        // Find / create conversation
+        const { data: existingConvo } = await supabase
+          .from("chatbot_conversations").select("id, metadata")
+          .eq("tenant_id", tenantId).eq("phone_number", customerPhone)
+          .eq("status", "active").order("started_at", { ascending: false })
+          .limit(1).maybeSingle();
+
+        let conversationId: string;
+        let conversationMetadata: Record<string, unknown> = {};
+        if (existingConvo) {
+          conversationId = existingConvo.id;
+          conversationMetadata = (existingConvo.metadata as Record<string, unknown>) || {};
+        } else {
+          const initialMeta: Record<string, unknown> = {
+            current_flow_id: null,
+            current_node_id: null,
+            collected_data: {},
+            gateway: "evolution",
+          };
+          const { data: newConvo } = await supabase.from("chatbot_conversations")
+            .insert({
+              tenant_id: tenantId, customer_id: customerId, channel: "whatsapp",
+              phone_number: customerPhone, status: "active",
+              metadata: initialMeta,
+            })
+            .select("id, metadata").single();
+          conversationId = newConvo!.id;
+          conversationMetadata = (newConvo!.metadata as Record<string, unknown>) || {};
+        }
+
+        // Persist inbound message
+        const { data: savedMessage } = await supabase.from("chatbot_messages")
+          .insert({
+            tenant_id: tenantId, conversation_id: conversationId, sender_type: "customer",
+            content: messageText,
+            message_type: "text",
+            metadata: { gateway: "evolution", evo_message_id: key.id, interactive_id: interactiveId },
+          })
+          .select("id").single();
+
+        await processChatbotFlow(
+          supabase, tenantId, conversationId, savedMessage!.id,
+          messageText, interactiveId, customerPhone, conversationMetadata, customerId,
+        );
+
+        return new Response(JSON.stringify({ success: true, gateway: "evolution" }), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // -------- Official Meta Cloud API webhook --------
       const entries = body.object === "whatsapp_business_account" ? body.entry : [];
 
       for (const entry of entries) {
