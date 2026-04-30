@@ -118,6 +118,43 @@ export default function DashboardPage() {
     <>
       <TopBar title="Dashboard" />
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        {/* WhatsApp Connection Status */}
+        {gatewayStatus && (
+          <div
+            className={`rounded-xl p-4 flex items-center gap-3 border ${
+              gatewayStatus.connected
+                ? "bg-success/10 border-success/30"
+                : "bg-destructive/10 border-destructive/30"
+            }`}
+          >
+            <div
+              className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                gatewayStatus.connected ? "bg-success/20" : "bg-destructive/20"
+              }`}
+            >
+              {gatewayStatus.connected ? (
+                <Wifi className="w-5 h-5 text-success" />
+              ) : (
+                <WifiOff className="w-5 h-5 text-destructive" />
+              )}
+            </div>
+            <div className="flex-1">
+              <p
+                className={`text-sm font-semibold ${
+                  gatewayStatus.connected ? "text-success" : "text-destructive"
+                }`}
+              >
+                WhatsApp:{" "}
+                {gatewayStatus.connected ? "Connected" : "Not Connected"}
+              </p>
+              <p className="text-xs text-muted-foreground">{gatewayStatus.detail}</p>
+            </div>
+            <span className="text-xs px-2 py-1 rounded-full bg-secondary text-foreground capitalize">
+              {gatewayStatus.provider === "evolution" ? "Evolution API" : "Meta API"}
+            </span>
+          </div>
+        )}
+
         {/* Capacity Alert */}
         {maxPerDay && (
           <div className={`rounded-xl p-4 flex items-center gap-3 border ${
