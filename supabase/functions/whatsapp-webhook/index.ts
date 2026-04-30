@@ -2,6 +2,33 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 // ============================================================
+// LANGUAGE DETECTION — script-based with keyword fallback
+// Returns one of the supported flow languages: "en" | "hi" | "ar"
+// ============================================================
+type Lang = "en" | "hi" | "ar";
+const SUPPORTED_LANGS: Lang[] = ["en", "hi", "ar"];
+
+function detectLanguage(text: string): Lang | null {
+  if (!text) return null;
+  // Arabic script (covers Arabic, Persian, Urdu shared range)
+  if (/[\u0600-\u06FF\u0750-\u077F]/.test(text)) return "ar";
+  // Devanagari (Hindi)
+  if (/[\u0900-\u097F]/.test(text)) return "hi";
+  // Romanized Hindi keyword sniff (very common on WhatsApp)
+  const lower = text.toLowerCase();
+  const hiRoman = /\b(namaste|namaskar|kaise|kaisa|kaisi|kya|hai|haan|nahi|nahin|theek|thik|sahi|kar|karo|chahiye|seva|gaadi|service|book karna|krna|krdo|kardo|bhai|bhaiya|aap|tumhara|hamara|hindi|mein|me|mai)\b/;
+  if (hiRoman.test(lower)) return "hi";
+  return "en";
+}
+
+// Pick the localized string from a {en,hi,ar} bundle, falling back gracefully.
+function pickLang(bundle: any, lang: Lang): string {
+  if (!bundle) return "";
+  if (typeof bundle === "string") return bundle;
+  return bundle[lang] || bundle.en || bundle.hi || bundle.ar || "";
+}
+
+// ============================================================
 // FLOW CACHE — in-memory, invalidated when chatbot_flows.updated_at changes
 // ============================================================
 type CachedFlow = { id: string; flow_data: any; updated_at: string; cachedAt: number };
@@ -479,6 +506,19 @@ async function processChatbotFlow(
   const currentNodeId = metadata.current_node_id as string | null;
   const collectedData = (metadata.collected_data as Record<string, unknown>) || {};
 
+  // --- Auto language detection ---
+  // Lock in the language on the first inbound text and reuse for the whole conversation.
+  // Interactive button/list replies are language-agnostic, so skip detection for those.
+  let lang: Lang = (collectedData.preferred_language as Lang) || "en";
+  if (!collectedData.preferred_language && userMessage && !interactiveId) {
+    const detected = detectLanguage(userMessage);
+    if (detected && SUPPORTED_LANGS.includes(detected)) {
+      lang = detected;
+      collectedData.preferred_language = detected;
+      console.log(`[FLOW] auto-detected language=${detected} for ${customerPhone}`);
+    }
+  }
+
   let flowId = currentFlowId;
   let flowData: any = null;
 
@@ -538,7 +578,7 @@ async function processChatbotFlow(
 
       if (!isoDate) {
         // Re-prompt with buttons
-        await sendDateButtons(supabase, tenantId, conversationId, customerPhone, node.message?.en || "Please pick a date:");
+        await sendDateButtons(supabase, tenantId, conversationId, customerPhone, pickLang(node.message, lang) || "Please pick a date:");
         await updateConversationMetadata(supabase, conversationId, flowId, nodeId, collectedData);
         return;
       }
@@ -564,11 +604,17 @@ async function processChatbotFlow(
       }
 
       if (node.options) {
-        const match = node.options.find((o: any) =>
-          o.value.toLowerCase() === userMessage.toLowerCase() ||
-          o.label.toLowerCase() === userMessage.toLowerCase() ||
-          o.value === interactiveId
-        );
+        const um = userMessage.toLowerCase();
+        const match = node.options.find((o: any) => {
+          if (o.value === interactiveId) return true;
+          if (o.value && o.value.toLowerCase() === um) return true;
+          // Match against the label in any supported language so users can reply
+          // in their native language ("haan" / "نعم" / "yes") and still progress.
+          const labels = typeof o.label === "string"
+            ? [o.label]
+            : SUPPORTED_LANGS.map((l) => o.label?.[l]).filter(Boolean);
+          return labels.some((lbl: string) => lbl.toLowerCase() === um);
+        });
         nextNodeId = match?.nextNodeId || node.options[0]?.nextNodeId || node.nextNodeId;
       } else {
         nextNodeId = node.nextNodeId;
@@ -678,7 +724,7 @@ async function processChatbotFlow(
   }
 
   if (node) {
-    let replyText = node.message?.en || "";
+    let replyText = pickLang(node.message, lang);
     replyText = replyText.replace(/\{\{(\w+)\}\}/g, (_: string, key: string) => {
       if (key === "booking_id") return `BK-${Date.now().toString(36).toUpperCase()}`;
       return String(collectedData[key] ?? `[${key}]`);
@@ -693,7 +739,7 @@ async function processChatbotFlow(
         body: replyText,
         buttons: node.options.slice(0, 3).map((o: any, i: number) => ({
           id: o.value || `opt_${i}`,
-          title: (o.label || "").substring(0, 20),
+          title: (pickLang(o.label, lang) || "").substring(0, 20),
         })),
       });
     } else {
