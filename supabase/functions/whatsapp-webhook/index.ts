@@ -578,7 +578,7 @@ async function processChatbotFlow(
 
       if (!isoDate) {
         // Re-prompt with buttons
-        await sendDateButtons(supabase, tenantId, conversationId, customerPhone, node.message?.en || "Please pick a date:");
+        await sendDateButtons(supabase, tenantId, conversationId, customerPhone, pickLang(node.message, lang) || "Please pick a date:");
         await updateConversationMetadata(supabase, conversationId, flowId, nodeId, collectedData);
         return;
       }
