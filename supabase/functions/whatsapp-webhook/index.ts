@@ -2,6 +2,33 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 // ============================================================
+// LANGUAGE DETECTION — script-based with keyword fallback
+// Returns one of the supported flow languages: "en" | "hi" | "ar"
+// ============================================================
+type Lang = "en" | "hi" | "ar";
+const SUPPORTED_LANGS: Lang[] = ["en", "hi", "ar"];
+
+function detectLanguage(text: string): Lang | null {
+  if (!text) return null;
+  // Arabic script (covers Arabic, Persian, Urdu shared range)
+  if (/[\u0600-\u06FF\u0750-\u077F]/.test(text)) return "ar";
+  // Devanagari (Hindi)
+  if (/[\u0900-\u097F]/.test(text)) return "hi";
+  // Romanized Hindi keyword sniff (very common on WhatsApp)
+  const lower = text.toLowerCase();
+  const hiRoman = /\b(namaste|namaskar|kaise|kaisa|kaisi|kya|hai|haan|nahi|nahin|theek|thik|sahi|kar|karo|chahiye|seva|gaadi|service|book karna|krna|krdo|kardo|bhai|bhaiya|aap|tumhara|hamara|hindi|mein|me|mai)\b/;
+  if (hiRoman.test(lower)) return "hi";
+  return "en";
+}
+
+// Pick the localized string from a {en,hi,ar} bundle, falling back gracefully.
+function pickLang(bundle: any, lang: Lang): string {
+  if (!bundle) return "";
+  if (typeof bundle === "string") return bundle;
+  return bundle[lang] || bundle.en || bundle.hi || bundle.ar || "";
+}
+
+// ============================================================
 // FLOW CACHE — in-memory, invalidated when chatbot_flows.updated_at changes
 // ============================================================
 type CachedFlow = { id: string; flow_data: any; updated_at: string; cachedAt: number };
