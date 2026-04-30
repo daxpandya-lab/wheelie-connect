@@ -626,6 +626,11 @@ async function processChatbotFlow(
       cleanMetadata.source_ad_name = adSource.source_ad_name || adSource.source_ad_headline || null;
     }
 
+    // Determine the originating gateway so reports can distinguish Meta vs Evolution
+    const gateway = ((metadata as any)?.gateway as string) || "meta";
+    const bookingSource = gateway === "evolution" ? "whatsapp_evolution" : "ai_bot";
+    cleanMetadata.gateway = gateway;
+
     if (node.metadata.action === "create_service_booking") {
       await supabase.from("service_bookings").insert({
         tenant_id: tenantId, customer_id: customerId,
@@ -638,7 +643,7 @@ async function processChatbotFlow(
         pickup_required: !!collectedData.pickup_required,
         drop_required: !!collectedData.drop_required,
         notes: collectedData.issue_description || "",
-        booking_source: "ai_bot", status: "confirmed",
+        booking_source: bookingSource, status: "confirmed",
         metadata: cleanMetadata,
       });
     } else if (node.metadata.action === "create_test_drive_booking") {
@@ -649,7 +654,7 @@ async function processChatbotFlow(
         vehicle_model: collectedData.vehicle_model || "",
         preferred_date: isoDate,
         preferred_time: collectedData.preferred_time || "",
-        booking_source: "ai_bot", status: "confirmed",
+        booking_source: bookingSource, status: "confirmed",
         metadata: cleanMetadata,
       });
     }
