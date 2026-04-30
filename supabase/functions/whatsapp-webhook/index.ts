@@ -604,11 +604,17 @@ async function processChatbotFlow(
       }
 
       if (node.options) {
-        const match = node.options.find((o: any) =>
-          o.value.toLowerCase() === userMessage.toLowerCase() ||
-          o.label.toLowerCase() === userMessage.toLowerCase() ||
-          o.value === interactiveId
-        );
+        const um = userMessage.toLowerCase();
+        const match = node.options.find((o: any) => {
+          if (o.value === interactiveId) return true;
+          if (o.value && o.value.toLowerCase() === um) return true;
+          // Match against the label in any supported language so users can reply
+          // in their native language ("haan" / "نعم" / "yes") and still progress.
+          const labels = typeof o.label === "string"
+            ? [o.label]
+            : SUPPORTED_LANGS.map((l) => o.label?.[l]).filter(Boolean);
+          return labels.some((lbl: string) => lbl.toLowerCase() === um);
+        });
         nextNodeId = match?.nextNodeId || node.options[0]?.nextNodeId || node.nextNodeId;
       } else {
         nextNodeId = node.nextNodeId;
