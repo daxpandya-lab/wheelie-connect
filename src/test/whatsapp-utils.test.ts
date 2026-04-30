@@ -53,7 +53,7 @@ describe("renderVariables", () => {
     expect(out).toBe("Hi Asha, your Swift is ready");
   });
   it("preserves unknown placeholders", () => {
-    expect(renderVariables("Hi {{name}}, code {{otp}}", { name: "A" })).toBe("Hi A, {{otp}}");
+    expect(renderVariables("Hi {{name}}, code {{otp}}", { name: "A" })).toBe("Hi A, code {{otp}}");
   });
   it("preserves placeholders for empty values", () => {
     expect(renderVariables("Hi {{name}}", { name: "" })).toBe("Hi {{name}}");
