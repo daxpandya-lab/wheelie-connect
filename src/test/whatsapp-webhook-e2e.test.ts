@@ -237,7 +237,7 @@ async function runFlow(
     });
   }
 
-  return { tenantId, gateway: ctx.gateway, customerPhone: ctx.customerPhone };
+  return { tenantId: ctx.tenantId, gateway: ctx.gateway, customerPhone: ctx.customerPhone };
 }
 
 // ---------------------------------------------------------------------------
