@@ -277,7 +277,7 @@ describe("WhatsApp webhook E2E — Meta payload", () => {
 
     const out = await routeWebhook(db, metaPayload);
 
-    expect(out.tenantId).toBe(TENANT_META);
+    expect((out as any).tenantId).toBe(TENANT_META);
     const bookings = db._tables.service_bookings;
     expect(bookings).toHaveLength(1);
     expect(bookings[0].tenant_id).toBe(TENANT_META);
@@ -326,7 +326,7 @@ describe("WhatsApp webhook E2E — Evolution payload", () => {
 
     const out = await routeWebhook(db, evoPayload);
 
-    expect(out.tenantId).toBe(TENANT_EVO);
+    expect((out as any).tenantId).toBe(TENANT_EVO);
     const bookings = db._tables.service_bookings;
     expect(bookings).toHaveLength(1);
     expect(bookings[0].tenant_id).toBe(TENANT_EVO);
