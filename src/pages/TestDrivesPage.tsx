@@ -70,6 +70,21 @@ export default function TestDrivesPage() {
 
   useEffect(() => { fetchBookings(); }, [tenantId, sourceFilter]);
 
+  // Realtime: refresh list instantly when chatbot or other clients insert/update bookings
+  useEffect(() => {
+    if (!tenantId) return;
+    const channel = supabase
+      .channel("td_changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "test_drive_bookings", filter: `tenant_id=eq.${tenantId}` },
+        () => fetchBookings()
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantId, sourceFilter]);
+
   const filtered = bookings.filter(td => {
     if (!search.trim()) return true;
     const s = search.toLowerCase();
