@@ -8,8 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { MessageSquare, Copy, Check, Loader2, ExternalLink, Wifi, WifiOff } from "lucide-react";
+import { MessageSquare, Copy, Check, Loader2, ExternalLink, Wifi, WifiOff, QrCode } from "lucide-react";
 import { toast } from "sonner";
+import ScanGoModal from "./ScanGoModal";
 
 export default function WhatsAppConfig() {
   const { tenantId } = useAuth();
@@ -20,6 +21,8 @@ export default function WhatsAppConfig() {
   const [flows, setFlows] = useState<Array<{ id: string; name: string; is_active: boolean }>>([]);
   const [activatingFlow, setActivatingFlow] = useState(false);
   const [provider, setProvider] = useState<"meta" | "evolution">("meta");
+  const [scanOpen, setScanOpen] = useState(false);
+  const [evolutionStatus, setEvolutionStatus] = useState<string>("disconnected");
   const [form, setForm] = useState({
     phoneNumberId: "",
     wabaId: "",
@@ -54,6 +57,7 @@ export default function WhatsAppConfig() {
       .single();
     const cfg = (tenantRow?.whatsapp_config as Record<string, any>) || {};
     setProvider(cfg.provider === "evolution" ? "evolution" : "meta");
+    setEvolutionStatus(cfg.evolution?.status || "disconnected");
     setForm({
       phoneNumberId: sessionData?.phone_number_id || cfg.meta?.phone_number_id || "",
       wabaId: sessionData?.waba_id || cfg.meta?.waba_id || "",
@@ -307,8 +311,29 @@ export default function WhatsAppConfig() {
             </>
           ) : (
             <>
-              <p className="text-xs text-muted-foreground">
-                Configure your self-hosted Evolution API instance.
+              {/* Scan & Go — platform-managed instance */}
+              <div className="rounded-lg border border-dashed p-4 space-y-3 bg-muted/30">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium flex items-center gap-2">
+                      <QrCode className="w-4 h-4" /> Scan & Go
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Quickest setup — scan a QR with your phone, no API keys needed.
+                    </p>
+                  </div>
+                  <Badge variant={evolutionStatus === "connected" ? "default" : "secondary"}>
+                    {evolutionStatus}
+                  </Badge>
+                </div>
+                <Button type="button" onClick={() => setScanOpen(true)} className="w-full">
+                  <QrCode className="w-4 h-4 mr-2" />
+                  {evolutionStatus === "connected" ? "Reconnect / Show QR" : "Scan QR Code"}
+                </Button>
+              </div>
+
+              <p className="text-xs text-muted-foreground pt-2">
+                Or connect your own self-hosted Evolution API instance below (advanced):
               </p>
               <div className="space-y-2">
                 <Label>Instance URL</Label>
@@ -344,6 +369,13 @@ export default function WhatsAppConfig() {
           </Button>
         </CardContent>
       </Card>
+
+      <ScanGoModal
+        open={scanOpen}
+        onOpenChange={setScanOpen}
+        tenantId={tenantId}
+        onConnected={() => { setProvider("evolution"); fetchSession(); }}
+      />
 
       {/* Last Activity */}
       {session?.last_webhook_at && (
