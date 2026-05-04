@@ -178,6 +178,7 @@ export default function TestDrivesPage() {
                 <TabsTrigger value="cards" className="text-xs gap-1"><LayoutGrid className="w-3.5 h-3.5" />Cards</TabsTrigger>
               </TabsList>
             </Tabs>
+            <ExportMenu title="Test Drives" filename="test-drives" columns={columns.filter(c => c.visible !== false).map(c => ({ key: c.key, label: c.label }))} rows={filtered} />
             <Button variant="outline" size="sm" onClick={() => setColMgrOpen(true)} className="gap-1.5">
               <Settings2 className="w-4 h-4" /> Manage Columns
             </Button>
