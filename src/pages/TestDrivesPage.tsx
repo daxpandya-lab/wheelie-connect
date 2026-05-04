@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { useDynamicColumns } from "@/hooks/useDynamicColumns";
 import ColumnManagerDialog from "@/components/reports/ColumnManagerDialog";
 import DynamicReportTable from "@/components/reports/DynamicReportTable";
+import ExportMenu from "@/components/reports/ExportMenu";
 
 const statusColors: Record<string, string> = {
   pending: "bg-warning/10 text-warning",
@@ -178,6 +179,7 @@ export default function TestDrivesPage() {
                 <TabsTrigger value="cards" className="text-xs gap-1"><LayoutGrid className="w-3.5 h-3.5" />Cards</TabsTrigger>
               </TabsList>
             </Tabs>
+            <ExportMenu title="Test Drives" filename="test-drives" columns={columns.filter(c => c.visible !== false).map(c => ({ key: c.key, label: c.label }))} rows={filtered} />
             <Button variant="outline" size="sm" onClick={() => setColMgrOpen(true)} className="gap-1.5">
               <Settings2 className="w-4 h-4" /> Manage Columns
             </Button>
