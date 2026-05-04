@@ -258,7 +258,23 @@ export default function ServiceBookingsPage() {
             {(search || phoneSearch || statusFilter !== "all" || serviceTypeFilter !== "all" || sourceFilter !== "all" || dateFrom || dateTo) && (
               <Button variant="ghost" size="sm" className="h-9" onClick={() => { setSearch(""); setPhoneSearch(""); setStatusFilter("all"); setServiceTypeFilter("all"); setSourceFilter("all"); setDateFrom(undefined); setDateTo(undefined); }}>Clear</Button>
             )}
-            <ExportMenu title="Service Bookings" filename="service-bookings" columns={columns.filter(c => c.visible !== false).map(c => ({ key: c.key, label: c.label }))} rows={filterByTab(bookings)} />
+            <ExportMenu
+              title="Service Bookings"
+              filename="service-bookings"
+              columns={columns.filter(c => c.visible !== false).map(c => ({ key: c.key, label: c.label }))}
+              rows={filterByTab(bookings)}
+              filters={[
+                { label: "Tab", value: tab },
+                { label: "Search", value: search.trim() },
+                { label: "Phone", value: phoneSearch.trim() },
+                { label: "Status", value: statusFilter },
+                { label: "Service Type", value: serviceTypeFilter },
+                { label: "Source", value: sourceFilter },
+                { label: "Date From", value: dateFrom ? format(dateFrom, "yyyy-MM-dd") : "" },
+                { label: "Date To", value: dateTo ? format(dateTo, "yyyy-MM-dd") : "" },
+                { label: "Sort", value: "Booking date (newest first)" },
+              ]}
+            />
             <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => setColMgrOpen(true)}><Settings2 className="w-4 h-4" />Manage Columns</Button>
             <Button variant="ghost" size="icon" className="h-9 w-9" onClick={fetchBookings}><RefreshCw className="w-4 h-4" /></Button>
           </div>
