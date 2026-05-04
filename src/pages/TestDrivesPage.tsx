@@ -134,6 +134,28 @@ export default function TestDrivesPage() {
     <>
       <TopBar title="Test Drives" />
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        {/* Live KPI cards — update instantly via realtime subscription */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {[
+            { label: "Total", value: counts.total, icon: Car, color: "text-primary" },
+            { label: "Pending", value: counts.pending, icon: Clock, color: "text-warning" },
+            { label: "Confirmed", value: counts.confirmed, icon: CheckCircle, color: "text-info" },
+            { label: "In Progress", value: counts.in_progress, icon: Play, color: "text-accent-foreground" },
+            { label: "Completed", value: counts.completed, icon: CheckCircle, color: "text-success" },
+            { label: "Cancelled", value: counts.cancelled, icon: XCircle, color: "text-destructive" },
+          ].map(kpi => (
+            <div key={kpi.label} className="glass-card rounded-xl p-4 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center">
+                <kpi.icon className={`w-4 h-4 ${kpi.color}`} />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">{kpi.label}</p>
+                <p className="text-lg font-bold text-foreground">{kpi.value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
         <div className="flex flex-wrap items-center gap-3 justify-between">
           <div className="flex flex-wrap items-center gap-3 flex-1">
             <div className="relative min-w-[200px] flex-1 max-w-sm">
