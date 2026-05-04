@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Car, Loader2, Search, Bot, User, Settings2, LayoutGrid, List as ListIcon } from "lucide-react";
+import { Plus, Car, Loader2, Search, Bot, User, Settings2, LayoutGrid, List as ListIcon, Clock, CheckCircle, XCircle, Play } from "lucide-react";
 import { toast } from "sonner";
 import { useDynamicColumns } from "@/hooks/useDynamicColumns";
 import ColumnManagerDialog from "@/components/reports/ColumnManagerDialog";
@@ -91,6 +91,15 @@ export default function TestDrivesPage() {
     return td.customer_name?.toLowerCase().includes(s) || td.vehicle_model?.toLowerCase().includes(s) || td.phone_number?.includes(s);
   });
 
+  const counts = {
+    total: bookings.length,
+    pending: bookings.filter(b => b.status === "pending").length,
+    confirmed: bookings.filter(b => b.status === "confirmed").length,
+    in_progress: bookings.filter(b => b.status === "in_progress").length,
+    completed: bookings.filter(b => b.status === "completed").length,
+    cancelled: bookings.filter(b => b.status === "cancelled").length,
+  };
+
   const handleCreate = async () => {
     if (!form.customer_name.trim() || !form.phone_number.trim() || !form.vehicle_model.trim() || !form.preferred_date) {
       toast.error("Please fill required fields"); return;
@@ -125,6 +134,28 @@ export default function TestDrivesPage() {
     <>
       <TopBar title="Test Drives" />
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        {/* Live KPI cards — update instantly via realtime subscription */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {[
+            { label: "Total", value: counts.total, icon: Car, color: "text-primary" },
+            { label: "Pending", value: counts.pending, icon: Clock, color: "text-warning" },
+            { label: "Confirmed", value: counts.confirmed, icon: CheckCircle, color: "text-info" },
+            { label: "In Progress", value: counts.in_progress, icon: Play, color: "text-accent-foreground" },
+            { label: "Completed", value: counts.completed, icon: CheckCircle, color: "text-success" },
+            { label: "Cancelled", value: counts.cancelled, icon: XCircle, color: "text-destructive" },
+          ].map(kpi => (
+            <div key={kpi.label} className="glass-card rounded-xl p-4 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center">
+                <kpi.icon className={`w-4 h-4 ${kpi.color}`} />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">{kpi.label}</p>
+                <p className="text-lg font-bold text-foreground">{kpi.value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
         <div className="flex flex-wrap items-center gap-3 justify-between">
           <div className="flex flex-wrap items-center gap-3 flex-1">
             <div className="relative min-w-[200px] flex-1 max-w-sm">
