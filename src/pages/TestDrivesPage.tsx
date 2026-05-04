@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { useDynamicColumns } from "@/hooks/useDynamicColumns";
 import ColumnManagerDialog from "@/components/reports/ColumnManagerDialog";
 import DynamicReportTable from "@/components/reports/DynamicReportTable";
+import ExportMenu from "@/components/reports/ExportMenu";
 
 const statusColors: Record<string, string> = {
   pending: "bg-warning/10 text-warning",
