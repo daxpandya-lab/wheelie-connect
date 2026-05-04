@@ -91,6 +91,15 @@ export default function TestDrivesPage() {
     return td.customer_name?.toLowerCase().includes(s) || td.vehicle_model?.toLowerCase().includes(s) || td.phone_number?.includes(s);
   });
 
+  const counts = {
+    total: bookings.length,
+    pending: bookings.filter(b => b.status === "pending").length,
+    confirmed: bookings.filter(b => b.status === "confirmed").length,
+    in_progress: bookings.filter(b => b.status === "in_progress").length,
+    completed: bookings.filter(b => b.status === "completed").length,
+    cancelled: bookings.filter(b => b.status === "cancelled").length,
+  };
+
   const handleCreate = async () => {
     if (!form.customer_name.trim() || !form.phone_number.trim() || !form.vehicle_model.trim() || !form.preferred_date) {
       toast.error("Please fill required fields"); return;
