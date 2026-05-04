@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Car, Loader2, Search, Bot, User, Settings2, LayoutGrid, List as ListIcon } from "lucide-react";
+import { Plus, Car, Loader2, Search, Bot, User, Settings2, LayoutGrid, List as ListIcon, Clock, CheckCircle, XCircle, Play } from "lucide-react";
 import { toast } from "sonner";
 import { useDynamicColumns } from "@/hooks/useDynamicColumns";
 import ColumnManagerDialog from "@/components/reports/ColumnManagerDialog";
