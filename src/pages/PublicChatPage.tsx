@@ -914,7 +914,12 @@ export default function PublicChatPage() {
       const node = flow.nodes.find((n) => n.id === nodeId);
       if (!node) return;
       setCurrentNodeId(node.id);
-      pushBotMessage(node, data, language);
+      // For "end" nodes we postpone pushing the confirmation message until
+      // the booking is successfully saved to the database. This guarantees:
+      //   Validate Address → Save to Database → Show Confirmation ID
+      if (node.type !== "end") {
+        pushBotMessage(node, data, language);
+      }
       persistSession({ current_node_id: node.id, collected_data: data });
 
       // Auto-execute non-interactive (background) nodes — never wait for user input
@@ -936,22 +941,45 @@ export default function PublicChatPage() {
       } else if (node.type === "greeting" && node.nextNodeId) {
         setTimeout(() => advanceTo(node.nextNodeId!, data), 700);
       } else if (node.type === "end") {
-        const bookingId = `BK-${Date.now().toString(36).toUpperCase()}`;
-        const finalData = { ...data, booking_id: bookingId };
-        setCollectedData(finalData);
-        // Persist booking to the appropriate table based on node metadata action
-        createBookingFromFlow(node, finalData).catch((e) =>
-          console.error("Failed to create booking record:", e)
-        );
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.nodeId === node.id && m.sender === "bot"
-              ? { ...m, text: interpolate(getNodeMessage(node, finalData, language), finalData), data: finalData }
-              : m
-          )
-        );
-        setIsComplete(true);
-        persistSession({ current_node_id: node.id, collected_data: finalData, is_complete: true });
+        // Save first; only show booking ID + confirmation message on success.
+        (async () => {
+          const result = await createBookingFromFlow(node, data).catch((e) => {
+            console.error("Failed to create booking record:", e);
+            return { ok: false as const, reason: "db" as const };
+          });
+          if (!result.ok) {
+            const errMsg =
+              result.reason === "address"
+                ? validationErrorMessage("address", language)
+                : language === "hi"
+                  ? "⚠️ क्षमा करें, हम आपकी बुकिंग सहेज नहीं पाए। कृपया पुनः प्रयास करें।"
+                  : language === "ar"
+                    ? "⚠️ عذرًا، تعذر حفظ حجزك. يرجى المحاولة مرة أخرى."
+                    : "⚠️ Sorry, we couldn't save your booking. Please try again.";
+            setMessages((prev) => [
+              ...prev,
+              { id: `bot-saveerr-${Date.now()}`, sender: "bot", text: errMsg },
+            ]);
+            // Do NOT mark complete — let the user retry/confirm again.
+            return;
+          }
+          const bookingId = `BK-${Date.now().toString(36).toUpperCase()}`;
+          const finalData = { ...data, booking_id: bookingId };
+          setCollectedData(finalData);
+          const text = interpolate(getNodeMessage(node, finalData, language), finalData);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `bot-${Date.now()}-end`,
+              sender: "bot",
+              text,
+              nodeId: node.id,
+              data: finalData,
+            },
+          ]);
+          setIsComplete(true);
+          persistSession({ current_node_id: node.id, collected_data: finalData, is_complete: true });
+        })();
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
