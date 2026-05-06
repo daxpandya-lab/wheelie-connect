@@ -700,8 +700,11 @@ export default function PublicChatPage() {
     return raw;
   };
 
-  const createBookingFromFlow = async (endNode: FlowNode, data: ChatbotCollectedData) => {
-    if (!dealer) return;
+  const createBookingFromFlow = async (
+    endNode: FlowNode,
+    data: ChatbotCollectedData
+  ): Promise<{ ok: boolean; reason?: "address" | "date" | "db" | "no_action" }> => {
+    if (!dealer) return { ok: false, reason: "db" };
     const action = (endNode.metadata?.action as string) || "";
 
     // Shared pickup/drop address pre-flight: required when pickup or drop is requested,
