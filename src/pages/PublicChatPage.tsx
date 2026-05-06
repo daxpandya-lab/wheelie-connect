@@ -728,7 +728,7 @@ export default function PublicChatPage() {
             text: validationErrorMessage("address", language),
           },
         ]);
-        return;
+        return { ok: false, reason: "address" };
       }
       addressClean = r.value;
       addressNormalized = normalizeAddress(addressClean);
