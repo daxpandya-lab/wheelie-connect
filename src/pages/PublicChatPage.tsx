@@ -811,12 +811,12 @@ export default function PublicChatPage() {
       const isoDate = normalizeDate(String(data.preferred_date || ""));
       if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
         console.warn("Skipping service_booking insert: invalid date", data.preferred_date);
-        return;
+        return { ok: false, reason: "date" };
       }
       const vehicleParts = [data.vehicle_type, data.vehicle_model, data.registration_number]
         .filter(Boolean)
         .join(" • ");
-      await supabase.from("service_bookings").insert({
+      const { error: insertErr } = await supabase.from("service_bookings").insert({
         tenant_id: dealer.id,
         customer_name: String(data.customer_name || "Chatbot Visitor"),
         phone_number: String(data.phone_number || ""),
@@ -829,30 +829,40 @@ export default function PublicChatPage() {
         drop_required: !!data.drop_required,
         issue_description: data.issue_description ? String(data.issue_description) : null,
         notes: needsAddress ? `Pickup/Drop address: ${addressClean}` : null,
-        booking_source: "chatbot",
+        booking_source: "AI Chatbot",
         status: "pending",
         metadata: { ...data, ...addressMeta, source_session_id: sessionId },
       } as never);
+      if (insertErr) {
+        console.error("service_bookings insert failed", insertErr);
+        return { ok: false, reason: "db" };
+      }
+      return { ok: true };
     } else if (action === "create_test_drive_booking") {
       const isoDate = normalizeDate(String(data.preferred_date || ""));
-      if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return;
-      await supabase.from("test_drive_bookings").insert({
+      if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return { ok: false, reason: "date" };
+      const { error: insertErr } = await supabase.from("test_drive_bookings").insert({
         tenant_id: dealer.id,
         customer_name: String(data.customer_name || "Chatbot Visitor"),
         phone_number: String(data.phone_number || ""),
         vehicle_model: String(data.vehicle_model || "Unknown"),
         preferred_date: isoDate,
         preferred_time: data.preferred_time ? String(data.preferred_time) : null,
-        booking_source: "chatbot",
+        booking_source: "AI Chatbot",
         status: "pending",
         metadata: { ...data, source_session_id: sessionId },
       } as never);
+      if (insertErr) {
+        console.error("test_drive_bookings insert failed", insertErr);
+        return { ok: false, reason: "db" };
+      }
+      return { ok: true };
     } else if (action === "reschedule_service_booking") {
       const isoDate = normalizeDate(String(data.preferred_date || ""));
       const originalId = String(data._existing_booking_id || "");
       if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate) || !originalId) {
         console.warn("Skipping reschedule: missing date or original booking id");
-        return;
+        return { ok: false, reason: "date" };
       }
       // 1) Cancel original booking, recording the link to the new one in metadata.
       await supabase
@@ -870,7 +880,7 @@ export default function PublicChatPage() {
         .eq("tenant_id", dealer.id);
 
       // 2) Insert a fresh booking carrying over identity + service details.
-      await supabase.from("service_bookings").insert({
+      const { error: insertErr } = await supabase.from("service_bookings").insert({
         tenant_id: dealer.id,
         customer_name: String(data.existing_customer_name || data.customer_name || "Chatbot Visitor"),
         phone_number: String(data.phone_number || ""),
@@ -880,7 +890,7 @@ export default function PublicChatPage() {
         pickup_required: !!data.pickup_required,
         drop_required: !!data.drop_required,
         notes: needsAddress ? `Pickup/Drop address: ${addressClean}` : null,
-        booking_source: "chatbot",
+        booking_source: "AI Chatbot",
         status: "pending",
         metadata: {
           ...data,
@@ -889,7 +899,13 @@ export default function PublicChatPage() {
           source_session_id: sessionId,
         },
       } as never);
+      if (insertErr) {
+        console.error("reschedule insert failed", insertErr);
+        return { ok: false, reason: "db" };
+      }
+      return { ok: true };
     }
+    return { ok: false, reason: "no_action" };
   };
 
   const advanceTo = useCallback(
