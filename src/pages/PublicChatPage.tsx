@@ -700,8 +700,11 @@ export default function PublicChatPage() {
     return raw;
   };
 
-  const createBookingFromFlow = async (endNode: FlowNode, data: ChatbotCollectedData) => {
-    if (!dealer) return;
+  const createBookingFromFlow = async (
+    endNode: FlowNode,
+    data: ChatbotCollectedData
+  ): Promise<{ ok: boolean; reason?: "address" | "date" | "db" | "no_action" }> => {
+    if (!dealer) return { ok: false, reason: "db" };
     const action = (endNode.metadata?.action as string) || "";
 
     // Shared pickup/drop address pre-flight: required when pickup or drop is requested,
@@ -725,7 +728,7 @@ export default function PublicChatPage() {
             text: validationErrorMessage("address", language),
           },
         ]);
-        return;
+        return { ok: false, reason: "address" };
       }
       addressClean = r.value;
       addressNormalized = normalizeAddress(addressClean);
@@ -808,12 +811,12 @@ export default function PublicChatPage() {
       const isoDate = normalizeDate(String(data.preferred_date || ""));
       if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
         console.warn("Skipping service_booking insert: invalid date", data.preferred_date);
-        return;
+        return { ok: false, reason: "date" };
       }
       const vehicleParts = [data.vehicle_type, data.vehicle_model, data.registration_number]
         .filter(Boolean)
         .join(" • ");
-      await supabase.from("service_bookings").insert({
+      const { error: insertErr } = await supabase.from("service_bookings").insert({
         tenant_id: dealer.id,
         customer_name: String(data.customer_name || "Chatbot Visitor"),
         phone_number: String(data.phone_number || ""),
@@ -826,30 +829,40 @@ export default function PublicChatPage() {
         drop_required: !!data.drop_required,
         issue_description: data.issue_description ? String(data.issue_description) : null,
         notes: needsAddress ? `Pickup/Drop address: ${addressClean}` : null,
-        booking_source: "chatbot",
+        booking_source: "AI Chatbot",
         status: "pending",
         metadata: { ...data, ...addressMeta, source_session_id: sessionId },
       } as never);
+      if (insertErr) {
+        console.error("service_bookings insert failed", insertErr);
+        return { ok: false, reason: "db" };
+      }
+      return { ok: true };
     } else if (action === "create_test_drive_booking") {
       const isoDate = normalizeDate(String(data.preferred_date || ""));
-      if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return;
-      await supabase.from("test_drive_bookings").insert({
+      if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return { ok: false, reason: "date" };
+      const { error: insertErr } = await supabase.from("test_drive_bookings").insert({
         tenant_id: dealer.id,
         customer_name: String(data.customer_name || "Chatbot Visitor"),
         phone_number: String(data.phone_number || ""),
         vehicle_model: String(data.vehicle_model || "Unknown"),
         preferred_date: isoDate,
         preferred_time: data.preferred_time ? String(data.preferred_time) : null,
-        booking_source: "chatbot",
+        booking_source: "AI Chatbot",
         status: "pending",
         metadata: { ...data, source_session_id: sessionId },
       } as never);
+      if (insertErr) {
+        console.error("test_drive_bookings insert failed", insertErr);
+        return { ok: false, reason: "db" };
+      }
+      return { ok: true };
     } else if (action === "reschedule_service_booking") {
       const isoDate = normalizeDate(String(data.preferred_date || ""));
       const originalId = String(data._existing_booking_id || "");
       if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate) || !originalId) {
         console.warn("Skipping reschedule: missing date or original booking id");
-        return;
+        return { ok: false, reason: "date" };
       }
       // 1) Cancel original booking, recording the link to the new one in metadata.
       await supabase
@@ -867,7 +880,7 @@ export default function PublicChatPage() {
         .eq("tenant_id", dealer.id);
 
       // 2) Insert a fresh booking carrying over identity + service details.
-      await supabase.from("service_bookings").insert({
+      const { error: insertErr } = await supabase.from("service_bookings").insert({
         tenant_id: dealer.id,
         customer_name: String(data.existing_customer_name || data.customer_name || "Chatbot Visitor"),
         phone_number: String(data.phone_number || ""),
@@ -877,7 +890,7 @@ export default function PublicChatPage() {
         pickup_required: !!data.pickup_required,
         drop_required: !!data.drop_required,
         notes: needsAddress ? `Pickup/Drop address: ${addressClean}` : null,
-        booking_source: "chatbot",
+        booking_source: "AI Chatbot",
         status: "pending",
         metadata: {
           ...data,
@@ -886,7 +899,13 @@ export default function PublicChatPage() {
           source_session_id: sessionId,
         },
       } as never);
+      if (insertErr) {
+        console.error("reschedule insert failed", insertErr);
+        return { ok: false, reason: "db" };
+      }
+      return { ok: true };
     }
+    return { ok: false, reason: "no_action" };
   };
 
   const advanceTo = useCallback(
@@ -895,7 +914,12 @@ export default function PublicChatPage() {
       const node = flow.nodes.find((n) => n.id === nodeId);
       if (!node) return;
       setCurrentNodeId(node.id);
-      pushBotMessage(node, data, language);
+      // For "end" nodes we postpone pushing the confirmation message until
+      // the booking is successfully saved to the database. This guarantees:
+      //   Validate Address → Save to Database → Show Confirmation ID
+      if (node.type !== "end") {
+        pushBotMessage(node, data, language);
+      }
       persistSession({ current_node_id: node.id, collected_data: data });
 
       // Auto-execute non-interactive (background) nodes — never wait for user input
@@ -917,22 +941,45 @@ export default function PublicChatPage() {
       } else if (node.type === "greeting" && node.nextNodeId) {
         setTimeout(() => advanceTo(node.nextNodeId!, data), 700);
       } else if (node.type === "end") {
-        const bookingId = `BK-${Date.now().toString(36).toUpperCase()}`;
-        const finalData = { ...data, booking_id: bookingId };
-        setCollectedData(finalData);
-        // Persist booking to the appropriate table based on node metadata action
-        createBookingFromFlow(node, finalData).catch((e) =>
-          console.error("Failed to create booking record:", e)
-        );
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.nodeId === node.id && m.sender === "bot"
-              ? { ...m, text: interpolate(getNodeMessage(node, finalData, language), finalData), data: finalData }
-              : m
-          )
-        );
-        setIsComplete(true);
-        persistSession({ current_node_id: node.id, collected_data: finalData, is_complete: true });
+        // Save first; only show booking ID + confirmation message on success.
+        (async () => {
+          const result = await createBookingFromFlow(node, data).catch((e) => {
+            console.error("Failed to create booking record:", e);
+            return { ok: false as const, reason: "db" as const };
+          });
+          if (!result.ok) {
+            const errMsg =
+              result.reason === "address"
+                ? validationErrorMessage("address", language)
+                : language === "hi"
+                  ? "⚠️ क्षमा करें, हम आपकी बुकिंग सहेज नहीं पाए। कृपया पुनः प्रयास करें।"
+                  : language === "ar"
+                    ? "⚠️ عذرًا، تعذر حفظ حجزك. يرجى المحاولة مرة أخرى."
+                    : "⚠️ Sorry, we couldn't save your booking. Please try again.";
+            setMessages((prev) => [
+              ...prev,
+              { id: `bot-saveerr-${Date.now()}`, sender: "bot", text: errMsg },
+            ]);
+            // Do NOT mark complete — let the user retry/confirm again.
+            return;
+          }
+          const bookingId = `BK-${Date.now().toString(36).toUpperCase()}`;
+          const finalData = { ...data, booking_id: bookingId };
+          setCollectedData(finalData);
+          const text = interpolate(getNodeMessage(node, finalData, language), finalData);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `bot-${Date.now()}-end`,
+              sender: "bot",
+              text,
+              nodeId: node.id,
+              data: finalData,
+            },
+          ]);
+          setIsComplete(true);
+          persistSession({ current_node_id: node.id, collected_data: finalData, is_complete: true });
+        })();
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
