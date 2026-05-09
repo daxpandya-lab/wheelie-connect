@@ -31,6 +31,7 @@ const FIXED_COLS = [
   { key: "preferred_date", label: "Date" },
   { key: "preferred_time", label: "Time" },
   { key: "status", label: "Status" },
+  { key: "assigned_to_name", label: "Assigned To" },
   { key: "booking_source", label: "Source" },
 ];
 
@@ -42,8 +43,9 @@ function SourceBadge({ source }: { source: string }) {
 }
 
 export default function TestDrivesPage() {
-  const { tenantId } = useAuth();
+  const { tenantId, isExecutive, user } = useAuth();
   const [bookings, setBookings] = useState<any[]>([]);
+  const [team, setTeam] = useState<{ user_id: string; full_name: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -57,19 +59,27 @@ export default function TestDrivesPage() {
     visit_type: "showroom", notes: "",
   });
 
-  const { columns, savePrefs } = useDynamicColumns("test_drive_bookings", FIXED_COLS, bookings);
+  const teamMap = Object.fromEntries(team.map(t => [t.user_id, t.full_name || "—"]));
+  const enrichedBookings = bookings.map(b => ({ ...b, assigned_to_name: b.assigned_to ? (teamMap[b.assigned_to] || "—") : "—" }));
+
+  const { columns, savePrefs } = useDynamicColumns("test_drive_bookings", FIXED_COLS, enrichedBookings);
 
   const fetchBookings = async () => {
     if (!tenantId) return;
     let query = supabase.from("test_drive_bookings")
       .select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false });
+    if (isExecutive && user?.id) query = query.eq("assigned_to", user.id);
     if (sourceFilter !== "all") query = query.eq("booking_source", sourceFilter);
-    const { data } = await query;
-    if (data) setBookings(data);
+    const [bookRes, teamRes] = await Promise.all([
+      query,
+      supabase.from("profiles").select("user_id, full_name").eq("tenant_id", tenantId),
+    ]);
+    if (bookRes.data) setBookings(bookRes.data);
+    if (teamRes.data) setTeam(teamRes.data);
     setLoading(false);
   };
 
-  useEffect(() => { fetchBookings(); }, [tenantId, sourceFilter]);
+  useEffect(() => { fetchBookings(); }, [tenantId, sourceFilter, isExecutive, user?.id]);
 
   // Realtime: refresh list instantly when chatbot or other clients insert/update bookings
   useEffect(() => {
@@ -86,19 +96,19 @@ export default function TestDrivesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId, sourceFilter]);
 
-  const filtered = bookings.filter(td => {
+  const filtered = enrichedBookings.filter(td => {
     if (!search.trim()) return true;
     const s = search.toLowerCase();
     return td.customer_name?.toLowerCase().includes(s) || td.vehicle_model?.toLowerCase().includes(s) || td.phone_number?.includes(s);
   });
 
   const counts = {
-    total: bookings.length,
-    pending: bookings.filter(b => b.status === "pending").length,
-    confirmed: bookings.filter(b => b.status === "confirmed").length,
-    in_progress: bookings.filter(b => b.status === "in_progress").length,
-    completed: bookings.filter(b => b.status === "completed").length,
-    cancelled: bookings.filter(b => b.status === "cancelled").length,
+    total: enrichedBookings.length,
+    pending: enrichedBookings.filter(b => b.status === "pending").length,
+    confirmed: enrichedBookings.filter(b => b.status === "confirmed").length,
+    in_progress: enrichedBookings.filter(b => b.status === "in_progress").length,
+    completed: enrichedBookings.filter(b => b.status === "completed").length,
+    cancelled: enrichedBookings.filter(b => b.status === "cancelled").length,
   };
 
   const handleCreate = async () => {

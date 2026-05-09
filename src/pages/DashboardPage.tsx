@@ -14,7 +14,7 @@ type GatewayStatus = {
 };
 
 export default function DashboardPage() {
-  const { tenantId } = useAuth();
+  const { tenantId, isExecutive, user } = useAuth();
   const [kpis, setKpis] = useState({ customers: 0, bookings: 0, todayBookings: 0, testDrives: 0, activeConvos: 0, leads: 0, completedBookings: 0, conversionRate: 0 });
   const [weeklyBookings, setWeeklyBookings] = useState<{ day: string; bookings: number }[]>([]);
   const [recentBookings, setRecentBookings] = useState<any[]>([]);
@@ -24,12 +24,24 @@ export default function DashboardPage() {
   const fetchDashboard = useCallback(async () => {
     if (!tenantId) return;
 
+    // Build executive-aware queries — must match the Service Bookings / Test Drives / Leads tabs exactly.
+    const execFilter = (q: any) => (isExecutive && user?.id ? q.eq("assigned_to", user.id) : q);
+
     const [customersRes, bookingsRes, testDrivesRes, convosRes, leadsRes, tenantRes] = await Promise.all([
       supabase.from("customers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
-      supabase.from("service_bookings").select("id, customer_name, phone_number, vehicle_model, service_type, booking_date, status").eq("tenant_id", tenantId).order("created_at", { ascending: false }),
-      supabase.from("test_drive_bookings").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
+      execFilter(
+        supabase.from("service_bookings")
+          .select("id, customer_name, phone_number, vehicle_model, service_type, booking_date, status, assigned_to")
+          .eq("tenant_id", tenantId)
+          .order("created_at", { ascending: false })
+      ),
+      execFilter(
+        supabase.from("test_drive_bookings").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId)
+      ),
       supabase.from("chatbot_conversations").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("status", "active"),
-      supabase.from("leads").select("id, status").eq("tenant_id", tenantId),
+      execFilter(
+        supabase.from("leads").select("id, status, assigned_to").eq("tenant_id", tenantId)
+      ),
       supabase.from("tenants").select("settings, whatsapp_config").eq("id", tenantId).single(),
     ]);
 
@@ -88,7 +100,7 @@ export default function DashboardPage() {
 
     // Recent bookings
     setRecentBookings(bookings.slice(0, 5));
-  }, [tenantId]);
+  }, [tenantId, isExecutive, user?.id]);
 
   useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
 
