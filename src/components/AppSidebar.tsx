@@ -21,7 +21,7 @@ export default function AppSidebar() {
     { to: "/leads", icon: UserPlus, label: "Leads" },
     ...(serviceBookingEnabled ? [{ to: "/service-bookings", icon: Wrench, label: "Service Bookings" }] : []),
     ...(testDriveEnabled ? [{ to: "/test-drives", icon: TestTube2, label: "Test Drives" }] : []),
-    { to: "/conversations", icon: MessageSquare, label: "Conversations" },
+    ...(isExecutive ? [] : [{ to: "/conversations", icon: MessageSquare, label: "Conversations" }]),
     ...(isAdminOrAbove ? [
       { to: "/campaigns", icon: Megaphone, label: "Campaigns" },
       { to: "/analytics", icon: BarChart3, label: "Analytics" },
