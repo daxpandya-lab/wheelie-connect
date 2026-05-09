@@ -11,7 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 export default function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
-  const { isSuperAdmin, isTenantAdmin, signOut, profile, serviceBookingEnabled, testDriveEnabled } = useAuth();
+  const { isSuperAdmin, isTenantAdmin, isExecutive, signOut, profile, serviceBookingEnabled, testDriveEnabled } = useAuth();
 
   const isAdminOrAbove = isTenantAdmin || isSuperAdmin;
 
