@@ -31,6 +31,7 @@ const FIXED_COLS = [
   { key: "preferred_date", label: "Date" },
   { key: "preferred_time", label: "Time" },
   { key: "status", label: "Status" },
+  { key: "assigned_to_name", label: "Assigned To" },
   { key: "booking_source", label: "Source" },
 ];
 
