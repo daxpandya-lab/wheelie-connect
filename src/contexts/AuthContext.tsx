@@ -116,16 +116,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isSuperAdmin = roles.includes("super_admin");
   const isTenantAdmin = roles.includes("tenant_admin");
+  const isExecutive = roles.includes("staff") && !isTenantAdmin && !isSuperAdmin;
   const tenantId = profile?.tenant_id ?? null;
 
-  // Check if tenant is suspended (non-super-admins only)
+  // Tenant status + feature flags
   const [tenantStatus, setTenantStatus] = useState<string | null>(null);
+  const [serviceBookingEnabled, setServiceBookingEnabled] = useState(true);
+  const [testDriveEnabled, setTestDriveEnabled] = useState(true);
   useEffect(() => {
-    if (tenantId && !isSuperAdmin) {
-      supabase.from("tenants").select("status").eq("id", tenantId).single()
-        .then(({ data }) => { if (data) setTenantStatus(data.status); });
+    if (tenantId) {
+      supabase.from("tenants")
+        .select("status, service_booking_enabled, test_drive_enabled")
+        .eq("id", tenantId).single()
+        .then(({ data }) => {
+          if (data) {
+            setTenantStatus(data.status);
+            setServiceBookingEnabled(data.service_booking_enabled !== false);
+            setTestDriveEnabled(data.test_drive_enabled !== false);
+          }
+        });
     }
-  }, [tenantId, isSuperAdmin]);
+  }, [tenantId]);
 
   const isTenantSuspended = !isSuperAdmin && tenantStatus !== null && tenantStatus !== "active";
 
@@ -133,7 +144,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         session, user, profile, roles, tenantId,
-        isSuperAdmin, isTenantAdmin, isTenantSuspended, isLoading, signOut,
+        isSuperAdmin, isTenantAdmin, isExecutive, isTenantSuspended,
+        serviceBookingEnabled, testDriveEnabled,
+        isLoading, signOut,
       }}
     >
       {children}
