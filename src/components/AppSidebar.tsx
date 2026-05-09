@@ -11,7 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 export default function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
-  const { isSuperAdmin, isTenantAdmin, signOut, profile } = useAuth();
+  const { isSuperAdmin, isTenantAdmin, signOut, profile, serviceBookingEnabled, testDriveEnabled } = useAuth();
 
   const isAdminOrAbove = isTenantAdmin || isSuperAdmin;
 
@@ -19,8 +19,8 @@ export default function AppSidebar() {
     { to: "/", icon: LayoutDashboard, label: "Dashboard" },
     { to: "/customers", icon: Users, label: "Customers" },
     { to: "/leads", icon: UserPlus, label: "Leads" },
-    { to: "/service-bookings", icon: Wrench, label: "Service Bookings" },
-    { to: "/test-drives", icon: TestTube2, label: "Test Drives" },
+    ...(serviceBookingEnabled ? [{ to: "/service-bookings", icon: Wrench, label: "Service Bookings" }] : []),
+    ...(testDriveEnabled ? [{ to: "/test-drives", icon: TestTube2, label: "Test Drives" }] : []),
     { to: "/conversations", icon: MessageSquare, label: "Conversations" },
     ...(isAdminOrAbove ? [
       { to: "/campaigns", icon: Megaphone, label: "Campaigns" },
