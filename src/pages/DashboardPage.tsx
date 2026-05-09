@@ -100,7 +100,7 @@ export default function DashboardPage() {
 
     // Recent bookings
     setRecentBookings(bookings.slice(0, 5));
-  }, [tenantId]);
+  }, [tenantId, isExecutive, user?.id]);
 
   useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
 
