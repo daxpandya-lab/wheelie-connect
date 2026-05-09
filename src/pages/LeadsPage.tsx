@@ -22,6 +22,7 @@ type Lead = {
   created_at: string;
   metadata: Record<string, unknown> | null;
   assigned_to?: string | null;
+};
 
 const FIXED_COLS = [
   { key: "customer_name", label: "Customer" },
