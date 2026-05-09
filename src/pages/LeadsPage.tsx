@@ -42,7 +42,7 @@ const stages = [
 ];
 
 export default function LeadsPage() {
-  const { tenantId } = useAuth();
+  const { tenantId, isExecutive, user } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -55,16 +55,18 @@ export default function LeadsPage() {
   const fetchLeads = async () => {
     if (!tenantId) return;
     setLoading(true);
-    const { data } = await supabase
+    let query = supabase
       .from("leads")
-      .select("id, customer_name, phone_number, email, vehicle_interest, source, status, created_at, metadata")
+      .select("id, customer_name, phone_number, email, vehicle_interest, source, status, created_at, metadata, assigned_to")
       .eq("tenant_id", tenantId)
       .order("created_at", { ascending: false });
+    if (isExecutive && user?.id) query = query.eq("assigned_to", user.id);
+    const { data } = await query;
     if (data) setLeads(data as unknown as Lead[]);
     setLoading(false);
   };
 
-  useEffect(() => { fetchLeads(); }, [tenantId]);
+  useEffect(() => { fetchLeads(); }, [tenantId, isExecutive, user?.id]);
 
   useEffect(() => {
     if (!tenantId) return;
