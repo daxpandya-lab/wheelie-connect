@@ -99,15 +99,14 @@ export default function ServiceBookingsPage() {
     setLoading(true);
     const [bookRes, teamRes] = await Promise.all([
       (() => {
-        let query = supabase.from("service_bookings").select("*").eq("tenant_id", tenantId).order("booking_date", { ascending: false });
+        let query = supabase.from("service_bookings").select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false });
         if (isExecutive && user?.id) query = query.eq("assigned_to", user.id);
         if (statusFilter !== "all") query = query.eq("status", statusFilter as any);
         if (serviceTypeFilter !== "all") query = query.ilike("service_type", `%${serviceTypeFilter}%`);
-        if (sourceFilter !== "all") query = query.eq("booking_source", sourceFilter);
+        if (sourceFilter === "manual") query = query.eq("booking_source", "manual");
+        else if (sourceFilter === "ai_bot") query = query.neq("booking_source", "manual");
         if (dateFrom) query = query.gte("booking_date", format(dateFrom, "yyyy-MM-dd"));
         if (dateTo) query = query.lte("booking_date", format(dateTo, "yyyy-MM-dd"));
-        if (search.trim()) query = query.ilike("customer_name", `%${search.trim()}%`);
-        if (phoneSearch.trim()) query = query.ilike("phone_number", `%${phoneSearch.trim()}%`);
         return query;
       })(),
       supabase.from("profiles").select("user_id, full_name").eq("tenant_id", tenantId),
@@ -115,7 +114,7 @@ export default function ServiceBookingsPage() {
     if (bookRes.data) setBookings(bookRes.data as ServiceBooking[]);
     if (teamRes.data) setTeamMembers(teamRes.data);
     setLoading(false);
-  }, [tenantId, statusFilter, serviceTypeFilter, sourceFilter, dateFrom, dateTo, search, phoneSearch, isExecutive, user?.id]);
+  }, [tenantId, statusFilter, serviceTypeFilter, sourceFilter, dateFrom, dateTo, isExecutive, user?.id]);
 
   useEffect(() => { fetchBookings(); }, [fetchBookings]);
 
@@ -124,6 +123,24 @@ export default function ServiceBookingsPage() {
     const channel = supabase.channel("sb_changes").on("postgres_changes", { event: "*", schema: "public", table: "service_bookings", filter: `tenant_id=eq.${tenantId}` }, () => fetchBookings()).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [tenantId, fetchBookings]);
+
+  // Client-side text search across customer/phone/vehicle (vehicle ignores spaces, dots, hyphens)
+  const searchedBookings = bookings.filter((b) => {
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      const qNorm = normalizeVehicle(q);
+      const matchesText =
+        (b.customer_name || "").toLowerCase().includes(q) ||
+        (b.vehicle_model || "").toLowerCase().includes(q) ||
+        normalizeVehicle(b.vehicle_model || "").includes(qNorm);
+      if (!matchesText) return false;
+    }
+    if (phoneSearch.trim()) {
+      const p = phoneSearch.trim();
+      if (!(b.phone_number || "").includes(p)) return false;
+    }
+    return true;
+  });
 
   const filterByTab = (list: ServiceBooking[]) => {
     switch (tab) {
@@ -134,10 +151,11 @@ export default function ServiceBookingsPage() {
     }
   };
 
-  const filtered = filterByTab(bookings);
-  const todayCount = bookings.filter(b => isToday(new Date(b.booking_date))).length;
-  const upcomingCount = bookings.filter(b => isFuture(new Date(b.booking_date)) && !isToday(new Date(b.booking_date))).length;
-  const completedCount = bookings.filter(b => b.status === "completed").length;
+  const filtered = filterByTab(searchedBookings);
+  const todayCount = searchedBookings.filter(b => isToday(new Date(b.booking_date))).length;
+  const upcomingCount = searchedBookings.filter(b => isFuture(new Date(b.booking_date)) && !isToday(new Date(b.booking_date))).length;
+  const completedCount = searchedBookings.filter(b => b.status === "completed").length;
+
 
   const getTeamName = (id: string | null) => {
     if (!id) return "—";
