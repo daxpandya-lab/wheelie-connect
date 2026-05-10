@@ -1319,30 +1319,6 @@ export default function PublicChatPage() {
     });
   };
 
-  const askAltConfirmation = (iso: string) => {
-    const nice = fmtNiceDate(iso);
-    const txt: Record<string, string> = {
-      en: `Great! I've updated your request to ${nice}. Is this correct?`,
-      hi: `बहुत अच्छा! मैंने आपका अनुरोध ${nice} पर अपडेट कर दिया है। क्या यह सही है?`,
-      ar: `رائع! لقد قمت بتحديث طلبك إلى ${nice}. هل هذا صحيح؟`,
-    };
-    const yesL: Record<string, string> = { en: "✅ Yes, confirm", hi: "✅ हाँ, पुष्टि करें", ar: "✅ نعم، أكد" };
-    const noL: Record<string, string> = { en: "📅 No, pick another", hi: "📅 नहीं, दूसरी चुनें", ar: "📅 لا، اختر تاريخًا آخر" };
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `bot-altconfirm-${Date.now()}`,
-        sender: "bot",
-        text: txt[language] || txt.en,
-        options: [
-          { label: yesL[language] || yesL.en, value: `__altconfirm_yes__:${iso}` },
-          { label: noL[language] || noL.en, value: "__altconfirm_no__" },
-        ],
-        nodeId: currentNodeId || undefined,
-        data: collectedData,
-      },
-    ]);
-  };
 
   const handleOptionClick = (value: string, label: string) => {
     if (value === "__alt_pick__") {
