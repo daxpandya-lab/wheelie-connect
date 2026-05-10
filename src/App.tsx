@@ -26,6 +26,7 @@ import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
 import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import SubscriptionExpiredPage from "@/pages/SubscriptionExpiredPage";
 import PublicChatPage from "@/pages/PublicChatPage";
+import EstimateApprovalPage from "@/pages/EstimateApprovalPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient({
