@@ -265,10 +265,17 @@ export default function CustomersPage() {
     return "bg-destructive/10 text-destructive border-destructive/20";
   };
 
-  const filtered = customers.filter(c =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.phone?.includes(search) || c.email?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = customers.filter(c => {
+    // Pull every vehicle string we know about for this customer (across their bookings)
+    const vehicleStrings = bookings
+      .filter(b => b.customer_id === c.id)
+      .map(b => b.vehicle_model);
+    return matchesGlobalSearch({
+      query: search,
+      text: [c.name, c.phone, c.email, c.city, c.area],
+      vehicle: vehicleStrings,
+    });
+  });
 
   return (
     <>
