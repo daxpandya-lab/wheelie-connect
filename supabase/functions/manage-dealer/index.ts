@@ -41,12 +41,28 @@ Deno.serve(async (req) => {
       if (!emailRegex.test(email)) return json({ error: "Invalid email format" }, 400);
 
       const tenantSlug = name.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+      const emailNorm = email.trim().toLowerCase();
+
+      // Pre-check: refuse early if an auth user already exists for this email,
+      // so we don't create an orphaned tenant row that we then have to roll back.
+      const { data: existing } = await supabaseAdmin.auth.admin.listUsers({
+        page: 1, perPage: 1, // @ts-expect-error - filter is supported by GoTrue
+        filter: `email.eq.${emailNorm}`,
+      });
+      const alreadyExists = (existing?.users || []).some(
+        (u) => (u.email || "").toLowerCase() === emailNorm
+      );
+      if (alreadyExists) {
+        return json({
+          error: `An account with ${emailNorm} already exists. Please use a different email or reset that user's password.`,
+        }, 409);
+      }
 
       const { service_booking_enabled, test_drive_enabled } = body;
       const { data: tenant, error: tenantError } = await supabaseAdmin.from("tenants").insert({
         name: name.trim(), slug: tenantSlug,
         contact_person: contact_person?.trim() || null, phone: phone?.trim() || null,
-        email: email.trim().toLowerCase(), address: address?.trim() || null,
+        email: emailNorm, address: address?.trim() || null,
         plan: plan || "free", status: status || "active",
         subscription_start_date: start_date || null, subscription_end_date: end_date || null,
         service_booking_enabled: service_booking_enabled ?? true,
@@ -55,12 +71,18 @@ Deno.serve(async (req) => {
       if (tenantError) return json({ error: tenantError.message }, 400);
 
       const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
-        email: email.trim().toLowerCase(), password, email_confirm: true,
+        email: emailNorm, password, email_confirm: true,
         user_metadata: { full_name: contact_person || name },
       });
       if (authError) {
         await supabaseAdmin.from("tenants").delete().eq("id", tenant.id);
-        return json({ error: authError.message }, 400);
+        const isDup = /already|registered|exists/i.test(authError.message);
+        return json(
+          { error: isDup
+              ? `An account with ${emailNorm} already exists. Please use a different email.`
+              : authError.message },
+          isDup ? 409 : 400,
+        );
       }
 
       await supabaseAdmin.from("profiles").update({
