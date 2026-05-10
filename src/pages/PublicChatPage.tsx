@@ -1145,9 +1145,31 @@ export default function PublicChatPage() {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const picked = new Date(canonical + "T00:00:00");
+      const fmtIso = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const fmtNice = (d: Date) =>
+        d.toLocaleDateString(language === "hi" ? "hi-IN" : language === "ar" ? "ar-EG" : "en-IN", {
+          weekday: "short", day: "numeric", month: "short", year: "numeric",
+        });
+      // Compute the next bookable date from "today", respecting holidays + window.
+      const findNextOpen = (): Date | null => {
+        const max = advanceBookingDays && advanceBookingDays > 0 ? advanceBookingDays : 60;
+        const cursor = new Date(today);
+        for (let i = 0; i <= max; i++) {
+          if (!holidays.has(fmtIso(cursor))) return new Date(cursor);
+          cursor.setDate(cursor.getDate() + 1);
+        }
+        return null;
+      };
       let blockText: string | null = null;
       if (holidays.has(canonical)) {
-        const msg: Record<string, string> = {
+        const next = findNextOpen();
+        const nextStr = next ? fmtNice(next) : "";
+        const msg: Record<string, string> = next ? {
+          en: `🚫 We are closed then, but our next available slot is ${nextStr}. Would you like to book that?`,
+          hi: `🚫 हम उस दिन बंद हैं, लेकिन हमारा अगला उपलब्ध स्लॉट ${nextStr} है। क्या आप वह बुक करना चाहेंगे?`,
+          ar: `🚫 نحن مغلقون في ذلك اليوم، لكن أقرب موعد متاح لدينا هو ${nextStr}. هل ترغب في حجزه؟`,
+        } : {
           en: "🚫 We are closed on this day. Please choose another date.",
           hi: "🚫 हम इस दिन बंद हैं। कृपया कोई दूसरी तारीख चुनें।",
           ar: "🚫 نحن مغلقون في هذا اليوم. يرجى اختيار تاريخ آخر.",
@@ -1157,7 +1179,13 @@ export default function PublicChatPage() {
         const max = new Date(today);
         max.setDate(max.getDate() + advanceBookingDays);
         if (picked.getTime() > max.getTime()) {
-          const msg: Record<string, string> = {
+          const next = findNextOpen();
+          const nextStr = next ? fmtNice(next) : "";
+          const msg: Record<string, string> = next ? {
+            en: `📅 We are closed then, but our next available slot is ${nextStr}. Would you like to book that?`,
+            hi: `📅 हम उस तारीख पर उपलब्ध नहीं हैं, लेकिन हमारा अगला उपलब्ध स्लॉट ${nextStr} है। क्या आप वह बुक करना चाहेंगे?`,
+            ar: `📅 لسنا متاحين في ذلك التاريخ، لكن أقرب موعد متاح هو ${nextStr}. هل ترغب في حجزه؟`,
+          } : {
             en: `📅 Booking is not yet open for this date. Please pick a date within the next ${advanceBookingDays} days.`,
             hi: `📅 इस तारीख के लिए बुकिंग अभी उपलब्ध नहीं है। कृपया अगले ${advanceBookingDays} दिनों के भीतर की तारीख चुनें।`,
             ar: `📅 لم يتم فتح الحجز لهذا التاريخ بعد. يرجى اختيار تاريخ خلال الـ ${advanceBookingDays} يومًا القادمة.`,
