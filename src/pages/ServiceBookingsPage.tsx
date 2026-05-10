@@ -315,7 +315,7 @@ export default function ServiceBookingsPage() {
           </TabsList>
           <TabsContent value={tab} className="mt-4">
             {tab === "report" ? (
-              <DynamicReportTable columns={columns} rows={bookings as any} emptyMessage="No bookings yet." />
+              <DynamicReportTable columns={columns} rows={searchedBookings as any} emptyMessage="No bookings yet." />
             ) : loading ? (
               <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
             ) : filtered.length === 0 ? (
