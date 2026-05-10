@@ -138,6 +138,8 @@ export default function PublicChatPage() {
   const [fuzzyThreshold, setFuzzyThreshold] = useState(0.75);
   const [advanceBookingDays, setAdvanceBookingDays] = useState<number | null>(null);
   const [holidays, setHolidays] = useState<Set<string>>(new Set());
+  const [dailyLimit, setDailyLimit] = useState<number>(0);
+  const [bookedDates, setBookedDates] = useState<Set<string>>(new Set());
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -175,6 +177,10 @@ export default function PublicChatPage() {
       if (Array.isArray(tSettings.holidays)) {
         setHolidays(new Set((tSettings.holidays as unknown[]).filter((s): s is string => typeof s === "string")));
       }
+      const _limit = Number(
+        tSettings.daily_booking_limit ?? tSettings.max_vehicles_per_day ?? 0
+      ) || 0;
+      setDailyLimit(_limit);
 
       let resolvedFlow: { id: string; flow_data: FlowData } | null = null;
       if (flowIdParam) {
@@ -358,6 +364,42 @@ export default function PublicChatPage() {
   }, [tenantParam, flowIdParam]);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+
+  // ---------- Load fully-booked dates within the booking window ----------
+  const loadBookedDates = useCallback(async () => {
+    if (!dealer || !dailyLimit || dailyLimit <= 0) {
+      setBookedDates(new Set());
+      return;
+    }
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const horizonDays = advanceBookingDays && advanceBookingDays > 0 ? advanceBookingDays : 60;
+    const end = new Date(today); end.setDate(end.getDate() + horizonDays);
+    const startIso = format(today, "yyyy-MM-dd");
+    const endIso = format(end, "yyyy-MM-dd");
+    const counts: Record<string, number> = {};
+    const accumulate = (rows: { d: string | null }[] | null) => {
+      for (const r of rows || []) {
+        if (!r.d) continue;
+        counts[r.d] = (counts[r.d] || 0) + 1;
+      }
+    };
+    const [sb, td] = await Promise.all([
+      supabase.from("service_bookings").select("d:booking_date").eq("tenant_id", dealer.id)
+        .neq("status", "cancelled").gte("booking_date", startIso).lte("booking_date", endIso),
+      supabase.from("test_drive_bookings").select("d:preferred_date").eq("tenant_id", dealer.id)
+        .neq("status", "cancelled").gte("preferred_date", startIso).lte("preferred_date", endIso),
+    ]);
+    accumulate(sb.data as { d: string | null }[] | null);
+    accumulate(td.data as { d: string | null }[] | null);
+    const full = new Set<string>();
+    for (const [date, n] of Object.entries(counts)) {
+      if (n >= dailyLimit) full.add(date);
+    }
+    setBookedDates(full);
+  }, [dealer, dailyLimit, advanceBookingDays]);
+
+  useEffect(() => { loadBookedDates(); }, [loadBookedDates]);
+
 
   // ---------- Persist session updates ----------
   const persistSession = useCallback(
@@ -1151,21 +1193,23 @@ export default function PublicChatPage() {
         d.toLocaleDateString(language === "hi" ? "hi-IN" : language === "ar" ? "ar-EG" : "en-IN", {
           weekday: "short", day: "numeric", month: "short", year: "numeric",
         });
-      // Compute the next bookable date from "today", respecting holidays + window.
+      // Compute the next bookable date from "today", respecting holidays + window + capacity.
       const findNextOpen = (): Date | null => {
         const max = advanceBookingDays && advanceBookingDays > 0 ? advanceBookingDays : 60;
         const cursor = new Date(today);
         for (let i = 0; i <= max; i++) {
-          if (!holidays.has(fmtIso(cursor))) return new Date(cursor);
+          const iso = fmtIso(cursor);
+          if (!holidays.has(iso) && !bookedDates.has(iso)) return new Date(cursor);
           cursor.setDate(cursor.getDate() + 1);
         }
         return null;
       };
       let blockText: string | null = null;
-      if (holidays.has(canonical)) {
-        const next = findNextOpen();
-        const nextStr = next ? fmtNice(next) : "";
-        const msg: Record<string, string> = next ? {
+      let altDate: Date | null = null;
+      if (holidays.has(canonical) || bookedDates.has(canonical)) {
+        altDate = findNextOpen();
+        const nextStr = altDate ? fmtNice(altDate) : "";
+        const msg: Record<string, string> = altDate ? {
           en: `🚫 We are closed then, but our next available slot is ${nextStr}. Would you like to book that?`,
           hi: `🚫 हम उस दिन बंद हैं, लेकिन हमारा अगला उपलब्ध स्लॉट ${nextStr} है। क्या आप वह बुक करना चाहेंगे?`,
           ar: `🚫 نحن مغلقون في ذلك اليوم، لكن أقرب موعد متاح لدينا هو ${nextStr}. هل ترغب في حجزه؟`,
@@ -1179,30 +1223,45 @@ export default function PublicChatPage() {
         const max = new Date(today);
         max.setDate(max.getDate() + advanceBookingDays);
         if (picked.getTime() > max.getTime()) {
-          const next = findNextOpen();
-          const nextStr = next ? fmtNice(next) : "";
-          const msg: Record<string, string> = next ? {
+          altDate = findNextOpen();
+          const nextStr = altDate ? fmtNice(altDate) : "";
+          const msg: Record<string, string> = altDate ? {
             en: `📅 We are closed then, but our next available slot is ${nextStr}. Would you like to book that?`,
             hi: `📅 हम उस तारीख पर उपलब्ध नहीं हैं, लेकिन हमारा अगला उपलब्ध स्लॉट ${nextStr} है। क्या आप वह बुक करना चाहेंगे?`,
             ar: `📅 لسنا متاحين في ذلك التاريخ، لكن أقرب موعد متاح هو ${nextStr}. هل ترغب في حجزه؟`,
           } : {
             en: `📅 Booking is not yet open for this date. Please pick a date within the next ${advanceBookingDays} days.`,
             hi: `📅 इस तारीख के लिए बुकिंग अभी उपलब्ध नहीं है। कृपया अगले ${advanceBookingDays} दिनों के भीतर की तारीख चुनें।`,
-            ar: `📅 لم يتم فتح الحجز لهذا التاريخ بعد. يرجى اختيار تاريخ خلال الـ ${advanceBookingDays} يومًا القادمة.`,
+            ar: `📅 لم يتم فتح الحجز لهذا التाريخ بعد. يرجى اختيار تاريخ خلال الـ ${advanceBookingDays} يومًا القادمة.`,
           };
           blockText = msg[language] || msg.en;
         }
       }
       if (blockText) {
+        const opts: { label: string; value: string }[] = [];
+        if (altDate) {
+          const altIso = fmtIso(altDate);
+          const yesLabel: Record<string, string> = {
+            en: `✅ Yes, book ${fmtNice(altDate)}`,
+            hi: `✅ हाँ, ${fmtNice(altDate)} बुक करें`,
+            ar: `✅ نعم، احجز ${fmtNice(altDate)}`,
+          };
+          opts.push({ label: yesLabel[language] || yesLabel.en, value: `__alt_yes__:${altIso}` });
+        }
+        const pickLabel: Record<string, string> = {
+          en: "📅 Choose another date",
+          hi: "📅 कोई दूसरी तारीख चुनें",
+          ar: "📅 اختر تاريخًا آخر",
+        };
+        opts.push({ label: pickLabel[language] || pickLabel.en, value: "__alt_pick__" });
         setMessages((prev) => [
           ...prev,
           { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? answer },
-          { id: `bot-block-${Date.now()}`, sender: "bot", text: blockText! },
           {
-            id: `bot-reprompt-${Date.now()}`,
+            id: `bot-block-${Date.now()}`,
             sender: "bot",
-            text: getNodeMessage(currentNode, collectedData, language),
-            options: currentNode.options?.map((o) => ({ label: o.label, value: o.value })),
+            text: blockText!,
+            options: opts,
             nodeId: currentNode.id,
             data: collectedData,
           },
@@ -1259,6 +1318,66 @@ export default function PublicChatPage() {
     if (!input.trim() || isComplete) return;
     processAnswer(input.trim());
     setInput("");
+  };
+
+  // ---------- Alternative-date interaction ----------
+  const fmtNiceDate = (iso: string) => {
+    const d = new Date(iso + "T00:00:00");
+    return d.toLocaleDateString(language === "hi" ? "hi-IN" : language === "ar" ? "ar-EG" : "en-IN", {
+      weekday: "short", day: "numeric", month: "short", year: "numeric",
+    });
+  };
+
+  const askAltConfirmation = (iso: string) => {
+    const nice = fmtNiceDate(iso);
+    const txt: Record<string, string> = {
+      en: `Great! I've updated your request to ${nice}. Is this correct?`,
+      hi: `बहुत अच्छा! मैंने आपका अनुरोध ${nice} पर अपडेट कर दिया है। क्या यह सही है?`,
+      ar: `رائع! لقد قمت بتحديث طلبك إلى ${nice}. هل هذا صحيح؟`,
+    };
+    const yesL: Record<string, string> = { en: "✅ Yes, confirm", hi: "✅ हाँ, पुष्टि करें", ar: "✅ نعم، أكد" };
+    const noL: Record<string, string> = { en: "📅 No, pick another", hi: "📅 नहीं, दूसरी चुनें", ar: "📅 لا، اختر تاريخًا آخر" };
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `bot-altconfirm-${Date.now()}`,
+        sender: "bot",
+        text: txt[language] || txt.en,
+        options: [
+          { label: yesL[language] || yesL.en, value: `__altconfirm_yes__:${iso}` },
+          { label: noL[language] || noL.en, value: "__altconfirm_no__" },
+        ],
+        nodeId: currentNodeId || undefined,
+        data: collectedData,
+      },
+    ]);
+  };
+
+  const handleOptionClick = (value: string, label: string) => {
+    if (value.startsWith("__alt_yes__:")) {
+      const iso = value.split(":")[1];
+      const nice = fmtNiceDate(iso);
+      setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: `✅ Yes, book ${nice}` }]);
+      askAltConfirmation(iso);
+      return;
+    }
+    if (value === "__alt_pick__") {
+      setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: label }]);
+      setDatePickerOpen(true);
+      return;
+    }
+    if (value.startsWith("__altconfirm_yes__:")) {
+      const iso = value.split(":")[1];
+      const nice = fmtNiceDate(iso);
+      processAnswer(iso, nice);
+      return;
+    }
+    if (value === "__altconfirm_no__") {
+      setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: label }]);
+      setDatePickerOpen(true);
+      return;
+    }
+    processAnswer(value, label);
   };
 
   // ---------- Language change ----------
@@ -1418,7 +1537,7 @@ export default function PublicChatPage() {
                     {msg.options.map((opt) => (
                       <button
                         key={opt.value}
-                        onClick={() => isActiveOptions && processAnswer(opt.value, opt.label)}
+                        onClick={() => isActiveOptions && handleOptionClick(opt.value, opt.label)}
                         disabled={isComplete || !isActiveOptions}
                         className="px-3 py-1.5 text-xs rounded-full border border-primary/30 text-primary hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
@@ -1483,7 +1602,19 @@ export default function PublicChatPage() {
                   processAnswer(iso, display);
                   setInput("");
                 }}
-                disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                disabled={(date) => {
+                  const today = new Date(); today.setHours(0, 0, 0, 0);
+                  if (date < today) return true;
+                  const iso = format(date, "yyyy-MM-dd");
+                  if (holidays.has(iso)) return true;
+                  if (bookedDates.has(iso)) return true;
+                  if (advanceBookingDays && advanceBookingDays > 0) {
+                    const max = new Date(today);
+                    max.setDate(max.getDate() + advanceBookingDays);
+                    if (date.getTime() > max.getTime()) return true;
+                  }
+                  return false;
+                }}
                 initialFocus
                 className={cn("p-3 pointer-events-auto")}
               />
