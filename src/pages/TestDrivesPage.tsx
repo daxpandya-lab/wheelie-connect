@@ -102,17 +102,13 @@ export default function TestDrivesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId, sourceFilter]);
 
-  const filtered = enrichedBookings.filter(td => {
-    if (!search.trim()) return true;
-    const s = search.toLowerCase();
-    const sNorm = normalizeVehicle(s);
-    return (
-      td.customer_name?.toLowerCase().includes(s) ||
-      td.vehicle_model?.toLowerCase().includes(s) ||
-      normalizeVehicle(td.vehicle_model || "").includes(sNorm) ||
-      td.phone_number?.includes(s)
-    );
-  });
+  const filtered = enrichedBookings.filter(td =>
+    matchesGlobalSearch({
+      query: search,
+      text: [td.customer_name, td.phone_number],
+      vehicle: [td.vehicle_model],
+    })
+  );
 
   const counts = {
     total: enrichedBookings.length,
