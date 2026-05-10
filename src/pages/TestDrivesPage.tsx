@@ -75,7 +75,8 @@ export default function TestDrivesPage() {
     let query = supabase.from("test_drive_bookings")
       .select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false });
     if (isExecutive && user?.id) query = query.eq("assigned_to", user.id);
-    if (sourceFilter !== "all") query = query.eq("booking_source", sourceFilter);
+    if (sourceFilter === "manual") query = query.eq("booking_source", "manual");
+    else if (sourceFilter === "ai_bot") query = query.neq("booking_source", "manual");
     const [bookRes, teamRes] = await Promise.all([
       query,
       supabase.from("profiles").select("user_id, full_name").eq("tenant_id", tenantId),
