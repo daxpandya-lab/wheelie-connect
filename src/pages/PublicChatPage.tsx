@@ -1602,7 +1602,19 @@ export default function PublicChatPage() {
                   processAnswer(iso, display);
                   setInput("");
                 }}
-                disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                disabled={(date) => {
+                  const today = new Date(); today.setHours(0, 0, 0, 0);
+                  if (date < today) return true;
+                  const iso = format(date, "yyyy-MM-dd");
+                  if (holidays.has(iso)) return true;
+                  if (bookedDates.has(iso)) return true;
+                  if (advanceBookingDays && advanceBookingDays > 0) {
+                    const max = new Date(today);
+                    max.setDate(max.getDate() + advanceBookingDays);
+                    if (date.getTime() > max.getTime()) return true;
+                  }
+                  return false;
+                }}
                 initialFocus
                 className={cn("p-3 pointer-events-auto")}
               />
