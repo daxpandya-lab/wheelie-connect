@@ -125,15 +125,11 @@ export default function ServiceBookingsPage() {
 
   // Client-side text search across customer/phone/vehicle (vehicle ignores spaces, dots, hyphens)
   const searchedBookings = bookings.filter((b) => {
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      const qNorm = normalizeVehicle(q);
-      const matchesText =
-        (b.customer_name || "").toLowerCase().includes(q) ||
-        (b.vehicle_model || "").toLowerCase().includes(q) ||
-        normalizeVehicle(b.vehicle_model || "").includes(qNorm);
-      if (!matchesText) return false;
-    }
+    if (!matchesGlobalSearch({
+      query: search,
+      text: [b.customer_name, b.phone_number],
+      vehicle: [b.vehicle_model],
+    })) return false;
     if (phoneSearch.trim()) {
       const p = phoneSearch.trim();
       if (!(b.phone_number || "").includes(p)) return false;
