@@ -837,7 +837,7 @@ export default function PublicChatPage() {
         drop_required: !!data.drop_required,
         issue_description: data.issue_description ? String(data.issue_description) : null,
         notes: needsAddress ? `Pickup/Drop address: ${addressClean}` : null,
-        booking_source: "AI Chatbot",
+        booking_source: "Web Bot",
         status: "pending",
         metadata: { ...data, ...addressMeta, source_session_id: sessionId },
       } as never);
@@ -856,7 +856,7 @@ export default function PublicChatPage() {
         vehicle_model: String(data.vehicle_model || "Unknown"),
         preferred_date: isoDate,
         preferred_time: data.preferred_time ? String(data.preferred_time) : null,
-        booking_source: "AI Chatbot",
+        booking_source: "Web Bot",
         status: "pending",
         metadata: { ...data, source_session_id: sessionId },
       } as never);
@@ -898,7 +898,7 @@ export default function PublicChatPage() {
         pickup_required: !!data.pickup_required,
         drop_required: !!data.drop_required,
         notes: needsAddress ? `Pickup/Drop address: ${addressClean}` : null,
-        booking_source: "AI Chatbot",
+        booking_source: "Web Bot",
         status: "pending",
         metadata: {
           ...data,
