@@ -1477,7 +1477,7 @@ export default function PublicChatPage() {
                     {msg.options.map((opt) => (
                       <button
                         key={opt.value}
-                        onClick={() => isActiveOptions && processAnswer(opt.value, opt.label)}
+                        onClick={() => isActiveOptions && handleOptionClick(opt.value, opt.label)}
                         disabled={isComplete || !isActiveOptions}
                         className="px-3 py-1.5 text-xs rounded-full border border-primary/30 text-primary hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
