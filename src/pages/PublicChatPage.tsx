@@ -169,6 +169,12 @@ export default function PublicChatPage() {
       if (typeof tSettings.fuzzy_match_threshold === "number") {
         setFuzzyThreshold(Math.min(1, Math.max(0.5, tSettings.fuzzy_match_threshold)));
       }
+      if (typeof tSettings.advance_booking_days === "number" && tSettings.advance_booking_days > 0) {
+        setAdvanceBookingDays(tSettings.advance_booking_days);
+      }
+      if (Array.isArray(tSettings.holidays)) {
+        setHolidays(new Set((tSettings.holidays as unknown[]).filter((s): s is string => typeof s === "string")));
+      }
 
       let resolvedFlow: { id: string; flow_data: FlowData } | null = null;
       if (flowIdParam) {
