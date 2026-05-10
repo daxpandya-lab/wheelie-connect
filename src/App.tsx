@@ -26,6 +26,7 @@ import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
 import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import SubscriptionExpiredPage from "@/pages/SubscriptionExpiredPage";
 import PublicChatPage from "@/pages/PublicChatPage";
+import EstimateApprovalPage from "@/pages/EstimateApprovalPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -55,6 +56,7 @@ const App = () => (
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/chat/:dealerId" element={<PublicChatPage />} />
             <Route path="/chat/:tenantSlug/:flowId" element={<PublicChatPage />} />
+            <Route path="/estimate/:bookingId" element={<EstimateApprovalPage />} />
 
             {/* Subscription expired */}
             <Route element={<ProtectedRoute />}>

@@ -92,6 +92,8 @@ export default function ServiceBookingsPage() {
   const [selectedJob, setSelectedJob] = useState<ServiceBooking | null>(null);
   const [jobForm, setJobForm] = useState({ work_notes: "", parts_required: "", estimated_cost: "", approval_status: "pending", status: "pending", executive_notes: "" });
   const [saving, setSaving] = useState(false);
+  const [estForm, setEstForm] = useState({ amount: "", notes: "", parts: "" });
+  const [sendingEstimate, setSendingEstimate] = useState(false);
 
   const fetchBookings = useCallback(async () => {
     if (!tenantId) return;
@@ -165,7 +167,40 @@ export default function ServiceBookingsPage() {
       approval_status: b.approval_status || "pending", status: b.status,
       executive_notes: (b as any).executive_notes || "",
     });
+    setEstForm({
+      amount: ((b as any).estimate_amount ?? b.estimated_cost ?? "")?.toString() || "",
+      notes: b.work_notes || "",
+      parts: b.parts_required || "",
+    });
     setDetailOpen(true);
+  };
+
+  const sendEstimate = async () => {
+    if (!selectedJob) return;
+    const amountNum = parseFloat(estForm.amount);
+    if (!Number.isFinite(amountNum) || amountNum < 0) {
+      toast.error("Please enter a valid amount");
+      return;
+    }
+    setSendingEstimate(true);
+    const { data, error } = await supabase.functions.invoke("send-service-estimate", {
+      body: {
+        booking_id: selectedJob.id,
+        amount: amountNum,
+        notes: estForm.notes,
+        parts: estForm.parts,
+      },
+    });
+    setSendingEstimate(false);
+    if (error) {
+      toast.error(error.message || "Failed to send estimate");
+      return;
+    }
+    const wa = (data as any)?.whatsapp;
+    if (wa === "sent") toast.success("Estimate sent — WhatsApp delivered");
+    else if (wa === "failed") toast.warning("Estimate saved, but WhatsApp send failed");
+    else toast.success("Estimate saved (WhatsApp not configured)");
+    fetchBookings();
   };
 
   const saveJobDetail = async () => {
@@ -473,6 +508,38 @@ export default function ServiceBookingsPage() {
                       <SelectItem value="rejected">Rejected</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+              )}
+
+              {!isExecutive && (
+                <div className="space-y-3 rounded-lg border border-primary/30 p-4 bg-primary/5">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-semibold text-foreground uppercase tracking-wide">Estimation</Label>
+                    <Badge variant="outline" className={`text-xs ${
+                      selectedJob.approval_status === "approved" ? "bg-success/10 text-success border-success/20" :
+                      selectedJob.approval_status === "rejected" ? "bg-destructive/10 text-destructive border-destructive/20" :
+                      "bg-warning/10 text-warning border-warning/20"
+                    }`}>
+                      {selectedJob.approval_status || "pending"}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Send the customer an interactive estimate they can approve or reject from WhatsApp or the web.</p>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Amount (₹)</Label>
+                    <Input type="number" value={estForm.amount} onChange={e => setEstForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Notes</Label>
+                    <Textarea value={estForm.notes} onChange={e => setEstForm(f => ({ ...f, notes: e.target.value }))} placeholder="Work to be done..." rows={2} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Parts</Label>
+                    <Textarea value={estForm.parts} onChange={e => setEstForm(f => ({ ...f, parts: e.target.value }))} placeholder="Parts required..." rows={2} />
+                  </div>
+                  <Button onClick={sendEstimate} disabled={sendingEstimate} className="w-full">
+                    {sendingEstimate ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+                    Send Estimate to Customer
+                  </Button>
                 </div>
               )}
             </div>
