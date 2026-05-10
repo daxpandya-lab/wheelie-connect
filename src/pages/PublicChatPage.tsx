@@ -1571,9 +1571,24 @@ export default function PublicChatPage() {
                   const display = format(d, "dd-MM-yyyy");
                   setInput(iso);
                   setDatePickerOpen(false);
-                  // Submit immediately so the flow advances
+                  // Submit immediately so the flow advances (this stores booking_date)
                   processAnswer(iso, display);
                   setInput("");
+                  // Inject a bot confirmation message before the next prompt arrives
+                  const nice = fmtNiceDate(iso);
+                  const confirmTxt: Record<string, string> = {
+                    en: `Great! I've set your appointment for ${nice}. Shall we proceed with the rest of the details?`,
+                    hi: `बहुत अच्छा! मैंने आपकी अपॉइंटमेंट ${nice} के लिए सेट कर दी है। क्या हम बाकी विवरण के साथ आगे बढ़ें?`,
+                    ar: `رائع! لقد حددت موعدك في ${nice}. هل نتابع مع بقية التفاصيل؟`,
+                  };
+                  setMessages((prev) => [
+                    ...prev,
+                    {
+                      id: `bot-pickconfirm-${Date.now()}`,
+                      sender: "bot",
+                      text: confirmTxt[language] || confirmTxt.en,
+                    },
+                  ]);
                 }}
                 disabled={(date) => {
                   const today = new Date(); today.setHours(0, 0, 0, 0);
