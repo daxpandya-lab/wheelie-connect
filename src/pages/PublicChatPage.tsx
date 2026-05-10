@@ -1345,25 +1345,7 @@ export default function PublicChatPage() {
   };
 
   const handleOptionClick = (value: string, label: string) => {
-    if (value.startsWith("__alt_yes__:")) {
-      const iso = value.split(":")[1];
-      const nice = fmtNiceDate(iso);
-      setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: `✅ Yes, book ${nice}` }]);
-      askAltConfirmation(iso);
-      return;
-    }
     if (value === "__alt_pick__") {
-      setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: label }]);
-      setDatePickerOpen(true);
-      return;
-    }
-    if (value.startsWith("__altconfirm_yes__:")) {
-      const iso = value.split(":")[1];
-      const nice = fmtNiceDate(iso);
-      processAnswer(iso, nice);
-      return;
-    }
-    if (value === "__altconfirm_no__") {
       setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: label }]);
       setDatePickerOpen(true);
       return;
