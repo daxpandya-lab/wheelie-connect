@@ -286,7 +286,7 @@ export default function ServiceBookingsPage() {
               title="Service Bookings"
               filename="service-bookings"
               columns={columns.filter(c => c.visible !== false).map(c => ({ key: c.key, label: c.label }))}
-              rows={filterByTab(bookings)}
+              rows={filterByTab(searchedBookings)}
               filters={[
                 { label: "Tab", value: tab },
                 { label: "Search", value: search.trim() },
@@ -296,7 +296,7 @@ export default function ServiceBookingsPage() {
                 { label: "Source", value: sourceFilter },
                 { label: "Date From", value: dateFrom ? format(dateFrom, "yyyy-MM-dd") : "" },
                 { label: "Date To", value: dateTo ? format(dateTo, "yyyy-MM-dd") : "" },
-                { label: "Sort", value: "Booking date (newest first)" },
+                { label: "Sort", value: "Created (newest first)" },
               ]}
             />
             <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => setColMgrOpen(true)}><Settings2 className="w-4 h-4" />Manage Columns</Button>
