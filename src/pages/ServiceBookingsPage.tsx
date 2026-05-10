@@ -58,17 +58,16 @@ const STATUS_FLOW = [
 
 const SERVICE_TYPES = ["Oil Change", "General Service", "Repair", "Inspection", "Custom"];
 
-const isAiBotSource = (s: string | null | undefined) =>
-  !!s && s.toLowerCase() !== "manual";
+import { classifyBookingSource, bookingSourceLabel, matchesGlobalSearch } from "@/lib/search-utils";
 
 function SourceBadge({ source }: { source: string }) {
-  if (isAiBotSource(source)) {
-    return <Badge variant="outline" className="text-xs gap-1 bg-primary/10 text-primary border-primary/20"><Bot className="w-3 h-3" />AI Bot</Badge>;
+  const kind = classifyBookingSource(source);
+  const label = bookingSourceLabel(source);
+  if (kind === "manual") {
+    return <Badge variant="outline" className="text-xs gap-1 bg-muted text-muted-foreground"><User className="w-3 h-3" />{label}</Badge>;
   }
-  return <Badge variant="outline" className="text-xs gap-1 bg-muted text-muted-foreground"><User className="w-3 h-3" />Manual</Badge>;
+  return <Badge variant="outline" className="text-xs gap-1 bg-primary/10 text-primary border-primary/20"><Bot className="w-3 h-3" />{label}</Badge>;
 }
-
-const normalizeVehicle = (v: string) => (v || "").toLowerCase().replace(/[\s.\-]/g, "");
 
 
 export default function ServiceBookingsPage() {
@@ -126,15 +125,11 @@ export default function ServiceBookingsPage() {
 
   // Client-side text search across customer/phone/vehicle (vehicle ignores spaces, dots, hyphens)
   const searchedBookings = bookings.filter((b) => {
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      const qNorm = normalizeVehicle(q);
-      const matchesText =
-        (b.customer_name || "").toLowerCase().includes(q) ||
-        (b.vehicle_model || "").toLowerCase().includes(q) ||
-        normalizeVehicle(b.vehicle_model || "").includes(qNorm);
-      if (!matchesText) return false;
-    }
+    if (!matchesGlobalSearch({
+      query: search,
+      text: [b.customer_name, b.phone_number],
+      vehicle: [b.vehicle_model],
+    })) return false;
     if (phoneSearch.trim()) {
       const p = phoneSearch.trim();
       if (!(b.phone_number || "").includes(p)) return false;

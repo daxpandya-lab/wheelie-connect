@@ -35,17 +35,16 @@ const FIXED_COLS = [
   { key: "booking_source", label: "Source" },
 ];
 
-const isAiBotSource = (s: string | null | undefined) =>
-  !!s && s.toLowerCase() !== "manual";
+import { classifyBookingSource, bookingSourceLabel, matchesGlobalSearch } from "@/lib/search-utils";
 
 function SourceBadge({ source }: { source: string }) {
-  if (isAiBotSource(source)) {
-    return <Badge variant="outline" className="text-xs gap-1 bg-primary/10 text-primary border-primary/20"><Bot className="w-3 h-3" />AI Bot</Badge>;
+  const kind = classifyBookingSource(source);
+  const label = bookingSourceLabel(source);
+  if (kind === "manual") {
+    return <Badge variant="outline" className="text-xs gap-1 bg-muted text-muted-foreground"><User className="w-3 h-3" />{label}</Badge>;
   }
-  return <Badge variant="outline" className="text-xs gap-1 bg-muted text-muted-foreground"><User className="w-3 h-3" />Manual</Badge>;
+  return <Badge variant="outline" className="text-xs gap-1 bg-primary/10 text-primary border-primary/20"><Bot className="w-3 h-3" />{label}</Badge>;
 }
-
-const normalizeVehicle = (v: string) => (v || "").toLowerCase().replace(/[\s.\-]/g, "");
 
 
 export default function TestDrivesPage() {
@@ -103,17 +102,13 @@ export default function TestDrivesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId, sourceFilter]);
 
-  const filtered = enrichedBookings.filter(td => {
-    if (!search.trim()) return true;
-    const s = search.toLowerCase();
-    const sNorm = normalizeVehicle(s);
-    return (
-      td.customer_name?.toLowerCase().includes(s) ||
-      td.vehicle_model?.toLowerCase().includes(s) ||
-      normalizeVehicle(td.vehicle_model || "").includes(sNorm) ||
-      td.phone_number?.includes(s)
-    );
-  });
+  const filtered = enrichedBookings.filter(td =>
+    matchesGlobalSearch({
+      query: search,
+      text: [td.customer_name, td.phone_number],
+      vehicle: [td.vehicle_model],
+    })
+  );
 
   const counts = {
     total: enrichedBookings.length,
