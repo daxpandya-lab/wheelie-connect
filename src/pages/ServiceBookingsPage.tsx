@@ -58,12 +58,18 @@ const STATUS_FLOW = [
 
 const SERVICE_TYPES = ["Oil Change", "General Service", "Repair", "Inspection", "Custom"];
 
+const isAiBotSource = (s: string | null | undefined) =>
+  !!s && s.toLowerCase() !== "manual";
+
 function SourceBadge({ source }: { source: string }) {
-  if (source === "ai_bot") {
+  if (isAiBotSource(source)) {
     return <Badge variant="outline" className="text-xs gap-1 bg-primary/10 text-primary border-primary/20"><Bot className="w-3 h-3" />AI Bot</Badge>;
   }
   return <Badge variant="outline" className="text-xs gap-1 bg-muted text-muted-foreground"><User className="w-3 h-3" />Manual</Badge>;
 }
+
+const normalizeVehicle = (v: string) => (v || "").toLowerCase().replace(/[\s.\-]/g, "");
+
 
 export default function ServiceBookingsPage() {
   const { tenantId, roles, user } = useAuth();
