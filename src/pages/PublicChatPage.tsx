@@ -1140,6 +1140,49 @@ export default function PublicChatPage() {
     // Use the canonicalized value (e.g. fuzzy-matched option value, normalized date)
     const canonical = result.value;
 
+    // Booking window + holiday enforcement (date inputs only)
+    if (currentNode.validationType === "date" && /^\d{4}-\d{2}-\d{2}$/.test(canonical)) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const picked = new Date(canonical + "T00:00:00");
+      let blockText: string | null = null;
+      if (holidays.has(canonical)) {
+        const msg: Record<string, string> = {
+          en: "🚫 We are closed on this day. Please choose another date.",
+          hi: "🚫 हम इस दिन बंद हैं। कृपया कोई दूसरी तारीख चुनें।",
+          ar: "🚫 نحن مغلقون في هذا اليوم. يرجى اختيار تاريخ آخر.",
+        };
+        blockText = msg[language] || msg.en;
+      } else if (advanceBookingDays && advanceBookingDays > 0) {
+        const max = new Date(today);
+        max.setDate(max.getDate() + advanceBookingDays);
+        if (picked.getTime() > max.getTime()) {
+          const msg: Record<string, string> = {
+            en: `📅 Booking is not yet open for this date. Please pick a date within the next ${advanceBookingDays} days.`,
+            hi: `📅 इस तारीख के लिए बुकिंग अभी उपलब्ध नहीं है। कृपया अगले ${advanceBookingDays} दिनों के भीतर की तारीख चुनें।`,
+            ar: `📅 لم يتم فتح الحجز لهذا التاريخ بعد. يرجى اختيار تاريخ خلال الـ ${advanceBookingDays} يومًا القادمة.`,
+          };
+          blockText = msg[language] || msg.en;
+        }
+      }
+      if (blockText) {
+        setMessages((prev) => [
+          ...prev,
+          { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? answer },
+          { id: `bot-block-${Date.now()}`, sender: "bot", text: blockText! },
+          {
+            id: `bot-reprompt-${Date.now()}`,
+            sender: "bot",
+            text: getNodeMessage(currentNode, collectedData, language),
+            options: currentNode.options?.map((o) => ({ label: o.label, value: o.value })),
+            nodeId: currentNode.id,
+            data: collectedData,
+          },
+        ]);
+        return;
+      }
+    }
+
     setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? answer }]);
 
     const newData = { ...collectedData };
