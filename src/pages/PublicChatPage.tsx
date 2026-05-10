@@ -1320,6 +1320,66 @@ export default function PublicChatPage() {
     setInput("");
   };
 
+  // ---------- Alternative-date interaction ----------
+  const fmtNiceDate = (iso: string) => {
+    const d = new Date(iso + "T00:00:00");
+    return d.toLocaleDateString(language === "hi" ? "hi-IN" : language === "ar" ? "ar-EG" : "en-IN", {
+      weekday: "short", day: "numeric", month: "short", year: "numeric",
+    });
+  };
+
+  const askAltConfirmation = (iso: string) => {
+    const nice = fmtNiceDate(iso);
+    const txt: Record<string, string> = {
+      en: `Great! I've updated your request to ${nice}. Is this correct?`,
+      hi: `बहुत अच्छा! मैंने आपका अनुरोध ${nice} पर अपडेट कर दिया है। क्या यह सही है?`,
+      ar: `رائع! لقد قمت بتحديث طلبك إلى ${nice}. هل هذا صحيح؟`,
+    };
+    const yesL: Record<string, string> = { en: "✅ Yes, confirm", hi: "✅ हाँ, पुष्टि करें", ar: "✅ نعم، أكد" };
+    const noL: Record<string, string> = { en: "📅 No, pick another", hi: "📅 नहीं, दूसरी चुनें", ar: "📅 لا، اختر تاريخًا آخر" };
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `bot-altconfirm-${Date.now()}`,
+        sender: "bot",
+        text: txt[language] || txt.en,
+        options: [
+          { label: yesL[language] || yesL.en, value: `__altconfirm_yes__:${iso}` },
+          { label: noL[language] || noL.en, value: "__altconfirm_no__" },
+        ],
+        nodeId: currentNodeId || undefined,
+        data: collectedData,
+      },
+    ]);
+  };
+
+  const handleOptionClick = (value: string, label: string) => {
+    if (value.startsWith("__alt_yes__:")) {
+      const iso = value.split(":")[1];
+      const nice = fmtNiceDate(iso);
+      setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: `✅ Yes, book ${nice}` }]);
+      askAltConfirmation(iso);
+      return;
+    }
+    if (value === "__alt_pick__") {
+      setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: label }]);
+      setDatePickerOpen(true);
+      return;
+    }
+    if (value.startsWith("__altconfirm_yes__:")) {
+      const iso = value.split(":")[1];
+      const nice = fmtNiceDate(iso);
+      processAnswer(iso, nice);
+      return;
+    }
+    if (value === "__altconfirm_no__") {
+      setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: label }]);
+      setDatePickerOpen(true);
+      return;
+    }
+    processAnswer(value, label);
+  };
+
   // ---------- Language change ----------
   const handleLanguageChange = (newLang: string) => {
     if (!flow || newLang === language) return;
