@@ -1193,21 +1193,23 @@ export default function PublicChatPage() {
         d.toLocaleDateString(language === "hi" ? "hi-IN" : language === "ar" ? "ar-EG" : "en-IN", {
           weekday: "short", day: "numeric", month: "short", year: "numeric",
         });
-      // Compute the next bookable date from "today", respecting holidays + window.
+      // Compute the next bookable date from "today", respecting holidays + window + capacity.
       const findNextOpen = (): Date | null => {
         const max = advanceBookingDays && advanceBookingDays > 0 ? advanceBookingDays : 60;
         const cursor = new Date(today);
         for (let i = 0; i <= max; i++) {
-          if (!holidays.has(fmtIso(cursor))) return new Date(cursor);
+          const iso = fmtIso(cursor);
+          if (!holidays.has(iso) && !bookedDates.has(iso)) return new Date(cursor);
           cursor.setDate(cursor.getDate() + 1);
         }
         return null;
       };
       let blockText: string | null = null;
-      if (holidays.has(canonical)) {
-        const next = findNextOpen();
-        const nextStr = next ? fmtNice(next) : "";
-        const msg: Record<string, string> = next ? {
+      let altDate: Date | null = null;
+      if (holidays.has(canonical) || bookedDates.has(canonical)) {
+        altDate = findNextOpen();
+        const nextStr = altDate ? fmtNice(altDate) : "";
+        const msg: Record<string, string> = altDate ? {
           en: `🚫 We are closed then, but our next available slot is ${nextStr}. Would you like to book that?`,
           hi: `🚫 हम उस दिन बंद हैं, लेकिन हमारा अगला उपलब्ध स्लॉट ${nextStr} है। क्या आप वह बुक करना चाहेंगे?`,
           ar: `🚫 نحن مغلقون في ذلك اليوم، لكن أقرب موعد متاح لدينا هو ${nextStr}. هل ترغب في حجزه؟`,
@@ -1221,30 +1223,45 @@ export default function PublicChatPage() {
         const max = new Date(today);
         max.setDate(max.getDate() + advanceBookingDays);
         if (picked.getTime() > max.getTime()) {
-          const next = findNextOpen();
-          const nextStr = next ? fmtNice(next) : "";
-          const msg: Record<string, string> = next ? {
+          altDate = findNextOpen();
+          const nextStr = altDate ? fmtNice(altDate) : "";
+          const msg: Record<string, string> = altDate ? {
             en: `📅 We are closed then, but our next available slot is ${nextStr}. Would you like to book that?`,
             hi: `📅 हम उस तारीख पर उपलब्ध नहीं हैं, लेकिन हमारा अगला उपलब्ध स्लॉट ${nextStr} है। क्या आप वह बुक करना चाहेंगे?`,
             ar: `📅 لسنا متاحين في ذلك التاريخ، لكن أقرب موعد متاح هو ${nextStr}. هل ترغب في حجزه؟`,
           } : {
             en: `📅 Booking is not yet open for this date. Please pick a date within the next ${advanceBookingDays} days.`,
             hi: `📅 इस तारीख के लिए बुकिंग अभी उपलब्ध नहीं है। कृपया अगले ${advanceBookingDays} दिनों के भीतर की तारीख चुनें।`,
-            ar: `📅 لم يتم فتح الحجز لهذا التاريخ بعد. يرجى اختيار تاريخ خلال الـ ${advanceBookingDays} يومًا القادمة.`,
+            ar: `📅 لم يتم فتح الحجز لهذا التाريخ بعد. يرجى اختيار تاريخ خلال الـ ${advanceBookingDays} يومًا القادمة.`,
           };
           blockText = msg[language] || msg.en;
         }
       }
       if (blockText) {
+        const opts: { label: string; value: string }[] = [];
+        if (altDate) {
+          const altIso = fmtIso(altDate);
+          const yesLabel: Record<string, string> = {
+            en: `✅ Yes, book ${fmtNice(altDate)}`,
+            hi: `✅ हाँ, ${fmtNice(altDate)} बुक करें`,
+            ar: `✅ نعم، احجز ${fmtNice(altDate)}`,
+          };
+          opts.push({ label: yesLabel[language] || yesLabel.en, value: `__alt_yes__:${altIso}` });
+        }
+        const pickLabel: Record<string, string> = {
+          en: "📅 Choose another date",
+          hi: "📅 कोई दूसरी तारीख चुनें",
+          ar: "📅 اختر تاريخًا آخر",
+        };
+        opts.push({ label: pickLabel[language] || pickLabel.en, value: "__alt_pick__" });
         setMessages((prev) => [
           ...prev,
           { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? answer },
-          { id: `bot-block-${Date.now()}`, sender: "bot", text: blockText! },
           {
-            id: `bot-reprompt-${Date.now()}`,
+            id: `bot-block-${Date.now()}`,
             sender: "bot",
-            text: getNodeMessage(currentNode, collectedData, language),
-            options: currentNode.options?.map((o) => ({ label: o.label, value: o.value })),
+            text: blockText!,
+            options: opts,
             nodeId: currentNode.id,
             data: collectedData,
           },
