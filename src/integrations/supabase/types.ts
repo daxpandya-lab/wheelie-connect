@@ -521,6 +521,7 @@ export type Database = {
           created_at: string
           description: string | null
           flow_data: Json
+          flow_type: string
           id: string
           is_active: boolean
           language: string
@@ -533,6 +534,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           flow_data?: Json
+          flow_type?: string
           id?: string
           is_active?: boolean
           language?: string
@@ -545,6 +547,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           flow_data?: Json
+          flow_type?: string
           id?: string
           is_active?: boolean
           language?: string
@@ -777,6 +780,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      flow_templates: {
+        Row: {
+          channel: string
+          created_at: string
+          description: string | null
+          flow_data: Json
+          flow_type: string
+          id: string
+          is_active: boolean
+          language: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          channel?: string
+          created_at?: string
+          description?: string | null
+          flow_data: Json
+          flow_type: string
+          id?: string
+          is_active?: boolean
+          language?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          description?: string | null
+          flow_data?: Json
+          flow_type?: string
+          id?: string
+          is_active?: boolean
+          language?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       leads: {
         Row: {
@@ -1587,6 +1629,10 @@ export type Database = {
           _window_seconds?: number
         }
         Returns: boolean
+      }
+      clone_master_flows_for_tenant: {
+        Args: { _tenant_id: string }
+        Returns: undefined
       }
       get_user_tenant_id: { Args: never; Returns: string }
       has_role: {
