@@ -106,7 +106,13 @@ export default function TestDrivesPage() {
   const filtered = enrichedBookings.filter(td => {
     if (!search.trim()) return true;
     const s = search.toLowerCase();
-    return td.customer_name?.toLowerCase().includes(s) || td.vehicle_model?.toLowerCase().includes(s) || td.phone_number?.includes(s);
+    const sNorm = normalizeVehicle(s);
+    return (
+      td.customer_name?.toLowerCase().includes(s) ||
+      td.vehicle_model?.toLowerCase().includes(s) ||
+      normalizeVehicle(td.vehicle_model || "").includes(sNorm) ||
+      td.phone_number?.includes(s)
+    );
   });
 
   const counts = {
