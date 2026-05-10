@@ -74,14 +74,14 @@ export default function FlowBuilderPage() {
 
   useEffect(() => { fetchFlows(); }, [tenantId]);
 
-  // Seed default flows
+  // Seed default flows (typed so booking tabs auto-link)
   const seedFlows = async () => {
     if (!tenantId) return;
     setSaving(true);
     const seeds = [
-      { name: "Service Booking", description: "14-step vehicle service booking chatbot", flow_data: SERVICE_BOOKING_FLOW, channel: "both" as const, language: "en" },
-      { name: "Test Drive", description: "Test drive booking chatbot with lead capture", flow_data: TEST_DRIVE_FLOW, channel: "both" as const, language: "en" },
-      { name: "Reschedule Service", description: "Lookup an existing service booking by phone and move it to a new date", flow_data: RESCHEDULE_SERVICE_FLOW, channel: "both" as const, language: "en" },
+      { name: "Service Booking", description: "14-step vehicle service booking chatbot", flow_data: SERVICE_BOOKING_FLOW, flow_type: "service_booking", channel: "both" as const, language: "en" },
+      { name: "Test Drive", description: "Test drive booking chatbot with lead capture", flow_data: TEST_DRIVE_FLOW, flow_type: "test_drive", channel: "both" as const, language: "en" },
+      { name: "Reschedule Service", description: "Lookup an existing service booking by phone and move it to a new date", flow_data: RESCHEDULE_SERVICE_FLOW, flow_type: "reschedule", channel: "both" as const, language: "en" },
     ];
     for (const s of seeds) {
       await supabase.from("chatbot_flows").insert({
@@ -92,12 +92,45 @@ export default function FlowBuilderPage() {
         is_active: false,
         language: s.language,
         channel: s.channel,
+        flow_type: s.flow_type,
       } as any);
     }
     setSaving(false);
     toast.success("Default flows created!");
     fetchFlows();
   };
+
+  // Super Admin only — push current frontend constants up as Master Templates.
+  // Trigger on `tenants` then auto-clones these into every newly created dealer.
+  const publishMasterTemplates = async () => {
+    if (!isSuperAdmin) return;
+    setSaving(true);
+    const masters = [
+      { name: "Service Booking (Master)", description: "Master template — auto-cloned to every new dealer", flow_type: "service_booking", flow_data: SERVICE_BOOKING_FLOW, channel: "both", language: "en" },
+      { name: "Test Drive (Master)", description: "Master template — auto-cloned to every new dealer", flow_type: "test_drive", flow_data: TEST_DRIVE_FLOW, channel: "both", language: "en" },
+    ];
+    for (const m of masters) {
+      const { error } = await (supabase as any).from("flow_templates").upsert(
+        { ...m, flow_data: JSON.parse(JSON.stringify(m.flow_data)), is_active: true, updated_at: new Date().toISOString() },
+        { onConflict: "flow_type" },
+      );
+      if (error) { toast.error(error.message); setSaving(false); return; }
+    }
+    setSaving(false);
+    toast.success("Master templates published — new dealers will receive them automatically");
+  };
+
+  // Clone master templates into the current tenant (idempotent on backend).
+  const cloneMasterTemplatesNow = async () => {
+    if (!tenantId) return;
+    setSaving(true);
+    const { error } = await (supabase as any).rpc("clone_master_flows_for_tenant", { _tenant_id: tenantId });
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Master templates cloned to your dealership");
+    fetchFlows();
+  };
+
 
   // Create a new flow — blank or a duplicate of an existing one
   const createNewFlow = async (sourceFlow?: FlowRecord) => {
