@@ -1590,10 +1590,12 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_executive_user: { Args: never; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }
       is_tenant_active: { Args: never; Returns: boolean }
       is_tenant_id_active: { Args: { _tenant_id: string }; Returns: boolean }
       is_user_tenant: { Args: { _tenant_id: string }; Returns: boolean }
+      normalize_vehicle_number: { Args: { _v: string }; Returns: string }
       schedule_booking_reminders: {
         Args: {
           _booking_date: string
@@ -1605,6 +1607,10 @@ export type Database = {
           _tenant_id: string
         }
         Returns: undefined
+      }
+      tenant_feature_enabled: {
+        Args: { _feature: string; _tenant_id: string }
+        Returns: boolean
       }
     }
     Enums: {
