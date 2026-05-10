@@ -138,6 +138,8 @@ export default function PublicChatPage() {
   const [fuzzyThreshold, setFuzzyThreshold] = useState(0.75);
   const [advanceBookingDays, setAdvanceBookingDays] = useState<number | null>(null);
   const [holidays, setHolidays] = useState<Set<string>>(new Set());
+  const [dailyLimit, setDailyLimit] = useState<number>(0);
+  const [bookedDates, setBookedDates] = useState<Set<string>>(new Set());
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
