@@ -17,6 +17,7 @@ interface AuthContextType {
   isTenantSuspended: boolean;
   serviceBookingEnabled: boolean;
   testDriveEnabled: boolean;
+  tenantName: string | null;
   isLoading: boolean;
   signOut: () => Promise<void>;
 }
