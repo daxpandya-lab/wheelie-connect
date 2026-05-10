@@ -307,7 +307,7 @@ export default function ServiceBookingsPage() {
         {/* Tabs */}
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
-            <TabsTrigger value="all">All ({bookings.length})</TabsTrigger>
+            <TabsTrigger value="all">All ({searchedBookings.length})</TabsTrigger>
             <TabsTrigger value="today">Today ({todayCount})</TabsTrigger>
             <TabsTrigger value="upcoming">Upcoming ({upcomingCount})</TabsTrigger>
             <TabsTrigger value="completed">Completed ({completedCount})</TabsTrigger>
