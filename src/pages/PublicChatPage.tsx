@@ -177,6 +177,10 @@ export default function PublicChatPage() {
       if (Array.isArray(tSettings.holidays)) {
         setHolidays(new Set((tSettings.holidays as unknown[]).filter((s): s is string => typeof s === "string")));
       }
+      const _limit = Number(
+        tSettings.daily_booking_limit ?? tSettings.max_vehicles_per_day ?? 0
+      ) || 0;
+      setDailyLimit(_limit);
 
       let resolvedFlow: { id: string; flow_data: FlowData } | null = null;
       if (flowIdParam) {
