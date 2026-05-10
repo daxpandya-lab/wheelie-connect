@@ -365,6 +365,42 @@ export default function PublicChatPage() {
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
+  // ---------- Load fully-booked dates within the booking window ----------
+  const loadBookedDates = useCallback(async () => {
+    if (!dealer || !dailyLimit || dailyLimit <= 0) {
+      setBookedDates(new Set());
+      return;
+    }
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const horizonDays = advanceBookingDays && advanceBookingDays > 0 ? advanceBookingDays : 60;
+    const end = new Date(today); end.setDate(end.getDate() + horizonDays);
+    const startIso = format(today, "yyyy-MM-dd");
+    const endIso = format(end, "yyyy-MM-dd");
+    const counts: Record<string, number> = {};
+    const accumulate = (rows: { d: string | null }[] | null) => {
+      for (const r of rows || []) {
+        if (!r.d) continue;
+        counts[r.d] = (counts[r.d] || 0) + 1;
+      }
+    };
+    const [sb, td] = await Promise.all([
+      supabase.from("service_bookings").select("d:booking_date").eq("tenant_id", dealer.id)
+        .neq("status", "cancelled").gte("booking_date", startIso).lte("booking_date", endIso),
+      supabase.from("test_drive_bookings").select("d:preferred_date").eq("tenant_id", dealer.id)
+        .neq("status", "cancelled").gte("preferred_date", startIso).lte("preferred_date", endIso),
+    ]);
+    accumulate(sb.data as { d: string | null }[] | null);
+    accumulate(td.data as { d: string | null }[] | null);
+    const full = new Set<string>();
+    for (const [date, n] of Object.entries(counts)) {
+      if (n >= dailyLimit) full.add(date);
+    }
+    setBookedDates(full);
+  }, [dealer, dailyLimit, advanceBookingDays]);
+
+  useEffect(() => { loadBookedDates(); }, [loadBookedDates]);
+
+
   // ---------- Persist session updates ----------
   const persistSession = useCallback(
     async (patch: {
