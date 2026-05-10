@@ -27,6 +27,8 @@ const sections = [
 function CapacitySettings() {
   const { tenantId } = useAuth();
   const [maxVehicles, setMaxVehicles] = useState("");
+  const [advanceDays, setAdvanceDays] = useState("");
+  const [holidays, setHolidays] = useState<Date[]>([]);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -36,6 +38,14 @@ function CapacitySettings() {
       .then(({ data }) => {
         const settings = data?.settings as Record<string, unknown> | null;
         if (settings?.max_vehicles_per_day) setMaxVehicles(String(settings.max_vehicles_per_day));
+        if (settings?.advance_booking_days) setAdvanceDays(String(settings.advance_booking_days));
+        if (Array.isArray(settings?.holidays)) {
+          setHolidays(
+            (settings!.holidays as unknown[])
+              .map((s) => (typeof s === "string" ? new Date(s + "T00:00:00") : null))
+              .filter((d): d is Date => !!d && !isNaN(d.getTime())),
+          );
+        }
         setLoading(false);
       });
   }, [tenantId]);
@@ -45,7 +55,14 @@ function CapacitySettings() {
     setSaving(true);
     const { data: tenant } = await supabase.from("tenants").select("settings").eq("id", tenantId).single();
     const currentSettings = (tenant?.settings as Record<string, unknown>) || {};
-    const newSettings = { ...currentSettings, max_vehicles_per_day: maxVehicles ? parseInt(maxVehicles) : null };
+    const newSettings = {
+      ...currentSettings,
+      max_vehicles_per_day: maxVehicles ? parseInt(maxVehicles) : null,
+      advance_booking_days: advanceDays ? parseInt(advanceDays) : null,
+      holidays: holidays
+        .map((d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`)
+        .sort(),
+    };
     const { error } = await supabase.from("tenants").update({ settings: newSettings } as any).eq("id", tenantId);
     if (error) toast.error(error.message);
     else toast.success("Capacity settings saved");
@@ -63,8 +80,44 @@ function CapacitySettings() {
           <Label>Max Vehicles Per Day</Label>
           <Input type="number" min="1" value={maxVehicles} onChange={e => setMaxVehicles(e.target.value)} placeholder="e.g. 10" />
         </div>
-        <Button onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save Settings"}</Button>
       </div>
+
+      <div className="glass-card rounded-xl p-6 space-y-4">
+        <h3 className="text-base font-semibold text-foreground">Advance Booking Window</h3>
+        <p className="text-sm text-muted-foreground">
+          How many days into the future customers can book. The bot will reject dates beyond this window
+          and the window slides forward by one day each midnight automatically.
+        </p>
+        <div className="space-y-2 max-w-xs">
+          <Label>Advance Booking Days</Label>
+          <Input type="number" min="1" value={advanceDays} onChange={e => setAdvanceDays(e.target.value)} placeholder="e.g. 30" />
+        </div>
+      </div>
+
+      <div className="glass-card rounded-xl p-6 space-y-4">
+        <h3 className="text-base font-semibold text-foreground">Holidays</h3>
+        <p className="text-sm text-muted-foreground">Pick the dates your dealership is closed. The bot will refuse bookings on these days.</p>
+        <Calendar
+          mode="multiple"
+          selected={holidays}
+          onSelect={(d) => setHolidays((d as Date[]) || [])}
+          className="p-3 pointer-events-auto rounded-md border border-border w-fit"
+        />
+        {holidays.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {holidays
+              .slice()
+              .sort((a, b) => a.getTime() - b.getTime())
+              .map((d) => (
+                <span key={d.toISOString()} className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs text-secondary-foreground">
+                  {d.toLocaleDateString()}
+                </span>
+              ))}
+          </div>
+        )}
+      </div>
+
+      <Button onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save Settings"}</Button>
     </div>
   );
 }
