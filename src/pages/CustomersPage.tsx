@@ -25,6 +25,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { matchesGlobalSearch } from "@/lib/search-utils";
 
 const SERVICE_TYPES = ["Oil Change", "General Service", "Repair", "Inspection", "Custom"];
 const VEHICLE_TYPES = ["Two Wheeler", "Car", "SUV", "Truck", "Commercial"];
