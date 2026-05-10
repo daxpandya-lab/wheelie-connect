@@ -43,7 +43,7 @@ const formatRelativeTime = (iso: string) => {
 };
 
 export default function FlowBuilderPage() {
-  const { tenantId } = useAuth();
+  const { tenantId, isSuperAdmin } = useAuth();
   const navigate = useNavigate();
 
   const [flows, setFlows] = useState<FlowRecord[]>([]);
