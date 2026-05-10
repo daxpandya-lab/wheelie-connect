@@ -984,7 +984,9 @@ export type Database = {
           customer_id: string | null
           customer_name: string
           drop_required: boolean | null
+          estimate_amount: number | null
           estimated_cost: number | null
+          estimation_sent_at: string | null
           executive_notes: string | null
           id: string
           issue_description: string | null
@@ -1014,7 +1016,9 @@ export type Database = {
           customer_id?: string | null
           customer_name: string
           drop_required?: boolean | null
+          estimate_amount?: number | null
           estimated_cost?: number | null
+          estimation_sent_at?: string | null
           executive_notes?: string | null
           id?: string
           issue_description?: string | null
@@ -1044,7 +1048,9 @@ export type Database = {
           customer_id?: string | null
           customer_name?: string
           drop_required?: boolean | null
+          estimate_amount?: number | null
           estimated_cost?: number | null
+          estimation_sent_at?: string | null
           executive_notes?: string | null
           id?: string
           issue_description?: string | null
