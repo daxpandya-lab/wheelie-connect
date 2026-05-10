@@ -167,7 +167,40 @@ export default function ServiceBookingsPage() {
       approval_status: b.approval_status || "pending", status: b.status,
       executive_notes: (b as any).executive_notes || "",
     });
+    setEstForm({
+      amount: ((b as any).estimate_amount ?? b.estimated_cost ?? "")?.toString() || "",
+      notes: b.work_notes || "",
+      parts: b.parts_required || "",
+    });
     setDetailOpen(true);
+  };
+
+  const sendEstimate = async () => {
+    if (!selectedJob) return;
+    const amountNum = parseFloat(estForm.amount);
+    if (!Number.isFinite(amountNum) || amountNum < 0) {
+      toast.error("Please enter a valid amount");
+      return;
+    }
+    setSendingEstimate(true);
+    const { data, error } = await supabase.functions.invoke("send-service-estimate", {
+      body: {
+        booking_id: selectedJob.id,
+        amount: amountNum,
+        notes: estForm.notes,
+        parts: estForm.parts,
+      },
+    });
+    setSendingEstimate(false);
+    if (error) {
+      toast.error(error.message || "Failed to send estimate");
+      return;
+    }
+    const wa = (data as any)?.whatsapp;
+    if (wa === "sent") toast.success("Estimate sent — WhatsApp delivered");
+    else if (wa === "failed") toast.warning("Estimate saved, but WhatsApp send failed");
+    else toast.success("Estimate saved (WhatsApp not configured)");
+    fetchBookings();
   };
 
   const saveJobDetail = async () => {
