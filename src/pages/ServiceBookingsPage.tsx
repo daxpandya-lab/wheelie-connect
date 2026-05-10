@@ -92,6 +92,8 @@ export default function ServiceBookingsPage() {
   const [selectedJob, setSelectedJob] = useState<ServiceBooking | null>(null);
   const [jobForm, setJobForm] = useState({ work_notes: "", parts_required: "", estimated_cost: "", approval_status: "pending", status: "pending", executive_notes: "" });
   const [saving, setSaving] = useState(false);
+  const [estForm, setEstForm] = useState({ amount: "", notes: "", parts: "" });
+  const [sendingEstimate, setSendingEstimate] = useState(false);
 
   const fetchBookings = useCallback(async () => {
     if (!tenantId) return;
