@@ -265,11 +265,23 @@ export default function FlowBuilderPage() {
                 <p className="text-sm text-muted-foreground">Build and manage your automated conversation flows</p>
               </div>
               <div className="flex items-center gap-2">
-                {flows.length === 0 && !loading && (
-                  <Button variant="outline" onClick={seedFlows} disabled={saving}>
-                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                    Create Default Flows
+                {isSuperAdmin && (
+                  <Button variant="outline" onClick={publishMasterTemplates} disabled={saving} title="Save current Service Booking & Test Drive flows as the global Master Templates that are auto-cloned to every new dealer.">
+                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
+                    Publish Master Templates
                   </Button>
+                )}
+                {flows.length === 0 && !loading && (
+                  <>
+                    <Button variant="outline" onClick={cloneMasterTemplatesNow} disabled={saving} title="Pull down the latest Master Templates published by the Super Admin">
+                      {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Copy className="w-4 h-4" />}
+                      Clone Master Templates
+                    </Button>
+                    <Button variant="outline" onClick={seedFlows} disabled={saving}>
+                      {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                      Create Default Flows
+                    </Button>
+                  </>
                 )}
                 <Button onClick={() => createNewFlow()} disabled={saving}>
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
