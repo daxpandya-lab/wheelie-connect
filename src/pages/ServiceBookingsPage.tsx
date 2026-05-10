@@ -58,7 +58,7 @@ const STATUS_FLOW = [
 
 const SERVICE_TYPES = ["Oil Change", "General Service", "Repair", "Inspection", "Custom"];
 
-import { classifyBookingSource, bookingSourceLabel, normalizeVehicle, matchesGlobalSearch } from "@/lib/search-utils";
+import { classifyBookingSource, bookingSourceLabel, matchesGlobalSearch } from "@/lib/search-utils";
 
 function SourceBadge({ source }: { source: string }) {
   const kind = classifyBookingSource(source);
