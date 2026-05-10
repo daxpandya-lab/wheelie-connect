@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Download, FileText, FileSpreadsheet } from "lucide-react";
 import { exportToCSV, exportToPDF, type ExportColumn, type ExportFilter } from "@/lib/export-utils";
+import { useAuth } from "@/contexts/AuthContext";
 
 type Props = {
   title: string;
@@ -10,9 +11,12 @@ type Props = {
   rows: any[];
   filters?: ExportFilter[];
   disabled?: boolean;
+  dealerName?: string;
 };
 
-export default function ExportMenu({ title, filename, columns, rows, filters = [], disabled }: Props) {
+export default function ExportMenu({ title, filename, columns, rows, filters = [], disabled, dealerName }: Props) {
+  const { tenantName } = useAuth();
+  const dealer = dealerName ?? tenantName ?? undefined;
   const stamp = new Date().toISOString().slice(0, 10);
   const fname = `${filename}-${stamp}`;
   return (
@@ -23,10 +27,10 @@ export default function ExportMenu({ title, filename, columns, rows, filters = [
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={() => exportToCSV(fname, columns, rows, filters)}>
+        <DropdownMenuItem onClick={() => exportToCSV(fname, columns, rows, filters, dealer)}>
           <FileSpreadsheet className="w-4 h-4 mr-2" /> Export as CSV
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => exportToPDF(title, fname, columns, rows, filters)}>
+        <DropdownMenuItem onClick={() => exportToPDF(title, fname, columns, rows, filters, dealer)}>
           <FileText className="w-4 h-4 mr-2" /> Export as PDF
         </DropdownMenuItem>
       </DropdownMenuContent>

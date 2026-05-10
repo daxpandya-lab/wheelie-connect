@@ -58,12 +58,18 @@ const STATUS_FLOW = [
 
 const SERVICE_TYPES = ["Oil Change", "General Service", "Repair", "Inspection", "Custom"];
 
+const isAiBotSource = (s: string | null | undefined) =>
+  !!s && s.toLowerCase() !== "manual";
+
 function SourceBadge({ source }: { source: string }) {
-  if (source === "ai_bot") {
+  if (isAiBotSource(source)) {
     return <Badge variant="outline" className="text-xs gap-1 bg-primary/10 text-primary border-primary/20"><Bot className="w-3 h-3" />AI Bot</Badge>;
   }
   return <Badge variant="outline" className="text-xs gap-1 bg-muted text-muted-foreground"><User className="w-3 h-3" />Manual</Badge>;
 }
+
+const normalizeVehicle = (v: string) => (v || "").toLowerCase().replace(/[\s.\-]/g, "");
+
 
 export default function ServiceBookingsPage() {
   const { tenantId, roles, user } = useAuth();
@@ -93,15 +99,14 @@ export default function ServiceBookingsPage() {
     setLoading(true);
     const [bookRes, teamRes] = await Promise.all([
       (() => {
-        let query = supabase.from("service_bookings").select("*").eq("tenant_id", tenantId).order("booking_date", { ascending: false });
+        let query = supabase.from("service_bookings").select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false });
         if (isExecutive && user?.id) query = query.eq("assigned_to", user.id);
         if (statusFilter !== "all") query = query.eq("status", statusFilter as any);
         if (serviceTypeFilter !== "all") query = query.ilike("service_type", `%${serviceTypeFilter}%`);
-        if (sourceFilter !== "all") query = query.eq("booking_source", sourceFilter);
+        if (sourceFilter === "manual") query = query.eq("booking_source", "manual");
+        else if (sourceFilter === "ai_bot") query = query.neq("booking_source", "manual");
         if (dateFrom) query = query.gte("booking_date", format(dateFrom, "yyyy-MM-dd"));
         if (dateTo) query = query.lte("booking_date", format(dateTo, "yyyy-MM-dd"));
-        if (search.trim()) query = query.ilike("customer_name", `%${search.trim()}%`);
-        if (phoneSearch.trim()) query = query.ilike("phone_number", `%${phoneSearch.trim()}%`);
         return query;
       })(),
       supabase.from("profiles").select("user_id, full_name").eq("tenant_id", tenantId),
@@ -109,7 +114,7 @@ export default function ServiceBookingsPage() {
     if (bookRes.data) setBookings(bookRes.data as ServiceBooking[]);
     if (teamRes.data) setTeamMembers(teamRes.data);
     setLoading(false);
-  }, [tenantId, statusFilter, serviceTypeFilter, sourceFilter, dateFrom, dateTo, search, phoneSearch, isExecutive, user?.id]);
+  }, [tenantId, statusFilter, serviceTypeFilter, sourceFilter, dateFrom, dateTo, isExecutive, user?.id]);
 
   useEffect(() => { fetchBookings(); }, [fetchBookings]);
 
@@ -118,6 +123,24 @@ export default function ServiceBookingsPage() {
     const channel = supabase.channel("sb_changes").on("postgres_changes", { event: "*", schema: "public", table: "service_bookings", filter: `tenant_id=eq.${tenantId}` }, () => fetchBookings()).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [tenantId, fetchBookings]);
+
+  // Client-side text search across customer/phone/vehicle (vehicle ignores spaces, dots, hyphens)
+  const searchedBookings = bookings.filter((b) => {
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      const qNorm = normalizeVehicle(q);
+      const matchesText =
+        (b.customer_name || "").toLowerCase().includes(q) ||
+        (b.vehicle_model || "").toLowerCase().includes(q) ||
+        normalizeVehicle(b.vehicle_model || "").includes(qNorm);
+      if (!matchesText) return false;
+    }
+    if (phoneSearch.trim()) {
+      const p = phoneSearch.trim();
+      if (!(b.phone_number || "").includes(p)) return false;
+    }
+    return true;
+  });
 
   const filterByTab = (list: ServiceBooking[]) => {
     switch (tab) {
@@ -128,10 +151,11 @@ export default function ServiceBookingsPage() {
     }
   };
 
-  const filtered = filterByTab(bookings);
-  const todayCount = bookings.filter(b => isToday(new Date(b.booking_date))).length;
-  const upcomingCount = bookings.filter(b => isFuture(new Date(b.booking_date)) && !isToday(new Date(b.booking_date))).length;
-  const completedCount = bookings.filter(b => b.status === "completed").length;
+  const filtered = filterByTab(searchedBookings);
+  const todayCount = searchedBookings.filter(b => isToday(new Date(b.booking_date))).length;
+  const upcomingCount = searchedBookings.filter(b => isFuture(new Date(b.booking_date)) && !isToday(new Date(b.booking_date))).length;
+  const completedCount = searchedBookings.filter(b => b.status === "completed").length;
+
 
   const getTeamName = (id: string | null) => {
     if (!id) return "—";
@@ -183,7 +207,7 @@ export default function ServiceBookingsPage() {
         {/* KPIs */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: "Total", value: bookings.length, icon: Wrench, color: "text-primary" },
+            { label: "Total", value: searchedBookings.length, icon: Wrench, color: "text-primary" },
             { label: "Today", value: todayCount, icon: CalendarIcon, color: "text-info" },
             { label: "Upcoming", value: upcomingCount, icon: Clock, color: "text-warning" },
             { label: "Completed", value: completedCount, icon: CheckCircle, color: "text-success" },
@@ -205,7 +229,7 @@ export default function ServiceBookingsPage() {
           <div className="flex flex-wrap gap-3">
             <div className="relative flex-1 min-w-[180px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Search customer..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9 text-sm" />
+              <Input placeholder="Search customer or vehicle no..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9 text-sm" />
             </div>
             <div className="relative min-w-[160px]">
               <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -262,7 +286,7 @@ export default function ServiceBookingsPage() {
               title="Service Bookings"
               filename="service-bookings"
               columns={columns.filter(c => c.visible !== false).map(c => ({ key: c.key, label: c.label }))}
-              rows={filterByTab(bookings)}
+              rows={filterByTab(searchedBookings)}
               filters={[
                 { label: "Tab", value: tab },
                 { label: "Search", value: search.trim() },
@@ -272,7 +296,7 @@ export default function ServiceBookingsPage() {
                 { label: "Source", value: sourceFilter },
                 { label: "Date From", value: dateFrom ? format(dateFrom, "yyyy-MM-dd") : "" },
                 { label: "Date To", value: dateTo ? format(dateTo, "yyyy-MM-dd") : "" },
-                { label: "Sort", value: "Booking date (newest first)" },
+                { label: "Sort", value: "Created (newest first)" },
               ]}
             />
             <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => setColMgrOpen(true)}><Settings2 className="w-4 h-4" />Manage Columns</Button>
@@ -283,7 +307,7 @@ export default function ServiceBookingsPage() {
         {/* Tabs */}
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
-            <TabsTrigger value="all">All ({bookings.length})</TabsTrigger>
+            <TabsTrigger value="all">All ({searchedBookings.length})</TabsTrigger>
             <TabsTrigger value="today">Today ({todayCount})</TabsTrigger>
             <TabsTrigger value="upcoming">Upcoming ({upcomingCount})</TabsTrigger>
             <TabsTrigger value="completed">Completed ({completedCount})</TabsTrigger>
@@ -291,7 +315,7 @@ export default function ServiceBookingsPage() {
           </TabsList>
           <TabsContent value={tab} className="mt-4">
             {tab === "report" ? (
-              <DynamicReportTable columns={columns} rows={bookings as any} emptyMessage="No bookings yet." />
+              <DynamicReportTable columns={columns} rows={searchedBookings as any} emptyMessage="No bookings yet." />
             ) : loading ? (
               <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
             ) : filtered.length === 0 ? (

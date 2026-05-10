@@ -136,6 +136,8 @@ export default function PublicChatPage() {
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [fuzzyEnabled, setFuzzyEnabled] = useState(true);
   const [fuzzyThreshold, setFuzzyThreshold] = useState(0.75);
+  const [advanceBookingDays, setAdvanceBookingDays] = useState<number | null>(null);
+  const [holidays, setHolidays] = useState<Set<string>>(new Set());
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -166,6 +168,12 @@ export default function PublicChatPage() {
       }
       if (typeof tSettings.fuzzy_match_threshold === "number") {
         setFuzzyThreshold(Math.min(1, Math.max(0.5, tSettings.fuzzy_match_threshold)));
+      }
+      if (typeof tSettings.advance_booking_days === "number" && tSettings.advance_booking_days > 0) {
+        setAdvanceBookingDays(tSettings.advance_booking_days);
+      }
+      if (Array.isArray(tSettings.holidays)) {
+        setHolidays(new Set((tSettings.holidays as unknown[]).filter((s): s is string => typeof s === "string")));
       }
 
       let resolvedFlow: { id: string; flow_data: FlowData } | null = null;
@@ -1131,6 +1139,49 @@ export default function PublicChatPage() {
     }
     // Use the canonicalized value (e.g. fuzzy-matched option value, normalized date)
     const canonical = result.value;
+
+    // Booking window + holiday enforcement (date inputs only)
+    if (currentNode.validationType === "date" && /^\d{4}-\d{2}-\d{2}$/.test(canonical)) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const picked = new Date(canonical + "T00:00:00");
+      let blockText: string | null = null;
+      if (holidays.has(canonical)) {
+        const msg: Record<string, string> = {
+          en: "🚫 We are closed on this day. Please choose another date.",
+          hi: "🚫 हम इस दिन बंद हैं। कृपया कोई दूसरी तारीख चुनें।",
+          ar: "🚫 نحن مغلقون في هذا اليوم. يرجى اختيار تاريخ آخر.",
+        };
+        blockText = msg[language] || msg.en;
+      } else if (advanceBookingDays && advanceBookingDays > 0) {
+        const max = new Date(today);
+        max.setDate(max.getDate() + advanceBookingDays);
+        if (picked.getTime() > max.getTime()) {
+          const msg: Record<string, string> = {
+            en: `📅 Booking is not yet open for this date. Please pick a date within the next ${advanceBookingDays} days.`,
+            hi: `📅 इस तारीख के लिए बुकिंग अभी उपलब्ध नहीं है। कृपया अगले ${advanceBookingDays} दिनों के भीतर की तारीख चुनें।`,
+            ar: `📅 لم يتم فتح الحجز لهذا التاريخ بعد. يرجى اختيار تاريخ خلال الـ ${advanceBookingDays} يومًا القادمة.`,
+          };
+          blockText = msg[language] || msg.en;
+        }
+      }
+      if (blockText) {
+        setMessages((prev) => [
+          ...prev,
+          { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? answer },
+          { id: `bot-block-${Date.now()}`, sender: "bot", text: blockText! },
+          {
+            id: `bot-reprompt-${Date.now()}`,
+            sender: "bot",
+            text: getNodeMessage(currentNode, collectedData, language),
+            options: currentNode.options?.map((o) => ({ label: o.label, value: o.value })),
+            nodeId: currentNode.id,
+            data: collectedData,
+          },
+        ]);
+        return;
+      }
+    }
 
     setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? answer }]);
 

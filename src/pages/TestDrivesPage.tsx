@@ -35,12 +35,18 @@ const FIXED_COLS = [
   { key: "booking_source", label: "Source" },
 ];
 
+const isAiBotSource = (s: string | null | undefined) =>
+  !!s && s.toLowerCase() !== "manual";
+
 function SourceBadge({ source }: { source: string }) {
-  if (source === "ai_bot") {
+  if (isAiBotSource(source)) {
     return <Badge variant="outline" className="text-xs gap-1 bg-primary/10 text-primary border-primary/20"><Bot className="w-3 h-3" />AI Bot</Badge>;
   }
   return <Badge variant="outline" className="text-xs gap-1 bg-muted text-muted-foreground"><User className="w-3 h-3" />Manual</Badge>;
 }
+
+const normalizeVehicle = (v: string) => (v || "").toLowerCase().replace(/[\s.\-]/g, "");
+
 
 export default function TestDrivesPage() {
   const { tenantId, isExecutive, user } = useAuth();
@@ -69,7 +75,8 @@ export default function TestDrivesPage() {
     let query = supabase.from("test_drive_bookings")
       .select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false });
     if (isExecutive && user?.id) query = query.eq("assigned_to", user.id);
-    if (sourceFilter !== "all") query = query.eq("booking_source", sourceFilter);
+    if (sourceFilter === "manual") query = query.eq("booking_source", "manual");
+    else if (sourceFilter === "ai_bot") query = query.neq("booking_source", "manual");
     const [bookRes, teamRes] = await Promise.all([
       query,
       supabase.from("profiles").select("user_id, full_name").eq("tenant_id", tenantId),
@@ -99,7 +106,13 @@ export default function TestDrivesPage() {
   const filtered = enrichedBookings.filter(td => {
     if (!search.trim()) return true;
     const s = search.toLowerCase();
-    return td.customer_name?.toLowerCase().includes(s) || td.vehicle_model?.toLowerCase().includes(s) || td.phone_number?.includes(s);
+    const sNorm = normalizeVehicle(s);
+    return (
+      td.customer_name?.toLowerCase().includes(s) ||
+      td.vehicle_model?.toLowerCase().includes(s) ||
+      normalizeVehicle(td.vehicle_model || "").includes(sNorm) ||
+      td.phone_number?.includes(s)
+    );
   });
 
   const counts = {
@@ -171,7 +184,7 @@ export default function TestDrivesPage() {
           <div className="flex flex-wrap items-center gap-3 flex-1">
             <div className="relative min-w-[200px] flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Search name, model, phone..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9 text-sm" />
+              <Input placeholder="Search name, vehicle no, phone..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9 text-sm" />
             </div>
             <Select value={sourceFilter} onValueChange={setSourceFilter}>
               <SelectTrigger className="h-9 w-[140px] text-sm"><SelectValue placeholder="Source" /></SelectTrigger>

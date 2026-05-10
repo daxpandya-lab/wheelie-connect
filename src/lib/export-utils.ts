@@ -24,9 +24,11 @@ export function exportToCSV(
   columns: ExportColumn[],
   rows: any[],
   filters: ExportFilter[] = [],
+  dealerName?: string,
 ) {
   const escape = (s: string) => `"${s.replace(/"/g, '""')}"`;
   const meta: string[] = [
+    ...(dealerName ? [`# Dealer: ${dealerName}`] : []),
     `# Generated: ${new Date().toLocaleString()}`,
     `# Rows: ${rows.length}`,
     ...filters.map((f) => `# ${f.label}: ${f.value || "—"}`),
@@ -45,32 +47,84 @@ export function exportToPDF(
   columns: ExportColumn[],
   rows: any[],
   filters: ExportFilter[] = [],
+  dealerName?: string,
 ) {
   const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
-  doc.setFontSize(14);
-  doc.text(title, 40, 40);
-  doc.setFontSize(9);
-  doc.text(`Generated ${new Date().toLocaleString()} • ${rows.length} rows`, 40, 56);
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 36;
+  const now = new Date();
+  const dateStr = now.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+  const timeStr = now.toLocaleTimeString();
 
-  let y = 72;
-  if (filters.length) {
-    doc.setFontSize(8);
-    const lines = filters
-      .filter((f) => f.value && f.value !== "all")
-      .map((f) => `${f.label}: ${f.value}`);
-    if (lines.length === 0) lines.push("Filters: none");
-    const wrapped = doc.splitTextToSize(`Filters — ${lines.join("  •  ")}`, 760);
-    doc.text(wrapped, 40, y);
-    y += wrapped.length * 11 + 4;
+  // Header band
+  doc.setFillColor(37, 99, 235);
+  doc.rect(0, 0, pageWidth, 64, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.text(dealerName || "Dealership", margin, 28);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+  doc.text(title, margin, 48);
+
+  doc.setFontSize(9);
+  const rightLine1 = `Report Date: ${dateStr}`;
+  const rightLine2 = `Generated: ${timeStr}  •  ${rows.length} record${rows.length === 1 ? "" : "s"}`;
+  doc.text(rightLine1, pageWidth - margin, 28, { align: "right" });
+  doc.text(rightLine2, pageWidth - margin, 44, { align: "right" });
+
+  // Filters block
+  doc.setTextColor(60, 60, 60);
+  let y = 84;
+  const activeFilters = filters.filter((f) => f.value && f.value !== "all");
+  if (activeFilters.length) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.text("Applied Filters", margin, y);
+    doc.setFont("helvetica", "normal");
+    y += 4;
+    const text = activeFilters.map((f) => `${f.label}: ${f.value}`).join("   •   ");
+    const wrapped = doc.splitTextToSize(text, pageWidth - margin * 2);
+    doc.text(wrapped, margin, y + 10);
+    y += 10 + wrapped.length * 11 + 4;
   }
 
   autoTable(doc, {
-    startY: y,
+    startY: y + 4,
     head: [columns.map((c) => c.label)],
     body: rows.map((r) => columns.map((c) => fmt(r[c.key]))),
-    styles: { fontSize: 8, cellPadding: 4 },
-    headStyles: { fillColor: [37, 99, 235] },
+    margin: { left: margin, right: margin },
+    styles: {
+      fontSize: 9,
+      cellPadding: 6,
+      lineColor: [220, 220, 220],
+      lineWidth: 0.5,
+      textColor: [30, 30, 30],
+      overflow: "linebreak",
+    },
+    headStyles: {
+      fillColor: [37, 99, 235],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      fontSize: 10,
+      halign: "left",
+    },
+    alternateRowStyles: { fillColor: [245, 247, 250] },
+    didDrawPage: (data) => {
+      const pageCount = doc.getNumberOfPages();
+      const current = data.pageNumber;
+      doc.setFontSize(8);
+      doc.setTextColor(120, 120, 120);
+      doc.text(
+        `${dealerName || ""}${dealerName ? " — " : ""}${title}`,
+        margin,
+        pageHeight - 16,
+      );
+      doc.text(`Page ${current} of ${pageCount}`, pageWidth - margin, pageHeight - 16, { align: "right" });
+    },
   });
+
   doc.save(`${filename}${buildFilenameSuffix(filters)}.pdf`);
 }
 

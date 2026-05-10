@@ -17,6 +17,7 @@ interface AuthContextType {
   isTenantSuspended: boolean;
   serviceBookingEnabled: boolean;
   testDriveEnabled: boolean;
+  tenantName: string | null;
   isLoading: boolean;
   signOut: () => Promise<void>;
 }
@@ -123,16 +124,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [tenantStatus, setTenantStatus] = useState<string | null>(null);
   const [serviceBookingEnabled, setServiceBookingEnabled] = useState(true);
   const [testDriveEnabled, setTestDriveEnabled] = useState(true);
+  const [tenantName, setTenantName] = useState<string | null>(null);
   useEffect(() => {
     if (tenantId) {
       supabase.from("tenants")
-        .select("status, service_booking_enabled, test_drive_enabled")
+        .select("status, service_booking_enabled, test_drive_enabled, name")
         .eq("id", tenantId).single()
         .then(({ data }) => {
           if (data) {
             setTenantStatus(data.status);
             setServiceBookingEnabled(data.service_booking_enabled !== false);
             setTestDriveEnabled(data.test_drive_enabled !== false);
+            setTenantName(data.name ?? null);
           }
         });
     }
@@ -145,7 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         session, user, profile, roles, tenantId,
         isSuperAdmin, isTenantAdmin, isExecutive, isTenantSuspended,
-        serviceBookingEnabled, testDriveEnabled,
+        serviceBookingEnabled, testDriveEnabled, tenantName,
         isLoading, signOut,
       }}
     >
