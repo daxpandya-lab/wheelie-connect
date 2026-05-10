@@ -1239,15 +1239,6 @@ export default function PublicChatPage() {
       }
       if (blockText) {
         const opts: { label: string; value: string }[] = [];
-        if (altDate) {
-          const altIso = fmtIso(altDate);
-          const yesLabel: Record<string, string> = {
-            en: `✅ Yes, book ${fmtNice(altDate)}`,
-            hi: `✅ हाँ, ${fmtNice(altDate)} बुक करें`,
-            ar: `✅ نعم، احجز ${fmtNice(altDate)}`,
-          };
-          opts.push({ label: yesLabel[language] || yesLabel.en, value: `__alt_yes__:${altIso}` });
-        }
         const pickLabel: Record<string, string> = {
           en: "📅 Choose another date",
           hi: "📅 कोई दूसरी तारीख चुनें",
