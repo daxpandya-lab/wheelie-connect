@@ -392,6 +392,18 @@ Deno.serve(async (req) => {
           conversationMetadata = (newConvo!.metadata as Record<string, unknown>) || {};
         }
 
+        // Intercept service-estimate button replies before any flow logic.
+        if (await handleEstimateButton(supabase, tenantId, customerPhone, interactiveId, (tenantRow.whatsapp_config as Record<string, any>) || {})) {
+          await supabase.from("chatbot_messages").insert({
+            tenant_id: tenantId, conversation_id: conversationId, sender_type: "customer",
+            content: messageText, message_type: "text",
+            metadata: { gateway: "evolution", evo_message_id: key.id, interactive_id: interactiveId, kind: "estimate_reply" },
+          });
+          return new Response(JSON.stringify({ success: true, gateway: "evolution", handled: "estimate" }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
         // Persist inbound message
         const { data: savedMessage } = await supabase.from("chatbot_messages")
           .insert({
