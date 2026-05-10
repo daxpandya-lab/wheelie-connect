@@ -1239,15 +1239,6 @@ export default function PublicChatPage() {
       }
       if (blockText) {
         const opts: { label: string; value: string }[] = [];
-        if (altDate) {
-          const altIso = fmtIso(altDate);
-          const yesLabel: Record<string, string> = {
-            en: `✅ Yes, book ${fmtNice(altDate)}`,
-            hi: `✅ हाँ, ${fmtNice(altDate)} बुक करें`,
-            ar: `✅ نعم، احجز ${fmtNice(altDate)}`,
-          };
-          opts.push({ label: yesLabel[language] || yesLabel.en, value: `__alt_yes__:${altIso}` });
-        }
         const pickLabel: Record<string, string> = {
           en: "📅 Choose another date",
           hi: "📅 कोई दूसरी तारीख चुनें",
@@ -1328,51 +1319,9 @@ export default function PublicChatPage() {
     });
   };
 
-  const askAltConfirmation = (iso: string) => {
-    const nice = fmtNiceDate(iso);
-    const txt: Record<string, string> = {
-      en: `Great! I've updated your request to ${nice}. Is this correct?`,
-      hi: `बहुत अच्छा! मैंने आपका अनुरोध ${nice} पर अपडेट कर दिया है। क्या यह सही है?`,
-      ar: `رائع! لقد قمت بتحديث طلبك إلى ${nice}. هل هذا صحيح؟`,
-    };
-    const yesL: Record<string, string> = { en: "✅ Yes, confirm", hi: "✅ हाँ, पुष्टि करें", ar: "✅ نعم، أكد" };
-    const noL: Record<string, string> = { en: "📅 No, pick another", hi: "📅 नहीं, दूसरी चुनें", ar: "📅 لا، اختر تاريخًا آخر" };
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `bot-altconfirm-${Date.now()}`,
-        sender: "bot",
-        text: txt[language] || txt.en,
-        options: [
-          { label: yesL[language] || yesL.en, value: `__altconfirm_yes__:${iso}` },
-          { label: noL[language] || noL.en, value: "__altconfirm_no__" },
-        ],
-        nodeId: currentNodeId || undefined,
-        data: collectedData,
-      },
-    ]);
-  };
 
   const handleOptionClick = (value: string, label: string) => {
-    if (value.startsWith("__alt_yes__:")) {
-      const iso = value.split(":")[1];
-      const nice = fmtNiceDate(iso);
-      setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: `✅ Yes, book ${nice}` }]);
-      askAltConfirmation(iso);
-      return;
-    }
     if (value === "__alt_pick__") {
-      setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: label }]);
-      setDatePickerOpen(true);
-      return;
-    }
-    if (value.startsWith("__altconfirm_yes__:")) {
-      const iso = value.split(":")[1];
-      const nice = fmtNiceDate(iso);
-      processAnswer(iso, nice);
-      return;
-    }
-    if (value === "__altconfirm_no__") {
       setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: label }]);
       setDatePickerOpen(true);
       return;
@@ -1598,9 +1547,24 @@ export default function PublicChatPage() {
                   const display = format(d, "dd-MM-yyyy");
                   setInput(iso);
                   setDatePickerOpen(false);
-                  // Submit immediately so the flow advances
+                  // Submit immediately so the flow advances (this stores booking_date)
                   processAnswer(iso, display);
                   setInput("");
+                  // Inject a bot confirmation message before the next prompt arrives
+                  const nice = fmtNiceDate(iso);
+                  const confirmTxt: Record<string, string> = {
+                    en: `Great! I've set your appointment for ${nice}. Shall we proceed with the rest of the details?`,
+                    hi: `बहुत अच्छा! मैंने आपकी अपॉइंटमेंट ${nice} के लिए सेट कर दी है। क्या हम बाकी विवरण के साथ आगे बढ़ें?`,
+                    ar: `رائع! لقد حددت موعدك في ${nice}. هل نتابع مع بقية التفاصيل؟`,
+                  };
+                  setMessages((prev) => [
+                    ...prev,
+                    {
+                      id: `bot-pickconfirm-${Date.now()}`,
+                      sender: "bot",
+                      text: confirmTxt[language] || confirmTxt.en,
+                    },
+                  ]);
                 }}
                 disabled={(date) => {
                   const today = new Date(); today.setHours(0, 0, 0, 0);
