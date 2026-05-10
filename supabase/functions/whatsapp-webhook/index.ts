@@ -21,6 +21,75 @@ function detectLanguage(text: string): Lang | null {
   return "en";
 }
 
+// ============================================================
+// SERVICE-ESTIMATE button handler
+// Intercepts interactive replies of the form `est_approve_<id>` / `est_reject_<id>`.
+// Returns true if the reply was an estimate decision (caller should stop further flow).
+// ============================================================
+async function handleEstimateButton(
+  supabase: any,
+  tenantId: string,
+  recipientPhone: string,
+  interactiveId: string | null,
+  whatsappConfig: Record<string, any>,
+): Promise<boolean> {
+  if (!interactiveId) return false;
+  const m = interactiveId.match(/^est_(approve|reject)_([0-9a-f-]{36})$/);
+  if (!m) return false;
+  const decision: "approved" | "rejected" = m[1] === "approve" ? "approved" : "rejected";
+  const bookingId = m[2];
+
+  const { data: booking } = await supabase
+    .from("service_bookings")
+    .select("id, tenant_id, approval_status")
+    .eq("id", bookingId).maybeSingle();
+  if (!booking || booking.tenant_id !== tenantId) return false;
+
+  if ((booking.approval_status || "pending") === "pending") {
+    await supabase.from("service_bookings")
+      .update({ approval_status: decision })
+      .eq("id", bookingId);
+  }
+
+  const reply = decision === "approved"
+    ? "✅ Confirmed! We have started the work. You will be notified once the vehicle is ready."
+    : "📞 Understood. Our service advisor will call you shortly to discuss the estimate.";
+
+  const provider: "meta" | "evolution" = whatsappConfig.provider === "evolution" ? "evolution" : "meta";
+  try {
+    if (provider === "evolution") {
+      const evoUrl = whatsappConfig.evolution?.instance_url;
+      const evoInstance = whatsappConfig.evolution?.instance_name;
+      const evoApiKey = whatsappConfig.evolution?.api_key;
+      if (evoUrl && evoInstance && evoApiKey) {
+        await fetch(`${evoUrl}/message/sendText/${encodeURIComponent(evoInstance)}`, {
+          method: "POST",
+          headers: { apikey: evoApiKey, "Content-Type": "application/json" },
+          body: JSON.stringify({ number: recipientPhone, text: reply }),
+        });
+      }
+    } else {
+      const accessToken = whatsappConfig.meta?.access_token || whatsappConfig.access_token;
+      const phoneNumberId = whatsappConfig.meta?.phone_number_id;
+      if (accessToken && phoneNumberId) {
+        await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            to: recipientPhone,
+            type: "text",
+            text: { body: reply },
+          }),
+        });
+      }
+    }
+  } catch (e) {
+    console.error("[estimate-reply] failed to send", e);
+  }
+  return true;
+}
+
 // Pick the localized string from a {en,hi,ar} bundle, falling back gracefully.
 function pickLang(bundle: any, lang: Lang): string {
   if (!bundle) return "";
