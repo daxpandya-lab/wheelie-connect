@@ -184,7 +184,7 @@ export default function TestDrivesPage() {
           <div className="flex flex-wrap items-center gap-3 flex-1">
             <div className="relative min-w-[200px] flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Search name, model, phone..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9 text-sm" />
+              <Input placeholder="Search name, vehicle no, phone..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9 text-sm" />
             </div>
             <Select value={sourceFilter} onValueChange={setSourceFilter}>
               <SelectTrigger className="h-9 w-[140px] text-sm"><SelectValue placeholder="Source" /></SelectTrigger>
