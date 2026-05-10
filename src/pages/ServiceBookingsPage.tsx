@@ -207,7 +207,7 @@ export default function ServiceBookingsPage() {
         {/* KPIs */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: "Total", value: bookings.length, icon: Wrench, color: "text-primary" },
+            { label: "Total", value: searchedBookings.length, icon: Wrench, color: "text-primary" },
             { label: "Today", value: todayCount, icon: CalendarIcon, color: "text-info" },
             { label: "Upcoming", value: upcomingCount, icon: Clock, color: "text-warning" },
             { label: "Completed", value: completedCount, icon: CheckCircle, color: "text-success" },
