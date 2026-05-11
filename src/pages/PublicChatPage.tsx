@@ -372,7 +372,7 @@ export default function PublicChatPage() {
       return;
     }
     const today = new Date(); today.setHours(0, 0, 0, 0);
-    const horizonDays = advanceBookingDays && advanceBookingDays > 0 ? advanceBookingDays : 60;
+    const horizonDays = advanceBookingDays && advanceBookingDays > 0 ? advanceBookingDays : 30;
     const end = new Date(today); end.setDate(end.getDate() + horizonDays);
     const startIso = format(today, "yyyy-MM-dd");
     const endIso = format(end, "yyyy-MM-dd");
