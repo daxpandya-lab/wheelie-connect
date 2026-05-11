@@ -195,15 +195,21 @@ export default function PublicChatPage() {
         if (data) resolvedFlow = { id: data.id, flow_data: data.flow_data as unknown as FlowData };
       }
       if (!resolvedFlow) {
-        const { data } = await supabase
+        const { data: actives } = await supabase
           .from("chatbot_flows")
-          .select("id, flow_data")
+          .select("id, name, flow_type, flow_data, updated_at")
           .eq("tenant_id", tenantData.id)
           .eq("is_active", true)
-          .order("updated_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (data) resolvedFlow = { id: data.id, flow_data: data.flow_data as unknown as FlowData };
+          .order("updated_at", { ascending: false });
+        const list = (actives || []).filter((f) => (f.flow_data as any)?.nodes?.length);
+        if (list.length > 1) {
+          setFlowChoices(list.map((f) => ({ id: f.id, name: f.name, flow_type: f.flow_type })));
+          setLoading(false);
+          return;
+        }
+        if (list.length === 1) {
+          resolvedFlow = { id: list[0].id, flow_data: list[0].flow_data as unknown as FlowData };
+        }
       }
 
       if (!resolvedFlow || !resolvedFlow.flow_data?.nodes?.length) {
