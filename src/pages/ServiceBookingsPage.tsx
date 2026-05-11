@@ -376,7 +376,14 @@ export default function ServiceBookingsPage() {
                         return (
                           <tr key={b.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors">
                             <td className="py-3 px-4">
-                              <p className="font-medium text-foreground">{b.customer_name}</p>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="font-medium text-foreground">{b.customer_name}</p>
+                                {(b.metadata as any)?.rescheduled_from && (
+                                  <Badge variant="outline" className="text-[10px] gap-1 bg-warning/10 text-warning border-warning/20">
+                                    Rescheduled
+                                  </Badge>
+                                )}
+                              </div>
                               <p className="text-xs text-muted-foreground font-mono">{b.phone_number}</p>
                             </td>
                             <td className="py-3 px-4 text-foreground hidden lg:table-cell">{b.vehicle_model}</td>
