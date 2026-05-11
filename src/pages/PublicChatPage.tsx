@@ -1573,11 +1573,10 @@ export default function PublicChatPage() {
                   const iso = format(date, "yyyy-MM-dd");
                   if (holidays.has(iso)) return true;
                   if (bookedDates.has(iso)) return true;
-                  if (advanceBookingDays && advanceBookingDays > 0) {
-                    const max = new Date(today);
-                    max.setDate(max.getDate() + advanceBookingDays);
-                    if (date.getTime() > max.getTime()) return true;
-                  }
+                  const windowDays = advanceBookingDays && advanceBookingDays > 0 ? advanceBookingDays : 30;
+                  const max = new Date(today);
+                  max.setDate(max.getDate() + windowDays);
+                  if (date.getTime() > max.getTime()) return true;
                   return false;
                 }}
                 initialFocus
