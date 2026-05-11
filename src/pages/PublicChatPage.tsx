@@ -1219,9 +1219,10 @@ export default function PublicChatPage() {
           ar: "🚫 نحن مغلقون في هذا اليوم. يرجى اختيار تاريخ آخر.",
         };
         blockText = msg[language] || msg.en;
-      } else if (advanceBookingDays && advanceBookingDays > 0) {
+      } else {
+        const windowDays = advanceBookingDays && advanceBookingDays > 0 ? advanceBookingDays : 30;
         const max = new Date(today);
-        max.setDate(max.getDate() + advanceBookingDays);
+        max.setDate(max.getDate() + windowDays);
         if (picked.getTime() > max.getTime()) {
           altDate = findNextOpen();
           const nextStr = altDate ? fmtNice(altDate) : "";
@@ -1230,9 +1231,9 @@ export default function PublicChatPage() {
             hi: `📅 हम उस तारीख पर उपलब्ध नहीं हैं, लेकिन हमारा अगला उपलब्ध स्लॉट ${nextStr} है। क्या आप वह बुक करना चाहेंगे?`,
             ar: `📅 لسنا متاحين في ذلك التاريخ، لكن أقرب موعد متاح هو ${nextStr}. هل ترغب في حجزه؟`,
           } : {
-            en: `📅 Booking is not yet open for this date. Please pick a date within the next ${advanceBookingDays} days.`,
-            hi: `📅 इस तारीख के लिए बुकिंग अभी उपलब्ध नहीं है। कृपया अगले ${advanceBookingDays} दिनों के भीतर की तारीख चुनें।`,
-            ar: `📅 لم يتم فتح الحجز لهذا التाريخ بعد. يرجى اختيار تاريخ خلال الـ ${advanceBookingDays} يومًا القادمة.`,
+            en: `📅 Booking is not yet open for this date. Please pick a date within the next ${windowDays} days.`,
+            hi: `📅 इस तारीख के लिए बुकिंग अभी उपलब्ध नहीं है। कृपया अगले ${windowDays} दिनों के भीतर की तारीख चुनें।`,
+            ar: `📅 لم يتم فتح الحجز لهذا التاريخ بعد. يرجى اختيار تاريخ خلال الـ ${windowDays} يومًا القادمة.`,
           };
           blockText = msg[language] || msg.en;
         }
