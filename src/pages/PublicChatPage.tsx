@@ -372,7 +372,7 @@ export default function PublicChatPage() {
       return;
     }
     const today = new Date(); today.setHours(0, 0, 0, 0);
-    const horizonDays = advanceBookingDays && advanceBookingDays > 0 ? advanceBookingDays : 60;
+    const horizonDays = advanceBookingDays && advanceBookingDays > 0 ? advanceBookingDays : 30;
     const end = new Date(today); end.setDate(end.getDate() + horizonDays);
     const startIso = format(today, "yyyy-MM-dd");
     const endIso = format(end, "yyyy-MM-dd");
@@ -1195,7 +1195,7 @@ export default function PublicChatPage() {
         });
       // Compute the next bookable date from "today", respecting holidays + window + capacity.
       const findNextOpen = (): Date | null => {
-        const max = advanceBookingDays && advanceBookingDays > 0 ? advanceBookingDays : 60;
+        const max = advanceBookingDays && advanceBookingDays > 0 ? advanceBookingDays : 30;
         const cursor = new Date(today);
         for (let i = 0; i <= max; i++) {
           const iso = fmtIso(cursor);
@@ -1219,9 +1219,10 @@ export default function PublicChatPage() {
           ar: "🚫 نحن مغلقون في هذا اليوم. يرجى اختيار تاريخ آخر.",
         };
         blockText = msg[language] || msg.en;
-      } else if (advanceBookingDays && advanceBookingDays > 0) {
+      } else {
+        const windowDays = advanceBookingDays && advanceBookingDays > 0 ? advanceBookingDays : 30;
         const max = new Date(today);
-        max.setDate(max.getDate() + advanceBookingDays);
+        max.setDate(max.getDate() + windowDays);
         if (picked.getTime() > max.getTime()) {
           altDate = findNextOpen();
           const nextStr = altDate ? fmtNice(altDate) : "";
@@ -1230,9 +1231,9 @@ export default function PublicChatPage() {
             hi: `📅 हम उस तारीख पर उपलब्ध नहीं हैं, लेकिन हमारा अगला उपलब्ध स्लॉट ${nextStr} है। क्या आप वह बुक करना चाहेंगे?`,
             ar: `📅 لسنا متاحين في ذلك التاريخ، لكن أقرب موعد متاح هو ${nextStr}. هل ترغب في حجزه؟`,
           } : {
-            en: `📅 Booking is not yet open for this date. Please pick a date within the next ${advanceBookingDays} days.`,
-            hi: `📅 इस तारीख के लिए बुकिंग अभी उपलब्ध नहीं है। कृपया अगले ${advanceBookingDays} दिनों के भीतर की तारीख चुनें।`,
-            ar: `📅 لم يتم فتح الحجز لهذا التाريخ بعد. يرجى اختيار تاريخ خلال الـ ${advanceBookingDays} يومًا القادمة.`,
+            en: `📅 Booking is not yet open for this date. Please pick a date within the next ${windowDays} days.`,
+            hi: `📅 इस तारीख के लिए बुकिंग अभी उपलब्ध नहीं है। कृपया अगले ${windowDays} दिनों के भीतर की तारीख चुनें।`,
+            ar: `📅 لم يتم فتح الحجز لهذا التاريخ بعد. يرجى اختيار تاريخ خلال الـ ${windowDays} يومًا القادمة.`,
           };
           blockText = msg[language] || msg.en;
         }
@@ -1572,11 +1573,10 @@ export default function PublicChatPage() {
                   const iso = format(date, "yyyy-MM-dd");
                   if (holidays.has(iso)) return true;
                   if (bookedDates.has(iso)) return true;
-                  if (advanceBookingDays && advanceBookingDays > 0) {
-                    const max = new Date(today);
-                    max.setDate(max.getDate() + advanceBookingDays);
-                    if (date.getTime() > max.getTime()) return true;
-                  }
+                  const windowDays = advanceBookingDays && advanceBookingDays > 0 ? advanceBookingDays : 30;
+                  const max = new Date(today);
+                  max.setDate(max.getDate() + windowDays);
+                  if (date.getTime() > max.getTime()) return true;
                   return false;
                 }}
                 initialFocus
