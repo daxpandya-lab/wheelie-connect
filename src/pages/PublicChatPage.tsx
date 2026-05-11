@@ -126,6 +126,8 @@ export default function PublicChatPage() {
   const [language, setLanguage] = useState<string>("en");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const navigate = useNavigate();
+  const [flowChoices, setFlowChoices] = useState<{ id: string; name: string; flow_type: string }[] | null>(null);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
