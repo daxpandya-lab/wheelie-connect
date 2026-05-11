@@ -1373,6 +1373,58 @@ export default function PublicChatPage() {
     </div>
   );
 
+  if (flowChoices && flowChoices.length > 1) {
+    const flowIcon = (t: string) => {
+      if (t === "service_booking") return "🔧";
+      if (t === "test_drive") return "🚗";
+      if (t === "reschedule") return "📅";
+      return "💬";
+    };
+    const labelFor = (f: { name: string; flow_type: string }) => {
+      if (f.flow_type === "service_booking") return "Book Service";
+      if (f.flow_type === "test_drive") return "Book Test Drive";
+      if (f.flow_type === "reschedule") return "Reschedule Service";
+      return f.name;
+    };
+    return (
+      <div className="min-h-screen bg-background flex flex-col max-w-lg mx-auto">
+        <div className="bg-primary text-primary-foreground px-4 py-3 flex items-center gap-3 shrink-0">
+          <div className="w-10 h-10 rounded-full bg-primary-foreground/20 flex items-center justify-center">
+            <Car className="w-5 h-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-sm truncate">{dealer?.name}</p>
+            <p className="text-xs opacity-75">Online</p>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          <div className="flex items-start gap-2">
+            <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+              <Bot className="w-4 h-4 text-primary" />
+            </div>
+            <div className="px-3 py-2 rounded-2xl rounded-bl-md text-sm bg-muted text-foreground max-w-[85%]">
+              👋 Hi! Welcome to {dealer?.name}. How can I help you today?
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 pl-9">
+            {flowChoices.map((f) => (
+              <Button
+                key={f.id}
+                variant="outline"
+                size="sm"
+                className="rounded-full"
+                onClick={() => navigate(`/chat/${tenantParam}/${f.id}`)}
+              >
+                <span className="mr-1">{flowIcon(f.flow_type)}</span>
+                {labelFor(f)}
+              </Button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (error) return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="text-center space-y-2">
