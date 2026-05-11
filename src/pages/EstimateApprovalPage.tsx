@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, CheckCircle, XCircle, Wrench, Phone } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, Wrench, MessageCircle } from "lucide-react";
 
 type Booking = {
   id: string;
