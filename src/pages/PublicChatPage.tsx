@@ -1195,7 +1195,7 @@ export default function PublicChatPage() {
         });
       // Compute the next bookable date from "today", respecting holidays + window + capacity.
       const findNextOpen = (): Date | null => {
-        const max = advanceBookingDays && advanceBookingDays > 0 ? advanceBookingDays : 60;
+        const max = advanceBookingDays && advanceBookingDays > 0 ? advanceBookingDays : 30;
         const cursor = new Date(today);
         for (let i = 0; i <= max; i++) {
           const iso = fmtIso(cursor);
