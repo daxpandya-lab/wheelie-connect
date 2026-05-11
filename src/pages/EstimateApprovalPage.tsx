@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, CheckCircle, XCircle, Wrench, Phone } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, Wrench, MessageCircle } from "lucide-react";
 
 type Booking = {
   id: string;
@@ -24,7 +24,6 @@ export default function EstimateApprovalPage() {
   const { bookingId } = useParams<{ bookingId: string }>();
   const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState<"approved" | "rejected" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
@@ -42,7 +41,7 @@ export default function EstimateApprovalPage() {
 
   useEffect(() => { load(); }, [bookingId]);
 
-  // Realtime: pick up status changes (e.g. dealer cancels or another channel responds)
+  // Realtime: pick up status changes from WhatsApp approval
   useEffect(() => {
     if (!bookingId) return;
     const channel = supabase.channel(`estimate_${bookingId}`)
@@ -51,21 +50,6 @@ export default function EstimateApprovalPage() {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [bookingId]);
-
-  const respond = async (decision: "approved" | "rejected") => {
-    if (!booking) return;
-    setSubmitting(decision);
-    const { error } = await supabase
-      .from("service_bookings")
-      .update({ approval_status: decision })
-      .eq("id", booking.id);
-    setSubmitting(null);
-    if (error) {
-      setError(error.message);
-      return;
-    }
-    setBooking({ ...booking, approval_status: decision });
-  };
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
@@ -84,7 +68,6 @@ export default function EstimateApprovalPage() {
 
   const amount = booking.estimate_amount ?? booking.estimated_cost ?? 0;
   const status = booking.approval_status || "pending";
-  const isPending = status === "pending";
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
@@ -120,30 +103,30 @@ export default function EstimateApprovalPage() {
             )}
           </div>
 
-          {isPending ? (
-            <div className="grid grid-cols-2 gap-3 pt-2">
-              <Button
-                onClick={() => respond("approved")}
-                disabled={!!submitting}
-                className="bg-success text-success-foreground hover:bg-success/90"
-              >
-                {submitting === "approved" ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                Approve Work
-              </Button>
-              <Button
-                onClick={() => respond("rejected")}
-                disabled={!!submitting}
-                variant="destructive"
-              >
-                {submitting === "rejected" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Phone className="w-4 h-4" />}
-                Reject / Call Me
-              </Button>
+          {status === "pending" ? (
+            <div className="rounded-lg bg-primary/5 border border-primary/20 p-4 text-center space-y-3">
+              <MessageCircle className="w-8 h-8 text-primary mx-auto" />
+              <p className="text-sm font-medium text-foreground">
+                Your service estimate has been sent to your WhatsApp number for approval.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Please tap <strong>Approve</strong> or <strong>Reject</strong> on the WhatsApp message to respond.
+              </p>
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <Button disabled className="opacity-60 cursor-not-allowed" variant="outline">
+                  <CheckCircle className="w-4 h-4 mr-1" /> Approve
+                </Button>
+                <Button disabled className="opacity-60 cursor-not-allowed" variant="outline">
+                  <XCircle className="w-4 h-4 mr-1" /> Reject
+                </Button>
+              </div>
+              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">Awaiting WhatsApp response</Badge>
             </div>
           ) : status === "approved" ? (
             <div className="rounded-lg bg-success/10 border border-success/30 p-4 text-center space-y-2">
               <CheckCircle className="w-8 h-8 text-success mx-auto" />
-              <p className="text-sm font-medium text-success">Confirmed!</p>
-              <p className="text-xs text-muted-foreground">We have started the work. You will be notified once the vehicle is ready.</p>
+              <p className="text-sm font-medium text-success">Thank you! Approval received via WhatsApp.</p>
+              <p className="text-xs text-muted-foreground">Work has started. You will be notified once the vehicle is ready.</p>
               <Badge variant="outline" className="bg-success/10 text-success border-success/20">Approved</Badge>
             </div>
           ) : (
