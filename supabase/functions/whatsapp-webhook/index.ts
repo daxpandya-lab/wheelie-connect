@@ -47,12 +47,15 @@ async function handleEstimateButton(
 
   if ((booking.approval_status || "pending") === "pending") {
     await supabase.from("service_bookings")
-      .update({ approval_status: decision })
+      .update({
+        approval_status: decision,
+        ...(decision === "approved" ? { status: "in_progress" } : {}),
+      })
       .eq("id", bookingId);
   }
 
   const reply = decision === "approved"
-    ? "✅ Confirmed! We have started the work. You will be notified once the vehicle is ready."
+    ? "✅ Estimate Approved. We have started the work! You will be notified once the vehicle is ready."
     : "📞 Understood. Our service advisor will call you shortly to discuss the estimate.";
 
   const provider: "meta" | "evolution" = whatsappConfig.provider === "evolution" ? "evolution" : "meta";
