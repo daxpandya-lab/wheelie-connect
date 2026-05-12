@@ -124,6 +124,26 @@ function CapacitySettings() {
         )}
       </div>
 
+      <div className="glass-card rounded-xl p-6 space-y-4">
+        <h3 className="text-base font-semibold text-foreground">Customer Feedback (CSAT)</h3>
+        <p className="text-sm text-muted-foreground">
+          24h after a job is marked Completed, the bot messages the customer to rate the service 1–5.
+          Low scores alert the manager; 5-star ratings receive your Google review link.
+        </p>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label>Service Manager WhatsApp</Label>
+            <Input value={managerPhone} onChange={(e) => setManagerPhone(e.target.value)} placeholder="+919876543210" />
+            <p className="text-xs text-muted-foreground">Receives an alert for ratings below 3.</p>
+          </div>
+          <div className="space-y-2">
+            <Label>Google Business Review URL</Label>
+            <Input value={reviewUrl} onChange={(e) => setReviewUrl(e.target.value)} placeholder="https://g.page/r/..." />
+            <p className="text-xs text-muted-foreground">Shared with 5-star customers.</p>
+          </div>
+        </div>
+      </div>
+
       <Button onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save Settings"}</Button>
     </div>
   );
