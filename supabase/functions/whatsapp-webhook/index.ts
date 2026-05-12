@@ -640,19 +640,23 @@ Deno.serve(async (req) => {
                 conversationMetadata = (newConvo!.metadata as Record<string, unknown>) || {};
               }
 
-              // Intercept service-estimate button replies before any flow logic.
-              if (interactiveId && /^est_(approve|reject)_[0-9a-f-]{36}$/.test(interactiveId)) {
+              // Intercept CSAT and estimate button replies before any flow logic.
+              if (interactiveId && /^(csat_[1-5]|est_(approve|reject))_[0-9a-f-]{36}$/.test(interactiveId)) {
                 const { data: tenantRow2 } = await supabase
-                  .from("tenants").select("whatsapp_config").eq("id", tenantId).maybeSingle();
-                const handled = await handleEstimateButton(
-                  supabase, tenantId, customerPhone, interactiveId,
-                  (tenantRow2?.whatsapp_config as Record<string, any>) || {},
+                  .from("tenants").select("name, whatsapp_config, settings").eq("id", tenantId).maybeSingle();
+                const wa2 = (tenantRow2?.whatsapp_config as Record<string, any>) || {};
+                const settings2 = (tenantRow2?.settings as Record<string, any>) || {};
+                const csatHandled = await handleCsatButton(
+                  supabase, tenantId, customerPhone, interactiveId, wa2, settings2, tenantRow2?.name || "",
                 );
-                if (handled) {
+                const estHandled = csatHandled ? false : await handleEstimateButton(
+                  supabase, tenantId, customerPhone, interactiveId, wa2,
+                );
+                if (csatHandled || estHandled) {
                   await supabase.from("chatbot_messages").insert({
                     tenant_id: tenantId, conversation_id: conversationId, sender_type: "customer",
                     content: messageText, message_type: "text",
-                    metadata: { wa_message_id: msg.id, interactive_id: interactiveId, kind: "estimate_reply" },
+                    metadata: { wa_message_id: msg.id, interactive_id: interactiveId, kind: csatHandled ? "csat_reply" : "estimate_reply" },
                   });
                   continue;
                 }
