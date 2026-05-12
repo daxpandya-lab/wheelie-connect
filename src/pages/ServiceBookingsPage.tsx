@@ -51,7 +51,9 @@ type Profile = { user_id: string; full_name: string | null };
 const STATUS_FLOW = [
   { value: "pending", label: "Pending", icon: Clock, class: "bg-warning/10 text-warning" },
   { value: "confirmed", label: "Inspection Done", icon: Eye, class: "bg-info/10 text-info" },
+  { value: "estimation_sent", label: "Estimation Sent", icon: ClipboardList, class: "bg-info/10 text-info" },
   { value: "in_progress", label: "In Progress", icon: Play, class: "bg-accent/10 text-accent-foreground" },
+  { value: "ready_for_pickup", label: "Ready for Pickup", icon: CheckCircle, class: "bg-success/10 text-success" },
   { value: "completed", label: "Completed", icon: CheckCircle, class: "bg-success/10 text-success" },
   { value: "cancelled", label: "Cancelled", icon: XCircle, class: "bg-destructive/10 text-destructive" },
 ];
