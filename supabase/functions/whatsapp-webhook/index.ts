@@ -483,8 +483,21 @@ Deno.serve(async (req) => {
           conversationMetadata = (newConvo!.metadata as Record<string, unknown>) || {};
         }
 
+        // Intercept CSAT button replies before any flow logic.
+        const tenantWaCfg = (tenantRow.whatsapp_config as Record<string, any>) || {};
+        const tenantSettings = (tenantRow.settings as Record<string, any>) || {};
+        if (await handleCsatButton(supabase, tenantId, customerPhone, interactiveId, tenantWaCfg, tenantSettings, tenantRow.name || "")) {
+          await supabase.from("chatbot_messages").insert({
+            tenant_id: tenantId, conversation_id: conversationId, sender_type: "customer",
+            content: messageText, message_type: "text",
+            metadata: { gateway: "evolution", evo_message_id: key.id, interactive_id: interactiveId, kind: "csat_reply" },
+          });
+          return new Response(JSON.stringify({ success: true, gateway: "evolution", handled: "csat" }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
         // Intercept service-estimate button replies before any flow logic.
-        if (await handleEstimateButton(supabase, tenantId, customerPhone, interactiveId, (tenantRow.whatsapp_config as Record<string, any>) || {})) {
+        if (await handleEstimateButton(supabase, tenantId, customerPhone, interactiveId, tenantWaCfg)) {
           await supabase.from("chatbot_messages").insert({
             tenant_id: tenantId, conversation_id: conversationId, sender_type: "customer",
             content: messageText, message_type: "text",
