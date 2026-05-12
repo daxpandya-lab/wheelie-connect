@@ -415,7 +415,7 @@ Deno.serve(async (req) => {
         // Resolve tenant by Evolution instance_name in whatsapp_config
         const { data: tenantRow } = await supabase
           .from("tenants")
-          .select("id, status, whatsapp_config")
+          .select("id, name, status, whatsapp_config, settings")
           .eq("status", "active")
           .filter("whatsapp_config->evolution->>instance_name", "eq", instanceName)
           .maybeSingle();
