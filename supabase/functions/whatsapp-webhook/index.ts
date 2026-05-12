@@ -93,6 +93,94 @@ async function handleEstimateButton(
   return true;
 }
 
+// ============================================================
+// CSAT button handler — intercepts `csat_<rating>_<bookingId>` replies
+// Records rating, alerts manager if <3, sends Google review link if 5.
+// ============================================================
+async function handleCsatButton(
+  supabase: any,
+  tenantId: string,
+  recipientPhone: string,
+  interactiveId: string | null,
+  whatsappConfig: Record<string, any>,
+  tenantSettings: Record<string, any>,
+  tenantName: string,
+): Promise<boolean> {
+  if (!interactiveId) return false;
+  const m = interactiveId.match(/^csat_([1-5])_([0-9a-f-]{36})$/);
+  if (!m) return false;
+  const rating = parseInt(m[1], 10);
+  const bookingId = m[2];
+
+  const { data: booking } = await supabase
+    .from("service_bookings")
+    .select("id, tenant_id, customer_name, vehicle_model")
+    .eq("id", bookingId).maybeSingle();
+  if (!booking || booking.tenant_id !== tenantId) return false;
+
+  await supabase.from("csat_responses").insert({
+    tenant_id: tenantId, booking_id: bookingId, booking_type: "service", rating,
+  });
+
+  const reviewUrl = String(tenantSettings?.google_review_url || "").trim();
+  const managerPhone = String(tenantSettings?.manager_phone || "").trim();
+
+  let reply: string;
+  if (rating >= 5 && reviewUrl) {
+    reply = `🙏 Thank you for the 5-star rating! Would you mind sharing your experience on Google?\n${reviewUrl}`;
+  } else if (rating >= 4) {
+    reply = "🙏 Thank you for your feedback! We're glad you had a good experience.";
+  } else {
+    reply = "We're sorry to hear that. Our service manager will reach out to make things right.";
+  }
+
+  const provider: "meta" | "evolution" = whatsappConfig.provider === "evolution" ? "evolution" : "meta";
+  const sendText = async (to: string, body: string) => {
+    try {
+      if (provider === "evolution" && whatsappConfig.evolution?.instance_url && whatsappConfig.evolution?.api_key && whatsappConfig.evolution?.instance_name) {
+        await fetch(`${whatsappConfig.evolution.instance_url}/message/sendText/${encodeURIComponent(whatsappConfig.evolution.instance_name)}`, {
+          method: "POST",
+          headers: { apikey: whatsappConfig.evolution.api_key, "Content-Type": "application/json" },
+          body: JSON.stringify({ number: to, text: body }),
+        });
+      } else if (provider === "meta") {
+        const token = whatsappConfig.meta?.access_token || whatsappConfig.access_token;
+        const phoneNumberId = whatsappConfig.meta?.phone_number_id;
+        if (token && phoneNumberId) {
+          await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ messaging_product: "whatsapp", to, type: "text", text: { body } }),
+          });
+        }
+      }
+    } catch (e) { console.error("[csat] send failed", e); }
+  };
+
+  await sendText(recipientPhone, reply);
+
+  // Low rating — alert manager (in-app + WhatsApp)
+  if (rating < 3) {
+    await supabase.from("notifications").insert({
+      tenant_id: tenantId,
+      user_id: null,
+      title: "Low CSAT rating received",
+      message: `${booking.customer_name} (${booking.vehicle_model}) rated ${rating}/5. Please follow up.`,
+      type: "warning",
+      source: "service_booking",
+      source_id: bookingId,
+    });
+    if (managerPhone) {
+      await sendText(
+        managerPhone,
+        `⚠️ ${tenantName}: Low CSAT alert — ${booking.customer_name} (${booking.vehicle_model}) rated ${rating}/5. Please follow up.`,
+      );
+    }
+  }
+
+  return true;
+}
+
 // Pick the localized string from a {en,hi,ar} bundle, falling back gracefully.
 function pickLang(bundle: any, lang: Lang): string {
   if (!bundle) return "";
