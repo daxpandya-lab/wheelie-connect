@@ -62,6 +62,7 @@ Deno.serve(async (req) => {
         work_notes: notes || null,
         parts_required: parts || null,
         approval_status: "pending",
+        status: "estimation_sent",
         estimation_sent_at: new Date().toISOString(),
       })
       .eq("id", bookingId);

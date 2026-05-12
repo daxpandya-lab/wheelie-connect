@@ -728,6 +728,36 @@ export type Database = {
           },
         ]
       }
+      csat_responses: {
+        Row: {
+          booking_id: string
+          booking_type: string
+          comment: string | null
+          created_at: string
+          id: string
+          rating: number
+          tenant_id: string
+        }
+        Insert: {
+          booking_id: string
+          booking_type?: string
+          comment?: string | null
+          created_at?: string
+          id?: string
+          rating: number
+          tenant_id: string
+        }
+        Update: {
+          booking_id?: string
+          booking_type?: string
+          comment?: string | null
+          created_at?: string
+          id?: string
+          rating?: number
+          tenant_id?: string
+        }
+        Relationships: []
+      }
       customers: {
         Row: {
           address: string | null
@@ -1023,6 +1053,7 @@ export type Database = {
           booking_date: string
           booking_source: string
           created_at: string
+          csat_sent_at: string | null
           customer_id: string | null
           customer_name: string
           drop_required: boolean | null
@@ -1040,6 +1071,7 @@ export type Database = {
           pickup_required: boolean | null
           preferred_time: string | null
           quotation_notes: string | null
+          ready_at: string | null
           service_type: string
           status: Database["public"]["Enums"]["service_status"]
           tenant_id: string
@@ -1055,6 +1087,7 @@ export type Database = {
           booking_date: string
           booking_source?: string
           created_at?: string
+          csat_sent_at?: string | null
           customer_id?: string | null
           customer_name: string
           drop_required?: boolean | null
@@ -1072,6 +1105,7 @@ export type Database = {
           pickup_required?: boolean | null
           preferred_time?: string | null
           quotation_notes?: string | null
+          ready_at?: string | null
           service_type: string
           status?: Database["public"]["Enums"]["service_status"]
           tenant_id: string
@@ -1087,6 +1121,7 @@ export type Database = {
           booking_date?: string
           booking_source?: string
           created_at?: string
+          csat_sent_at?: string | null
           customer_id?: string | null
           customer_name?: string
           drop_required?: boolean | null
@@ -1104,6 +1139,7 @@ export type Database = {
           pickup_required?: boolean | null
           preferred_time?: string | null
           quotation_notes?: string | null
+          ready_at?: string | null
           service_type?: string
           status?: Database["public"]["Enums"]["service_status"]
           tenant_id?: string
@@ -1687,6 +1723,8 @@ export type Database = {
         | "in_progress"
         | "completed"
         | "cancelled"
+        | "estimation_sent"
+        | "ready_for_pickup"
       tenant_plan: "free" | "starter" | "pro" | "enterprise"
       tenant_status: "active" | "suspended" | "cancelled"
       wa_message_status:
@@ -1840,6 +1878,8 @@ export const Constants = {
         "in_progress",
         "completed",
         "cancelled",
+        "estimation_sent",
+        "ready_for_pickup",
       ],
       tenant_plan: ["free", "starter", "pro", "enterprise"],
       tenant_status: ["active", "suspended", "cancelled"],

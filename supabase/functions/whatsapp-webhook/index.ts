@@ -47,12 +47,15 @@ async function handleEstimateButton(
 
   if ((booking.approval_status || "pending") === "pending") {
     await supabase.from("service_bookings")
-      .update({ approval_status: decision })
+      .update({
+        approval_status: decision,
+        ...(decision === "approved" ? { status: "in_progress" } : {}),
+      })
       .eq("id", bookingId);
   }
 
   const reply = decision === "approved"
-    ? "✅ Confirmed! We have started the work. You will be notified once the vehicle is ready."
+    ? "✅ Estimate Approved. We have started the work! You will be notified once the vehicle is ready."
     : "📞 Understood. Our service advisor will call you shortly to discuss the estimate.";
 
   const provider: "meta" | "evolution" = whatsappConfig.provider === "evolution" ? "evolution" : "meta";
@@ -87,6 +90,94 @@ async function handleEstimateButton(
   } catch (e) {
     console.error("[estimate-reply] failed to send", e);
   }
+  return true;
+}
+
+// ============================================================
+// CSAT button handler — intercepts `csat_<rating>_<bookingId>` replies
+// Records rating, alerts manager if <3, sends Google review link if 5.
+// ============================================================
+async function handleCsatButton(
+  supabase: any,
+  tenantId: string,
+  recipientPhone: string,
+  interactiveId: string | null,
+  whatsappConfig: Record<string, any>,
+  tenantSettings: Record<string, any>,
+  tenantName: string,
+): Promise<boolean> {
+  if (!interactiveId) return false;
+  const m = interactiveId.match(/^csat_([1-5])_([0-9a-f-]{36})$/);
+  if (!m) return false;
+  const rating = parseInt(m[1], 10);
+  const bookingId = m[2];
+
+  const { data: booking } = await supabase
+    .from("service_bookings")
+    .select("id, tenant_id, customer_name, vehicle_model")
+    .eq("id", bookingId).maybeSingle();
+  if (!booking || booking.tenant_id !== tenantId) return false;
+
+  await supabase.from("csat_responses").insert({
+    tenant_id: tenantId, booking_id: bookingId, booking_type: "service", rating,
+  });
+
+  const reviewUrl = String(tenantSettings?.google_review_url || "").trim();
+  const managerPhone = String(tenantSettings?.manager_phone || "").trim();
+
+  let reply: string;
+  if (rating >= 5 && reviewUrl) {
+    reply = `🙏 Thank you for the 5-star rating! Would you mind sharing your experience on Google?\n${reviewUrl}`;
+  } else if (rating >= 4) {
+    reply = "🙏 Thank you for your feedback! We're glad you had a good experience.";
+  } else {
+    reply = "We're sorry to hear that. Our service manager will reach out to make things right.";
+  }
+
+  const provider: "meta" | "evolution" = whatsappConfig.provider === "evolution" ? "evolution" : "meta";
+  const sendText = async (to: string, body: string) => {
+    try {
+      if (provider === "evolution" && whatsappConfig.evolution?.instance_url && whatsappConfig.evolution?.api_key && whatsappConfig.evolution?.instance_name) {
+        await fetch(`${whatsappConfig.evolution.instance_url}/message/sendText/${encodeURIComponent(whatsappConfig.evolution.instance_name)}`, {
+          method: "POST",
+          headers: { apikey: whatsappConfig.evolution.api_key, "Content-Type": "application/json" },
+          body: JSON.stringify({ number: to, text: body }),
+        });
+      } else if (provider === "meta") {
+        const token = whatsappConfig.meta?.access_token || whatsappConfig.access_token;
+        const phoneNumberId = whatsappConfig.meta?.phone_number_id;
+        if (token && phoneNumberId) {
+          await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ messaging_product: "whatsapp", to, type: "text", text: { body } }),
+          });
+        }
+      }
+    } catch (e) { console.error("[csat] send failed", e); }
+  };
+
+  await sendText(recipientPhone, reply);
+
+  // Low rating — alert manager (in-app + WhatsApp)
+  if (rating < 3) {
+    await supabase.from("notifications").insert({
+      tenant_id: tenantId,
+      user_id: null,
+      title: "Low CSAT rating received",
+      message: `${booking.customer_name} (${booking.vehicle_model}) rated ${rating}/5. Please follow up.`,
+      type: "warning",
+      source: "service_booking",
+      source_id: bookingId,
+    });
+    if (managerPhone) {
+      await sendText(
+        managerPhone,
+        `⚠️ ${tenantName}: Low CSAT alert — ${booking.customer_name} (${booking.vehicle_model}) rated ${rating}/5. Please follow up.`,
+      );
+    }
+  }
+
   return true;
 }
 
@@ -324,7 +415,7 @@ Deno.serve(async (req) => {
         // Resolve tenant by Evolution instance_name in whatsapp_config
         const { data: tenantRow } = await supabase
           .from("tenants")
-          .select("id, status, whatsapp_config")
+          .select("id, name, status, whatsapp_config, settings")
           .eq("status", "active")
           .filter("whatsapp_config->evolution->>instance_name", "eq", instanceName)
           .maybeSingle();
@@ -392,8 +483,21 @@ Deno.serve(async (req) => {
           conversationMetadata = (newConvo!.metadata as Record<string, unknown>) || {};
         }
 
+        // Intercept CSAT button replies before any flow logic.
+        const tenantWaCfg = (tenantRow.whatsapp_config as Record<string, any>) || {};
+        const tenantSettings = (tenantRow.settings as Record<string, any>) || {};
+        if (await handleCsatButton(supabase, tenantId, customerPhone, interactiveId, tenantWaCfg, tenantSettings, tenantRow.name || "")) {
+          await supabase.from("chatbot_messages").insert({
+            tenant_id: tenantId, conversation_id: conversationId, sender_type: "customer",
+            content: messageText, message_type: "text",
+            metadata: { gateway: "evolution", evo_message_id: key.id, interactive_id: interactiveId, kind: "csat_reply" },
+          });
+          return new Response(JSON.stringify({ success: true, gateway: "evolution", handled: "csat" }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
         // Intercept service-estimate button replies before any flow logic.
-        if (await handleEstimateButton(supabase, tenantId, customerPhone, interactiveId, (tenantRow.whatsapp_config as Record<string, any>) || {})) {
+        if (await handleEstimateButton(supabase, tenantId, customerPhone, interactiveId, tenantWaCfg)) {
           await supabase.from("chatbot_messages").insert({
             tenant_id: tenantId, conversation_id: conversationId, sender_type: "customer",
             content: messageText, message_type: "text",
@@ -536,19 +640,23 @@ Deno.serve(async (req) => {
                 conversationMetadata = (newConvo!.metadata as Record<string, unknown>) || {};
               }
 
-              // Intercept service-estimate button replies before any flow logic.
-              if (interactiveId && /^est_(approve|reject)_[0-9a-f-]{36}$/.test(interactiveId)) {
+              // Intercept CSAT and estimate button replies before any flow logic.
+              if (interactiveId && /^(csat_[1-5]|est_(approve|reject))_[0-9a-f-]{36}$/.test(interactiveId)) {
                 const { data: tenantRow2 } = await supabase
-                  .from("tenants").select("whatsapp_config").eq("id", tenantId).maybeSingle();
-                const handled = await handleEstimateButton(
-                  supabase, tenantId, customerPhone, interactiveId,
-                  (tenantRow2?.whatsapp_config as Record<string, any>) || {},
+                  .from("tenants").select("name, whatsapp_config, settings").eq("id", tenantId).maybeSingle();
+                const wa2 = (tenantRow2?.whatsapp_config as Record<string, any>) || {};
+                const settings2 = (tenantRow2?.settings as Record<string, any>) || {};
+                const csatHandled = await handleCsatButton(
+                  supabase, tenantId, customerPhone, interactiveId, wa2, settings2, tenantRow2?.name || "",
                 );
-                if (handled) {
+                const estHandled = csatHandled ? false : await handleEstimateButton(
+                  supabase, tenantId, customerPhone, interactiveId, wa2,
+                );
+                if (csatHandled || estHandled) {
                   await supabase.from("chatbot_messages").insert({
                     tenant_id: tenantId, conversation_id: conversationId, sender_type: "customer",
                     content: messageText, message_type: "text",
-                    metadata: { wa_message_id: msg.id, interactive_id: interactiveId, kind: "estimate_reply" },
+                    metadata: { wa_message_id: msg.id, interactive_id: interactiveId, kind: csatHandled ? "csat_reply" : "estimate_reply" },
                   });
                   continue;
                 }

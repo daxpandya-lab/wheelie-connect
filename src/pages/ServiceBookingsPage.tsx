@@ -51,7 +51,9 @@ type Profile = { user_id: string; full_name: string | null };
 const STATUS_FLOW = [
   { value: "pending", label: "Pending", icon: Clock, class: "bg-warning/10 text-warning" },
   { value: "confirmed", label: "Inspection Done", icon: Eye, class: "bg-info/10 text-info" },
+  { value: "estimation_sent", label: "Estimation Sent", icon: ClipboardList, class: "bg-info/10 text-info" },
   { value: "in_progress", label: "In Progress", icon: Play, class: "bg-accent/10 text-accent-foreground" },
+  { value: "ready_for_pickup", label: "Ready for Pickup", icon: CheckCircle, class: "bg-success/10 text-success" },
   { value: "completed", label: "Completed", icon: CheckCircle, class: "bg-success/10 text-success" },
   { value: "cancelled", label: "Cancelled", icon: XCircle, class: "bg-destructive/10 text-destructive" },
 ];
@@ -201,6 +203,29 @@ export default function ServiceBookingsPage() {
     else if (wa === "failed") toast.warning("Estimate saved, but WhatsApp send failed");
     else toast.success("Estimate saved (WhatsApp not configured)");
     fetchBookings();
+  };
+
+  const [markingReady, setMarkingReady] = useState(false);
+  const [readyAmount, setReadyAmount] = useState("");
+  const markReady = async () => {
+    if (!selectedJob) return;
+    const amountNum = parseFloat(readyAmount);
+    if (!Number.isFinite(amountNum) || amountNum < 0) {
+      toast.error("Enter the final bill amount");
+      return;
+    }
+    setMarkingReady(true);
+    const { data, error } = await supabase.functions.invoke("mark-service-ready", {
+      body: { booking_id: selectedJob.id, amount: amountNum },
+    });
+    setMarkingReady(false);
+    if (error) { toast.error(error.message || "Failed to mark ready"); return; }
+    const wa = (data as any)?.whatsapp;
+    if (wa === "sent") toast.success("Marked ready — invoice sent on WhatsApp");
+    else if (wa === "failed") toast.warning("Marked ready — WhatsApp failed");
+    else toast.success("Marked ready (WhatsApp not configured)");
+    fetchBookings();
+    setDetailOpen(false);
   };
 
   const saveJobDetail = async () => {
@@ -460,6 +485,20 @@ export default function ServiceBookingsPage() {
                 <p className="text-sm text-foreground whitespace-pre-wrap">{selectedJob.issue_description || "No issue description provided"}</p>
               </div>
 
+              {/* Reschedule Timeline */}
+              {(selectedJob.metadata as any)?.rescheduled_from && (
+                <div className="space-y-2 rounded-lg border border-warning/30 p-3 bg-warning/5">
+                  <Label className="text-xs font-semibold text-warning uppercase tracking-wide">Reschedule Timeline</Label>
+                  <ol className="text-xs text-foreground space-y-1 ml-4 list-decimal">
+                    <li>Originally booked from ID <span className="font-mono">{String((selectedJob.metadata as any).rescheduled_from).slice(0, 8)}</span></li>
+                    {(selectedJob.metadata as any).rescheduled_at && (
+                      <li>Rescheduled at {new Date((selectedJob.metadata as any).rescheduled_at).toLocaleString()}</li>
+                    )}
+                    <li>Current date: {selectedJob.booking_date}</li>
+                  </ol>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
                   Executive Notes
@@ -546,6 +585,21 @@ export default function ServiceBookingsPage() {
                   <Button onClick={sendEstimate} disabled={sendingEstimate} className="w-full">
                     {sendingEstimate ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
                     Send Estimate to Customer
+                  </Button>
+                </div>
+              )}
+
+              {!isExecutive && selectedJob.approval_status === "approved" && selectedJob.status !== "ready_for_pickup" && selectedJob.status !== "completed" && (
+                <div className="space-y-3 rounded-lg border border-success/30 p-4 bg-success/5">
+                  <Label className="text-sm font-semibold text-foreground uppercase tracking-wide">Mark as Ready for Pickup</Label>
+                  <p className="text-xs text-muted-foreground">Sends the customer a WhatsApp message with the pro-forma invoice attached.</p>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Final Bill Amount (₹)</Label>
+                    <Input type="number" value={readyAmount} onChange={e => setReadyAmount(e.target.value)} placeholder="0" />
+                  </div>
+                  <Button onClick={markReady} disabled={markingReady} className="w-full" variant="default">
+                    {markingReady ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-1" />}
+                    Mark as Ready & Send Invoice
                   </Button>
                 </div>
               )}
