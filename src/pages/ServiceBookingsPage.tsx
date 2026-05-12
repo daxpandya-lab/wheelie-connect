@@ -588,6 +588,21 @@ export default function ServiceBookingsPage() {
                   </Button>
                 </div>
               )}
+
+              {!isExecutive && selectedJob.approval_status === "approved" && selectedJob.status !== "ready_for_pickup" && selectedJob.status !== "completed" && (
+                <div className="space-y-3 rounded-lg border border-success/30 p-4 bg-success/5">
+                  <Label className="text-sm font-semibold text-foreground uppercase tracking-wide">Mark as Ready for Pickup</Label>
+                  <p className="text-xs text-muted-foreground">Sends the customer a WhatsApp message with the pro-forma invoice attached.</p>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Final Bill Amount (₹)</Label>
+                    <Input type="number" value={readyAmount} onChange={e => setReadyAmount(e.target.value)} placeholder="0" />
+                  </div>
+                  <Button onClick={markReady} disabled={markingReady} className="w-full" variant="default">
+                    {markingReady ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-1" />}
+                    Mark as Ready & Send Invoice
+                  </Button>
+                </div>
+              )}
             </div>
           )}
           <DialogFooter>
