@@ -30,6 +30,8 @@ function CapacitySettings() {
   const [maxVehicles, setMaxVehicles] = useState("");
   const [advanceDays, setAdvanceDays] = useState("");
   const [holidays, setHolidays] = useState<Date[]>([]);
+  const [managerPhone, setManagerPhone] = useState("");
+  const [reviewUrl, setReviewUrl] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
