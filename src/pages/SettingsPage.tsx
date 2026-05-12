@@ -64,6 +64,8 @@ function CapacitySettings() {
       ...currentSettings,
       max_vehicles_per_day: maxVehicles ? parseInt(maxVehicles) : null,
       advance_booking_days: advanceDays ? parseInt(advanceDays) : null,
+      manager_phone: managerPhone.trim() || null,
+      google_review_url: reviewUrl.trim() || null,
       holidays: holidays
         .map((d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`)
         .sort(),
