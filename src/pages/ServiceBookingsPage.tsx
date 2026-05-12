@@ -485,6 +485,20 @@ export default function ServiceBookingsPage() {
                 <p className="text-sm text-foreground whitespace-pre-wrap">{selectedJob.issue_description || "No issue description provided"}</p>
               </div>
 
+              {/* Reschedule Timeline */}
+              {(selectedJob.metadata as any)?.rescheduled_from && (
+                <div className="space-y-2 rounded-lg border border-warning/30 p-3 bg-warning/5">
+                  <Label className="text-xs font-semibold text-warning uppercase tracking-wide">Reschedule Timeline</Label>
+                  <ol className="text-xs text-foreground space-y-1 ml-4 list-decimal">
+                    <li>Originally booked from ID <span className="font-mono">{String((selectedJob.metadata as any).rescheduled_from).slice(0, 8)}</span></li>
+                    {(selectedJob.metadata as any).rescheduled_at && (
+                      <li>Rescheduled at {new Date((selectedJob.metadata as any).rescheduled_at).toLocaleString()}</li>
+                    )}
+                    <li>Current date: {selectedJob.booking_date}</li>
+                  </ol>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
                   Executive Notes
