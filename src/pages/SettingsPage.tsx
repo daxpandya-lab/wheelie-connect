@@ -49,6 +49,8 @@ function CapacitySettings() {
               .filter((d): d is Date => !!d && !isNaN(d.getTime())),
           );
         }
+        if (typeof settings?.manager_phone === "string") setManagerPhone(settings.manager_phone);
+        if (typeof settings?.google_review_url === "string") setReviewUrl(settings.google_review_url);
         setLoading(false);
       });
   }, [tenantId]);
