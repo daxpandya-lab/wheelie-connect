@@ -205,6 +205,29 @@ export default function ServiceBookingsPage() {
     fetchBookings();
   };
 
+  const [markingReady, setMarkingReady] = useState(false);
+  const [readyAmount, setReadyAmount] = useState("");
+  const markReady = async () => {
+    if (!selectedJob) return;
+    const amountNum = parseFloat(readyAmount);
+    if (!Number.isFinite(amountNum) || amountNum < 0) {
+      toast.error("Enter the final bill amount");
+      return;
+    }
+    setMarkingReady(true);
+    const { data, error } = await supabase.functions.invoke("mark-service-ready", {
+      body: { booking_id: selectedJob.id, amount: amountNum },
+    });
+    setMarkingReady(false);
+    if (error) { toast.error(error.message || "Failed to mark ready"); return; }
+    const wa = (data as any)?.whatsapp;
+    if (wa === "sent") toast.success("Marked ready — invoice sent on WhatsApp");
+    else if (wa === "failed") toast.warning("Marked ready — WhatsApp failed");
+    else toast.success("Marked ready (WhatsApp not configured)");
+    fetchBookings();
+    setDetailOpen(false);
+  };
+
   const saveJobDetail = async () => {
     if (!selectedJob) return;
     setSaving(true);
