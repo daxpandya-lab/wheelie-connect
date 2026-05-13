@@ -783,19 +783,45 @@ Deno.serve(async (req) => {
                 }
               }
 
+              // Handle inbound media (image/audio/video/document) for Meta Cloud API
+              let metaAttachment: Record<string, unknown> | null = null;
+              const metaMedia = (msg as any).image || (msg as any).audio || (msg as any).video || (msg as any).document;
+              if (metaMedia?.id) {
+                const { data: tenantCfg } = await supabase
+                  .from("tenants").select("whatsapp_config").eq("id", tenantId).maybeSingle();
+                const accessToken = (tenantCfg?.whatsapp_config as any)?.meta?.access_token
+                  || (tenantCfg?.whatsapp_config as any)?.access_token;
+                if (accessToken) {
+                  const fetched = await fetchMetaMedia(accessToken, metaMedia.id);
+                  if (fetched) {
+                    const publicUrl = await uploadMediaToBucket(supabase, tenantId, fetched.bytes, fetched.mime);
+                    if (publicUrl) {
+                      metaAttachment = {
+                        url: publicUrl, mime: fetched.mime, kind: classifyMime(fetched.mime),
+                        received_at: new Date().toISOString(), source: "whatsapp_meta",
+                      };
+                      const bookingId = await attachMediaToActiveBooking(supabase, tenantId, customerPhone, metaAttachment);
+                      (metaAttachment as any).booking_id = bookingId;
+                    }
+                  }
+                }
+              }
+
               const { data: savedMessage } = await supabase.from("chatbot_messages")
                 .insert({
                   tenant_id: tenantId, conversation_id: conversationId, sender_type: "customer",
-                  content: messageText,
+                  content: messageText || (metaAttachment ? `[${metaAttachment.kind}] ${metaAttachment.url}` : ""),
                   message_type: msg.type === "interactive" ? "text" : msg.type,
-                  metadata: { wa_message_id: msg.id, wa_timestamp: msg.timestamp, interactive_id: interactiveId, referral: msg.referral || null },
+                  metadata: { wa_message_id: msg.id, wa_timestamp: msg.timestamp, interactive_id: interactiveId, referral: msg.referral || null, media: metaAttachment },
                 })
                 .select("id").single();
 
-              await processChatbotFlow(
-                supabase, tenantId, conversationId, savedMessage!.id,
-                messageText, interactiveId, customerPhone, conversationMetadata, customerId
-              );
+              if (messageText || interactiveId) {
+                await processChatbotFlow(
+                  supabase, tenantId, conversationId, savedMessage!.id,
+                  messageText, interactiveId, customerPhone, conversationMetadata, customerId
+                );
+              }
             }
           }
         }
