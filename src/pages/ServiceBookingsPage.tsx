@@ -494,6 +494,42 @@ export default function ServiceBookingsPage() {
                 <p className="text-sm text-foreground whitespace-pre-wrap">{selectedJob.issue_description || "No issue description provided"}</p>
               </div>
 
+              {Array.isArray(selectedJob.media_attachments) && selectedJob.media_attachments.length > 0 && (
+                <div className="space-y-2 rounded-lg border border-border p-3 bg-muted/30">
+                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Customer Attachments ({selectedJob.media_attachments.length})
+                  </Label>
+                  <div className="space-y-3">
+                    {selectedJob.media_attachments.map((att, i) => {
+                      const kind = att.kind || (att.mime?.startsWith("image/") ? "image" : att.mime?.startsWith("audio/") ? "audio" : att.mime?.startsWith("video/") ? "video" : "file");
+                      if (kind === "image") {
+                        return (
+                          <a key={i} href={att.url} target="_blank" rel="noreferrer" className="inline-block">
+                            <img src={att.url} alt={`Attachment ${i + 1}`} loading="lazy" className="w-32 h-32 object-cover rounded-md border border-border hover:opacity-80 transition" />
+                          </a>
+                        );
+                      }
+                      if (kind === "audio") {
+                        return (
+                          <div key={i} className="flex flex-col gap-1">
+                            <span className="text-xs text-muted-foreground">🎤 Voice note {i + 1}</span>
+                            <audio controls src={att.url} className="w-full max-w-sm" />
+                          </div>
+                        );
+                      }
+                      if (kind === "video") {
+                        return <video key={i} controls src={att.url} className="w-full max-w-sm rounded-md border border-border" />;
+                      }
+                      return (
+                        <a key={i} href={att.url} target="_blank" rel="noreferrer" className="text-xs text-primary underline block">
+                          📎 Download attachment {i + 1}
+                        </a>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Reschedule Timeline */}
               {(selectedJob.metadata as any)?.rescheduled_from && (
                 <div className="space-y-2 rounded-lg border border-warning/30 p-3 bg-warning/5">
