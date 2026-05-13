@@ -606,22 +606,45 @@ Deno.serve(async (req) => {
           });
         }
 
+        // Handle inbound media (image / voice note / video / doc) — store + attach to active booking
+        let evoAttachment: Record<string, unknown> | null = null;
+        if (evoMediaMsg) {
+          const media = await fetchEvolutionMedia(tenantWaCfg, m);
+          if (media) {
+            const publicUrl = await uploadMediaToBucket(supabase, tenantId, media.bytes, media.mime);
+            if (publicUrl) {
+              evoAttachment = {
+                url: publicUrl, mime: media.mime, kind: classifyMime(media.mime),
+                received_at: new Date().toISOString(), source: "whatsapp_evolution",
+              };
+              const bookingId = await attachMediaToActiveBooking(supabase, tenantId, customerPhone, evoAttachment);
+              (evoAttachment as any).booking_id = bookingId;
+            }
+          }
+        }
+
         // Persist inbound message
+        const evoMsgType = evoAttachment
+          ? (evoAttachment.kind === "image" ? "image" : evoAttachment.kind === "audio" ? "audio" : "text")
+          : "text";
         const { data: savedMessage } = await supabase.from("chatbot_messages")
           .insert({
             tenant_id: tenantId, conversation_id: conversationId, sender_type: "customer",
-            content: messageText,
-            message_type: "text",
-            metadata: { gateway: "evolution", evo_message_id: key.id, interactive_id: interactiveId },
+            content: messageText || (evoAttachment ? `[${evoAttachment.kind}] ${evoAttachment.url}` : ""),
+            message_type: evoMsgType,
+            metadata: { gateway: "evolution", evo_message_id: key.id, interactive_id: interactiveId, media: evoAttachment },
           })
           .select("id").single();
 
-        await processChatbotFlow(
-          supabase, tenantId, conversationId, savedMessage!.id,
-          messageText, interactiveId, customerPhone, conversationMetadata, customerId,
-        );
+        // Only run flow processor when there's a textual / interactive payload to act on.
+        if (messageText || interactiveId) {
+          await processChatbotFlow(
+            supabase, tenantId, conversationId, savedMessage!.id,
+            messageText, interactiveId, customerPhone, conversationMetadata, customerId,
+          );
+        }
 
-        return new Response(JSON.stringify({ success: true, gateway: "evolution" }), {
+        return new Response(JSON.stringify({ success: true, gateway: "evolution", media: evoAttachment?.kind || null }), {
           status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
