@@ -23,6 +23,14 @@ import ColumnManagerDialog from "@/components/reports/ColumnManagerDialog";
 import DynamicReportTable from "@/components/reports/DynamicReportTable";
 import ExportMenu from "@/components/reports/ExportMenu";
 
+type MediaAttachment = {
+  url: string;
+  mime?: string;
+  kind?: "image" | "audio" | "video" | "file";
+  received_at?: string;
+  source?: string;
+};
+
 type ServiceBooking = {
   id: string; customer_name: string; phone_number: string; vehicle_model: string;
   kms_driven: number | null; service_type: string; booking_date: string;
@@ -33,6 +41,7 @@ type ServiceBooking = {
   quotation_notes: string | null; work_notes: string | null;
   parts_required: string | null; created_at: string; booking_source: string;
   metadata: Record<string, unknown> | null;
+  media_attachments: MediaAttachment[] | null;
 };
 
 const FIXED_COLS = [
