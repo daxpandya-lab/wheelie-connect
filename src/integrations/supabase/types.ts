@@ -1064,6 +1064,7 @@ export type Database = {
           id: string
           issue_description: string | null
           kms_driven: number | null
+          media_attachments: Json
           metadata: Json
           notes: string | null
           parts_required: string | null
@@ -1098,6 +1099,7 @@ export type Database = {
           id?: string
           issue_description?: string | null
           kms_driven?: number | null
+          media_attachments?: Json
           metadata?: Json
           notes?: string | null
           parts_required?: string | null
@@ -1132,6 +1134,7 @@ export type Database = {
           id?: string
           issue_description?: string | null
           kms_driven?: number | null
+          media_attachments?: Json
           metadata?: Json
           notes?: string | null
           parts_required?: string | null

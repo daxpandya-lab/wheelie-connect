@@ -283,6 +283,104 @@ function nextDays(n: number, startOffset = 0): { iso: string; ddmmyyyy: string; 
 }
 
 // ============================================================
+// MEDIA — download from WhatsApp providers and store in `service_media`
+// ============================================================
+function extOf(mime: string, fallback = "bin"): string {
+  if (!mime) return fallback;
+  const map: Record<string, string> = {
+    "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif",
+    "audio/ogg": "ogg", "audio/opus": "opus", "audio/mpeg": "mp3", "audio/mp4": "m4a", "audio/aac": "aac", "audio/wav": "wav",
+    "video/mp4": "mp4", "video/3gpp": "3gp",
+    "application/pdf": "pdf",
+  };
+  if (map[mime]) return map[mime];
+  const sub = mime.split("/")[1] || fallback;
+  return sub.split(";")[0];
+}
+
+function classifyMime(mime: string): "image" | "audio" | "video" | "file" {
+  if (mime?.startsWith("image/")) return "image";
+  if (mime?.startsWith("audio/")) return "audio";
+  if (mime?.startsWith("video/")) return "video";
+  return "file";
+}
+
+async function uploadMediaToBucket(
+  supabase: any, tenantId: string, bytes: Uint8Array, mime: string,
+): Promise<string | null> {
+  const ext = extOf(mime);
+  const path = `${tenantId}/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage.from("service_media").upload(path, bytes, {
+    contentType: mime || "application/octet-stream", upsert: false,
+  });
+  if (error) { console.error("[MEDIA] upload error", error); return null; }
+  const { data } = supabase.storage.from("service_media").getPublicUrl(path);
+  return data?.publicUrl || null;
+}
+
+async function attachMediaToActiveBooking(
+  supabase: any, tenantId: string, phone: string, attachment: Record<string, unknown>,
+) {
+  const { data: booking } = await supabase
+    .from("service_bookings")
+    .select("id, media_attachments")
+    .eq("tenant_id", tenantId).eq("phone_number", phone)
+    .not("status", "in", "(cancelled,completed)")
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (!booking) return null;
+  const list = Array.isArray(booking.media_attachments) ? booking.media_attachments : [];
+  list.push(attachment);
+  await supabase.from("service_bookings")
+    .update({ media_attachments: list })
+    .eq("id", booking.id);
+  return booking.id;
+}
+
+async function fetchEvolutionMedia(
+  cfg: Record<string, any>, msg: any,
+): Promise<{ bytes: Uint8Array; mime: string } | null> {
+  const url = cfg?.evolution?.instance_url; const inst = cfg?.evolution?.instance_name; const key = cfg?.evolution?.api_key;
+  if (!url || !inst || !key) return null;
+  const mediaMsg = msg?.imageMessage || msg?.audioMessage || msg?.videoMessage || msg?.documentMessage;
+  if (!mediaMsg) return null;
+  const mime = mediaMsg.mimetype || (msg.imageMessage ? "image/jpeg" : msg.audioMessage ? "audio/ogg" : "application/octet-stream");
+  try {
+    const endpoint = `${url.replace(/\/+$/, "")}/chat/getBase64FromMediaMessage/${encodeURIComponent(inst)}`;
+    const resp = await fetch(endpoint, {
+      method: "POST",
+      headers: { apikey: key, "Content-Type": "application/json" },
+      body: JSON.stringify({ message: { key: msg.key || {}, message: { ...msg } } }),
+    });
+    if (!resp.ok) { console.error("[MEDIA][EVO] fetch failed", resp.status, await resp.text().catch(() => "")); return null; }
+    const j = await resp.json().catch(() => ({} as any));
+    const b64: string | undefined = j?.base64 || j?.media || j?.data;
+    if (!b64) return null;
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return { bytes, mime };
+  } catch (e) { console.error("[MEDIA][EVO] error", e); return null; }
+}
+
+async function fetchMetaMedia(
+  accessToken: string, mediaId: string,
+): Promise<{ bytes: Uint8Array; mime: string } | null> {
+  try {
+    const meta = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!meta.ok) return null;
+    const j = await meta.json();
+    if (!j?.url) return null;
+    const file = await fetch(j.url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!file.ok) return null;
+    const mime = j.mime_type || file.headers.get("content-type") || "application/octet-stream";
+    const buf = await file.arrayBuffer();
+    return { bytes: new Uint8Array(buf), mime };
+  } catch (e) { console.error("[MEDIA][META] error", e); return null; }
+}
+
+// ============================================================
 // COMMON
 // ============================================================
 async function checkRateLimit(supabase: any, key: string, maxTokens = 120, windowSeconds = 60): Promise<boolean> {
@@ -405,8 +503,8 @@ Deno.serve(async (req) => {
           interactiveId = m.templateButtonReplyMessage.selectedId || null;
         }
 
-        if (!messageText && !interactiveId) {
-          // Non-text payload (image/audio/etc.) — acknowledge and ignore for now
+        const evoMediaMsg = m.imageMessage || m.audioMessage || m.videoMessage || m.documentMessage || null;
+        if (!messageText && !interactiveId && !evoMediaMsg) {
           return new Response(JSON.stringify({ success: true, skipped: "non_text" }), {
             status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
@@ -508,22 +606,45 @@ Deno.serve(async (req) => {
           });
         }
 
+        // Handle inbound media (image / voice note / video / doc) — store + attach to active booking
+        let evoAttachment: Record<string, unknown> | null = null;
+        if (evoMediaMsg) {
+          const media = await fetchEvolutionMedia(tenantWaCfg, m);
+          if (media) {
+            const publicUrl = await uploadMediaToBucket(supabase, tenantId, media.bytes, media.mime);
+            if (publicUrl) {
+              evoAttachment = {
+                url: publicUrl, mime: media.mime, kind: classifyMime(media.mime),
+                received_at: new Date().toISOString(), source: "whatsapp_evolution",
+              };
+              const bookingId = await attachMediaToActiveBooking(supabase, tenantId, customerPhone, evoAttachment);
+              (evoAttachment as any).booking_id = bookingId;
+            }
+          }
+        }
+
         // Persist inbound message
+        const evoMsgType = evoAttachment
+          ? (evoAttachment.kind === "image" ? "image" : evoAttachment.kind === "audio" ? "audio" : "text")
+          : "text";
         const { data: savedMessage } = await supabase.from("chatbot_messages")
           .insert({
             tenant_id: tenantId, conversation_id: conversationId, sender_type: "customer",
-            content: messageText,
-            message_type: "text",
-            metadata: { gateway: "evolution", evo_message_id: key.id, interactive_id: interactiveId },
+            content: messageText || (evoAttachment ? `[${evoAttachment.kind}] ${evoAttachment.url}` : ""),
+            message_type: evoMsgType,
+            metadata: { gateway: "evolution", evo_message_id: key.id, interactive_id: interactiveId, media: evoAttachment },
           })
           .select("id").single();
 
-        await processChatbotFlow(
-          supabase, tenantId, conversationId, savedMessage!.id,
-          messageText, interactiveId, customerPhone, conversationMetadata, customerId,
-        );
+        // Only run flow processor when there's a textual / interactive payload to act on.
+        if (messageText || interactiveId) {
+          await processChatbotFlow(
+            supabase, tenantId, conversationId, savedMessage!.id,
+            messageText, interactiveId, customerPhone, conversationMetadata, customerId,
+          );
+        }
 
-        return new Response(JSON.stringify({ success: true, gateway: "evolution" }), {
+        return new Response(JSON.stringify({ success: true, gateway: "evolution", media: evoAttachment?.kind || null }), {
           status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -662,19 +783,45 @@ Deno.serve(async (req) => {
                 }
               }
 
+              // Handle inbound media (image/audio/video/document) for Meta Cloud API
+              let metaAttachment: Record<string, unknown> | null = null;
+              const metaMedia = (msg as any).image || (msg as any).audio || (msg as any).video || (msg as any).document;
+              if (metaMedia?.id) {
+                const { data: tenantCfg } = await supabase
+                  .from("tenants").select("whatsapp_config").eq("id", tenantId).maybeSingle();
+                const accessToken = (tenantCfg?.whatsapp_config as any)?.meta?.access_token
+                  || (tenantCfg?.whatsapp_config as any)?.access_token;
+                if (accessToken) {
+                  const fetched = await fetchMetaMedia(accessToken, metaMedia.id);
+                  if (fetched) {
+                    const publicUrl = await uploadMediaToBucket(supabase, tenantId, fetched.bytes, fetched.mime);
+                    if (publicUrl) {
+                      metaAttachment = {
+                        url: publicUrl, mime: fetched.mime, kind: classifyMime(fetched.mime),
+                        received_at: new Date().toISOString(), source: "whatsapp_meta",
+                      };
+                      const bookingId = await attachMediaToActiveBooking(supabase, tenantId, customerPhone, metaAttachment);
+                      (metaAttachment as any).booking_id = bookingId;
+                    }
+                  }
+                }
+              }
+
               const { data: savedMessage } = await supabase.from("chatbot_messages")
                 .insert({
                   tenant_id: tenantId, conversation_id: conversationId, sender_type: "customer",
-                  content: messageText,
+                  content: messageText || (metaAttachment ? `[${metaAttachment.kind}] ${metaAttachment.url}` : ""),
                   message_type: msg.type === "interactive" ? "text" : msg.type,
-                  metadata: { wa_message_id: msg.id, wa_timestamp: msg.timestamp, interactive_id: interactiveId, referral: msg.referral || null },
+                  metadata: { wa_message_id: msg.id, wa_timestamp: msg.timestamp, interactive_id: interactiveId, referral: msg.referral || null, media: metaAttachment },
                 })
                 .select("id").single();
 
-              await processChatbotFlow(
-                supabase, tenantId, conversationId, savedMessage!.id,
-                messageText, interactiveId, customerPhone, conversationMetadata, customerId
-              );
+              if (messageText || interactiveId) {
+                await processChatbotFlow(
+                  supabase, tenantId, conversationId, savedMessage!.id,
+                  messageText, interactiveId, customerPhone, conversationMetadata, customerId
+                );
+              }
             }
           }
         }
