@@ -283,6 +283,104 @@ function nextDays(n: number, startOffset = 0): { iso: string; ddmmyyyy: string; 
 }
 
 // ============================================================
+// MEDIA — download from WhatsApp providers and store in `service_media`
+// ============================================================
+function extOf(mime: string, fallback = "bin"): string {
+  if (!mime) return fallback;
+  const map: Record<string, string> = {
+    "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif",
+    "audio/ogg": "ogg", "audio/opus": "opus", "audio/mpeg": "mp3", "audio/mp4": "m4a", "audio/aac": "aac", "audio/wav": "wav",
+    "video/mp4": "mp4", "video/3gpp": "3gp",
+    "application/pdf": "pdf",
+  };
+  if (map[mime]) return map[mime];
+  const sub = mime.split("/")[1] || fallback;
+  return sub.split(";")[0];
+}
+
+function classifyMime(mime: string): "image" | "audio" | "video" | "file" {
+  if (mime?.startsWith("image/")) return "image";
+  if (mime?.startsWith("audio/")) return "audio";
+  if (mime?.startsWith("video/")) return "video";
+  return "file";
+}
+
+async function uploadMediaToBucket(
+  supabase: any, tenantId: string, bytes: Uint8Array, mime: string,
+): Promise<string | null> {
+  const ext = extOf(mime);
+  const path = `${tenantId}/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage.from("service_media").upload(path, bytes, {
+    contentType: mime || "application/octet-stream", upsert: false,
+  });
+  if (error) { console.error("[MEDIA] upload error", error); return null; }
+  const { data } = supabase.storage.from("service_media").getPublicUrl(path);
+  return data?.publicUrl || null;
+}
+
+async function attachMediaToActiveBooking(
+  supabase: any, tenantId: string, phone: string, attachment: Record<string, unknown>,
+) {
+  const { data: booking } = await supabase
+    .from("service_bookings")
+    .select("id, media_attachments")
+    .eq("tenant_id", tenantId).eq("phone_number", phone)
+    .not("status", "in", "(cancelled,completed)")
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (!booking) return null;
+  const list = Array.isArray(booking.media_attachments) ? booking.media_attachments : [];
+  list.push(attachment);
+  await supabase.from("service_bookings")
+    .update({ media_attachments: list })
+    .eq("id", booking.id);
+  return booking.id;
+}
+
+async function fetchEvolutionMedia(
+  cfg: Record<string, any>, msg: any,
+): Promise<{ bytes: Uint8Array; mime: string } | null> {
+  const url = cfg?.evolution?.instance_url; const inst = cfg?.evolution?.instance_name; const key = cfg?.evolution?.api_key;
+  if (!url || !inst || !key) return null;
+  const mediaMsg = msg?.imageMessage || msg?.audioMessage || msg?.videoMessage || msg?.documentMessage;
+  if (!mediaMsg) return null;
+  const mime = mediaMsg.mimetype || (msg.imageMessage ? "image/jpeg" : msg.audioMessage ? "audio/ogg" : "application/octet-stream");
+  try {
+    const endpoint = `${url.replace(/\/+$/, "")}/chat/getBase64FromMediaMessage/${encodeURIComponent(inst)}`;
+    const resp = await fetch(endpoint, {
+      method: "POST",
+      headers: { apikey: key, "Content-Type": "application/json" },
+      body: JSON.stringify({ message: { key: msg.key || {}, message: { ...msg } } }),
+    });
+    if (!resp.ok) { console.error("[MEDIA][EVO] fetch failed", resp.status, await resp.text().catch(() => "")); return null; }
+    const j = await resp.json().catch(() => ({} as any));
+    const b64: string | undefined = j?.base64 || j?.media || j?.data;
+    if (!b64) return null;
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return { bytes, mime };
+  } catch (e) { console.error("[MEDIA][EVO] error", e); return null; }
+}
+
+async function fetchMetaMedia(
+  accessToken: string, mediaId: string,
+): Promise<{ bytes: Uint8Array; mime: string } | null> {
+  try {
+    const meta = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!meta.ok) return null;
+    const j = await meta.json();
+    if (!j?.url) return null;
+    const file = await fetch(j.url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!file.ok) return null;
+    const mime = j.mime_type || file.headers.get("content-type") || "application/octet-stream";
+    const buf = await file.arrayBuffer();
+    return { bytes: new Uint8Array(buf), mime };
+  } catch (e) { console.error("[MEDIA][META] error", e); return null; }
+}
+
+// ============================================================
 // COMMON
 // ============================================================
 async function checkRateLimit(supabase: any, key: string, maxTokens = 120, windowSeconds = 60): Promise<boolean> {
