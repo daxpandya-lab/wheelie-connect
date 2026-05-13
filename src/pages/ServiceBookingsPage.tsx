@@ -123,7 +123,7 @@ export default function ServiceBookingsPage() {
       })(),
       supabase.from("profiles").select("user_id, full_name").eq("tenant_id", tenantId),
     ]);
-    if (bookRes.data) setBookings(bookRes.data as ServiceBooking[]);
+    if (bookRes.data) setBookings(bookRes.data as unknown as ServiceBooking[]);
     if (teamRes.data) setTeamMembers(teamRes.data);
     setLoading(false);
   }, [tenantId, statusFilter, serviceTypeFilter, sourceFilter, dateFrom, dateTo, isExecutive, user?.id]);
