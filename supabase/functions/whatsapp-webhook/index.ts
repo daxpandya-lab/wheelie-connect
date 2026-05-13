@@ -504,7 +504,28 @@ Deno.serve(async (req) => {
         }
 
         if (!messageText && !interactiveId) {
-          // Non-text payload (image/audio/etc.) — acknowledge and ignore for now
+          // Try to handle media (image/audio/video/doc) — store and attach to active booking
+          const cfg = (tenantRow.whatsapp_config as Record<string, any>) || {};
+          const media = await fetchEvolutionMedia(cfg, m);
+          if (media) {
+            const publicUrl = await uploadMediaToBucket(supabase, tenantId, media.bytes, media.mime);
+            if (publicUrl) {
+              const attachment = {
+                url: publicUrl, mime: media.mime, kind: classifyMime(media.mime),
+                received_at: new Date().toISOString(), source: "whatsapp_evolution",
+              };
+              const bookingId = await attachMediaToActiveBooking(supabase, tenantId, customerPhone, attachment);
+              await supabase.from("chatbot_messages").insert({
+                tenant_id: tenantId, conversation_id: conversationId, sender_type: "customer",
+                content: `[${classifyMime(media.mime)}] ${publicUrl}`,
+                message_type: classifyMime(media.mime) === "image" ? "image" : classifyMime(media.mime) === "audio" ? "audio" : "text",
+                metadata: { gateway: "evolution", evo_message_id: m.key?.id, media: attachment, booking_id: bookingId },
+              });
+              return new Response(JSON.stringify({ success: true, gateway: "evolution", media: attachment.kind, booking_id: bookingId }), {
+                status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+              });
+            }
+          }
           return new Response(JSON.stringify({ success: true, skipped: "non_text" }), {
             status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
