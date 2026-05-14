@@ -1375,30 +1375,64 @@ export default function PublicChatPage() {
     }
 
     setUploadingMedia(true);
-    try {
-      const visitorToken = getVisitorToken(dealer.id);
-      const ext = (file.name.split(".").pop() || "bin").toLowerCase();
-      const path = `${dealer.id}/${visitorToken}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from("service-intake-media")
-        .upload(path, file, { contentType: file.type, upsert: false });
-      if (upErr) throw upErr;
-      const { data: pub } = supabase.storage.from("service-intake-media").getPublicUrl(path);
-      setChatMedia((prev) => [...prev, { url: pub.publicUrl, mime: file.type, kind, name: file.name }]);
-      toast.success(
-        kind === "image" ? "Photo attached" : kind === "video" ? "Video attached" : "Voice note attached"
-      );
-    } catch (err) {
-      console.error("media upload failed", err);
-      toast.error("Upload failed. Please try again.");
-    } finally {
+    const visitorToken = getVisitorToken(dealer.id);
+    const ext = (file.name.split(".").pop() || "bin").toLowerCase();
+    const path = `${dealer.id}/${visitorToken}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const MAX_ATTEMPTS = 3;
+    let lastErr: unknown = null;
+    let success = false;
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS && !success; attempt++) {
+      try {
+        const { error: upErr } = await supabase.storage
+          .from("service-intake-media")
+          .upload(path, file, { contentType: file.type, upsert: true });
+        if (upErr) throw upErr;
+        success = true;
+      } catch (err) {
+        lastErr = err;
+        console.warn(`media upload attempt ${attempt}/${MAX_ATTEMPTS} failed`, err);
+        if (attempt < MAX_ATTEMPTS) {
+          toast.message(`Upload failed, retrying (${attempt}/${MAX_ATTEMPTS - 1})…`);
+          await new Promise((r) => setTimeout(r, 600 * attempt));
+        }
+      }
+    }
+
+    if (!success) {
+      // Best-effort cleanup of any partial object
+      supabase.storage.from("service-intake-media").remove([path]).catch(() => {});
+      console.error("media upload failed after retries", lastErr);
+      toast.error("Upload failed after multiple attempts. Please try again.");
       setUploadingMedia(false);
       setMediaMenuOpen(false);
+      return;
     }
+
+    const { data: pub } = supabase.storage.from("service-intake-media").getPublicUrl(path);
+    setChatMedia((prev) => [...prev, { url: pub.publicUrl, path, mime: file.type, kind, name: file.name }]);
+    toast.success(
+      kind === "image" ? "Photo attached" : kind === "video" ? "Video attached" : "Voice note attached"
+    );
+    setUploadingMedia(false);
+    setMediaMenuOpen(false);
   };
 
-  const removeMedia = (idx: number) => {
-    setChatMedia((prev) => prev.filter((_, i) => i !== idx));
+  const removeMedia = async (idx: number) => {
+    let removed: { path: string } | undefined;
+    setChatMedia((prev) => {
+      removed = prev[idx];
+      return prev.filter((_, i) => i !== idx);
+    });
+    if (removed?.path) {
+      const { error } = await supabase.storage
+        .from("service-intake-media")
+        .remove([removed.path]);
+      if (error) {
+        console.warn("Failed to delete attachment from storage", error);
+        toast.error("Removed locally, but couldn't delete the file from storage.");
+      }
+    }
   };
 
   // ---------- Alternative-date interaction ----------
