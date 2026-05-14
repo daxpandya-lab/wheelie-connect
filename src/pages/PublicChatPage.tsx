@@ -12,8 +12,9 @@ import {
 } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Car, Send, Loader2, Bot, User as UserIcon, Languages, CalendarIcon } from "lucide-react";
+import { Car, Send, Loader2, Bot, User as UserIcon, Languages, CalendarIcon, Paperclip, Camera, Video as VideoIcon, Mic, X as XIcon } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { toast } from "sonner";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { FlowData, FlowNode, ChatbotCollectedData } from "@/types/chatbot-flow";
@@ -143,6 +144,12 @@ export default function PublicChatPage() {
   const [dailyLimit, setDailyLimit] = useState<number>(0);
   const [bookedDates, setBookedDates] = useState<Set<string>>(new Set());
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
+  const [chatMedia, setChatMedia] = useState<{ url: string; mime: string; kind: "image" | "video" | "audio"; name: string }[]>([]);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [mediaMenuOpen, setMediaMenuOpen] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const availableLanguages = useMemo(
@@ -889,6 +896,9 @@ export default function PublicChatPage() {
         notes: needsAddress ? `Pickup/Drop address: ${addressClean}` : null,
         booking_source: "Web Bot",
         status: "pending",
+        media_attachments: chatMedia.length
+          ? chatMedia.map((m) => ({ url: m.url, mime: m.mime, kind: m.kind, source: "web_chat", received_at: new Date().toISOString() }))
+          : null,
         metadata: { ...data, ...addressMeta, source_session_id: sessionId },
       } as never);
       if (insertErr) {
@@ -1315,9 +1325,80 @@ export default function PublicChatPage() {
   };
 
   const handleSend = () => {
-    if (!input.trim() || isComplete) return;
-    processAnswer(input.trim());
+    if (isComplete) return;
+    const text = input.trim();
+    if (!text) {
+      // Allow advancing the issue-description node when only media was attached
+      const node = flow?.nodes.find((n) => n.id === currentNodeId);
+      if (node?.dataField === "issue_description" && chatMedia.length > 0) {
+        processAnswer("(media attached)");
+        setInput("");
+      }
+      return;
+    }
+    processAnswer(text);
     setInput("");
+  };
+
+  // ---------- Media upload (chatbot intake) ----------
+  const MEDIA_LIMITS = {
+    image: 5 * 1024 * 1024,
+    video: 15 * 1024 * 1024,
+    audio: 5 * 1024 * 1024,
+  } as const;
+
+  const handleMediaPick = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    kind: "image" | "video" | "audio"
+  ) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !dealer) return;
+
+    const mimeOk =
+      (kind === "image" && /image\/(jpe?g|png)/i.test(file.type)) ||
+      (kind === "video" && file.type === "video/mp4") ||
+      (kind === "audio" && /audio\//i.test(file.type));
+    if (!mimeOk) {
+      toast.error(
+        kind === "image"
+          ? "Please upload a JPG or PNG photo."
+          : kind === "video"
+          ? "Please upload an MP4 video."
+          : "Please upload an MP3, M4A, or WAV audio file."
+      );
+      return;
+    }
+    if (file.size > MEDIA_LIMITS[kind]) {
+      toast.error("File too large! Please keep videos under 15MB and photos/audio under 5MB.");
+      return;
+    }
+
+    setUploadingMedia(true);
+    try {
+      const visitorToken = getVisitorToken(dealer.id);
+      const ext = (file.name.split(".").pop() || "bin").toLowerCase();
+      const path = `${dealer.id}/${visitorToken}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("service-intake-media")
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("service-intake-media").getPublicUrl(path);
+      setChatMedia((prev) => [...prev, { url: pub.publicUrl, mime: file.type, kind, name: file.name }]);
+      toast.success(
+        kind === "image" ? "Photo attached" : kind === "video" ? "Video attached" : "Voice note attached"
+      );
+    } catch (err) {
+      console.error("media upload failed", err);
+      toast.error("Upload failed. Please try again.");
+    } finally {
+      setUploadingMedia(false);
+      setMediaMenuOpen(false);
+    }
+  };
+
+  const removeMedia = (idx: number) => {
+    setChatMedia((prev) => prev.filter((_, i) => i !== idx));
   };
 
   // ---------- Alternative-date interaction ----------
@@ -1447,6 +1528,8 @@ export default function PublicChatPage() {
     currentNode.options.length > 0 &&
     currentNode.type !== "api_check" &&
     currentNode.type !== "condition";
+  const isIssueNode =
+    !!currentNode && !isComplete && currentNode.dataField === "issue_description";
 
   return (
     <div
@@ -1582,7 +1665,82 @@ export default function PublicChatPage() {
         <div ref={bottomRef} />
       </div>
 
-      <div className="border-t bg-background p-3 flex gap-2 shrink-0">
+      <div className="border-t bg-background shrink-0">
+        {chatMedia.length > 0 && (
+          <div className="px-3 pt-2 flex flex-wrap gap-2">
+            {chatMedia.map((m, i) => (
+              <div
+                key={i}
+                className="relative group flex items-center gap-1.5 pl-1.5 pr-6 py-1 rounded-md border border-border bg-muted/40 text-xs text-foreground max-w-[180px]"
+                title={m.name}
+              >
+                {m.kind === "image" ? (
+                  <img src={m.url} alt="" className="w-7 h-7 object-cover rounded" />
+                ) : m.kind === "video" ? (
+                  <VideoIcon className="w-4 h-4 text-primary" />
+                ) : (
+                  <Mic className="w-4 h-4 text-primary" />
+                )}
+                <span className="truncate">{m.kind === "image" ? "Photo" : m.kind === "video" ? "Video" : "Voice note"}</span>
+                <button
+                  type="button"
+                  onClick={() => removeMedia(i)}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-destructive"
+                  aria-label="Remove attachment"
+                >
+                  <XIcon className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="p-3 flex gap-2 items-center">
+        {isIssueNode && (
+          <>
+            <input ref={photoInputRef} type="file" accept="image/jpeg,image/png" capture="environment" hidden onChange={(e) => handleMediaPick(e, "image")} />
+            <input ref={videoInputRef} type="file" accept="video/mp4" capture="environment" hidden onChange={(e) => handleMediaPick(e, "video")} />
+            <input ref={audioInputRef} type="file" accept="audio/*" capture hidden onChange={(e) => handleMediaPick(e, "audio")} />
+            <Popover open={mediaMenuOpen} onOpenChange={setMediaMenuOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  disabled={isComplete || uploadingMedia}
+                  aria-label="Attach media"
+                >
+                  {uploadingMedia ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="start" side="top" className="w-56 p-1">
+                <button
+                  type="button"
+                  onClick={() => photoInputRef.current?.click()}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm hover:bg-muted text-left"
+                >
+                  <Camera className="w-4 h-4 text-primary" /> 📸 Take / Upload Photo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => videoInputRef.current?.click()}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm hover:bg-muted text-left"
+                >
+                  <VideoIcon className="w-4 h-4 text-primary" /> 🎥 Record / Upload Video
+                </button>
+                <button
+                  type="button"
+                  onClick={() => audioInputRef.current?.click()}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm hover:bg-muted text-left"
+                >
+                  <Mic className="w-4 h-4 text-primary" /> 🎤 Record / Upload Voice Note
+                </button>
+                <p className="px-3 py-1.5 text-[10px] text-muted-foreground border-t mt-1">
+                  Photos & audio ≤ 5MB · Video ≤ 15MB
+                </p>
+              </PopoverContent>
+            </Popover>
+          </>
+        )}
         {isDateNode ? (
           <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
             <PopoverTrigger asChild>
@@ -1654,6 +1812,8 @@ export default function PublicChatPage() {
                 ? "Conversation complete"
                 : isSelectionNode
                 ? "Please choose an option above ☝️"
+                : isIssueNode
+                ? "Describe the issue, or attach media…"
                 : "Type your answer..."
             }
             className="flex-1"
@@ -1664,11 +1824,12 @@ export default function PublicChatPage() {
           <Button
             size="icon"
             onClick={handleSend}
-            disabled={!input.trim() || isComplete || isSelectionNode}
+            disabled={(!input.trim() && !(isIssueNode && chatMedia.length > 0)) || isComplete || isSelectionNode}
           >
             <Send className="w-4 h-4" />
           </Button>
         )}
+        </div>
       </div>
     </div>
   );
