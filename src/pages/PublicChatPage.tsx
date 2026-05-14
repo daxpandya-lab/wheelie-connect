@@ -144,6 +144,12 @@ export default function PublicChatPage() {
   const [dailyLimit, setDailyLimit] = useState<number>(0);
   const [bookedDates, setBookedDates] = useState<Set<string>>(new Set());
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
+  const [chatMedia, setChatMedia] = useState<{ url: string; mime: string; kind: "image" | "video" | "audio"; name: string }[]>([]);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [mediaMenuOpen, setMediaMenuOpen] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const availableLanguages = useMemo(
