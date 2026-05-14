@@ -12,8 +12,9 @@ import {
 } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Car, Send, Loader2, Bot, User as UserIcon, Languages, CalendarIcon } from "lucide-react";
+import { Car, Send, Loader2, Bot, User as UserIcon, Languages, CalendarIcon, Paperclip, Camera, Video as VideoIcon, Mic, X as XIcon } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { toast } from "sonner";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { FlowData, FlowNode, ChatbotCollectedData } from "@/types/chatbot-flow";
