@@ -1518,6 +1518,8 @@ export default function PublicChatPage() {
     currentNode.options.length > 0 &&
     currentNode.type !== "api_check" &&
     currentNode.type !== "condition";
+  const isIssueNode =
+    !!currentNode && !isComplete && currentNode.dataField === "issue_description";
 
   return (
     <div
