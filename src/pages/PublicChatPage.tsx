@@ -1330,6 +1330,67 @@ export default function PublicChatPage() {
     setInput("");
   };
 
+  // ---------- Media upload (chatbot intake) ----------
+  const MEDIA_LIMITS = {
+    image: 5 * 1024 * 1024,
+    video: 15 * 1024 * 1024,
+    audio: 5 * 1024 * 1024,
+  } as const;
+
+  const handleMediaPick = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    kind: "image" | "video" | "audio"
+  ) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !dealer) return;
+
+    const mimeOk =
+      (kind === "image" && /image\/(jpe?g|png)/i.test(file.type)) ||
+      (kind === "video" && file.type === "video/mp4") ||
+      (kind === "audio" && /audio\//i.test(file.type));
+    if (!mimeOk) {
+      toast.error(
+        kind === "image"
+          ? "Please upload a JPG or PNG photo."
+          : kind === "video"
+          ? "Please upload an MP4 video."
+          : "Please upload an MP3, M4A, or WAV audio file."
+      );
+      return;
+    }
+    if (file.size > MEDIA_LIMITS[kind]) {
+      toast.error("File too large! Please keep videos under 15MB and photos/audio under 5MB.");
+      return;
+    }
+
+    setUploadingMedia(true);
+    try {
+      const visitorToken = getVisitorToken(dealer.id);
+      const ext = (file.name.split(".").pop() || "bin").toLowerCase();
+      const path = `${dealer.id}/${visitorToken}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("service-intake-media")
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("service-intake-media").getPublicUrl(path);
+      setChatMedia((prev) => [...prev, { url: pub.publicUrl, mime: file.type, kind, name: file.name }]);
+      toast.success(
+        kind === "image" ? "Photo attached" : kind === "video" ? "Video attached" : "Voice note attached"
+      );
+    } catch (err) {
+      console.error("media upload failed", err);
+      toast.error("Upload failed. Please try again.");
+    } finally {
+      setUploadingMedia(false);
+      setMediaMenuOpen(false);
+    }
+  };
+
+  const removeMedia = (idx: number) => {
+    setChatMedia((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   // ---------- Alternative-date interaction ----------
   const fmtNiceDate = (iso: string) => {
     const d = new Date(iso + "T00:00:00");
