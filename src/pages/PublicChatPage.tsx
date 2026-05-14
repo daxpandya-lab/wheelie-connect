@@ -1325,8 +1325,18 @@ export default function PublicChatPage() {
   };
 
   const handleSend = () => {
-    if (!input.trim() || isComplete) return;
-    processAnswer(input.trim());
+    if (isComplete) return;
+    const text = input.trim();
+    if (!text) {
+      // Allow advancing the issue-description node when only media was attached
+      const node = flow?.nodes.find((n) => n.id === currentNodeId);
+      if (node?.dataField === "issue_description" && chatMedia.length > 0) {
+        processAnswer("(media attached)");
+        setInput("");
+      }
+      return;
+    }
+    processAnswer(text);
     setInput("");
   };
 
