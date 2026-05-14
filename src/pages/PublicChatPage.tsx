@@ -1655,7 +1655,82 @@ export default function PublicChatPage() {
         <div ref={bottomRef} />
       </div>
 
-      <div className="border-t bg-background p-3 flex gap-2 shrink-0">
+      <div className="border-t bg-background shrink-0">
+        {chatMedia.length > 0 && (
+          <div className="px-3 pt-2 flex flex-wrap gap-2">
+            {chatMedia.map((m, i) => (
+              <div
+                key={i}
+                className="relative group flex items-center gap-1.5 pl-1.5 pr-6 py-1 rounded-md border border-border bg-muted/40 text-xs text-foreground max-w-[180px]"
+                title={m.name}
+              >
+                {m.kind === "image" ? (
+                  <img src={m.url} alt="" className="w-7 h-7 object-cover rounded" />
+                ) : m.kind === "video" ? (
+                  <VideoIcon className="w-4 h-4 text-primary" />
+                ) : (
+                  <Mic className="w-4 h-4 text-primary" />
+                )}
+                <span className="truncate">{m.kind === "image" ? "Photo" : m.kind === "video" ? "Video" : "Voice note"}</span>
+                <button
+                  type="button"
+                  onClick={() => removeMedia(i)}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-destructive"
+                  aria-label="Remove attachment"
+                >
+                  <XIcon className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="p-3 flex gap-2 items-center">
+        {isIssueNode && (
+          <>
+            <input ref={photoInputRef} type="file" accept="image/jpeg,image/png" capture="environment" hidden onChange={(e) => handleMediaPick(e, "image")} />
+            <input ref={videoInputRef} type="file" accept="video/mp4" capture="environment" hidden onChange={(e) => handleMediaPick(e, "video")} />
+            <input ref={audioInputRef} type="file" accept="audio/*" capture hidden onChange={(e) => handleMediaPick(e, "audio")} />
+            <Popover open={mediaMenuOpen} onOpenChange={setMediaMenuOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  disabled={isComplete || uploadingMedia}
+                  aria-label="Attach media"
+                >
+                  {uploadingMedia ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="start" side="top" className="w-56 p-1">
+                <button
+                  type="button"
+                  onClick={() => photoInputRef.current?.click()}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm hover:bg-muted text-left"
+                >
+                  <Camera className="w-4 h-4 text-primary" /> 📸 Take / Upload Photo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => videoInputRef.current?.click()}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm hover:bg-muted text-left"
+                >
+                  <VideoIcon className="w-4 h-4 text-primary" /> 🎥 Record / Upload Video
+                </button>
+                <button
+                  type="button"
+                  onClick={() => audioInputRef.current?.click()}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm hover:bg-muted text-left"
+                >
+                  <Mic className="w-4 h-4 text-primary" /> 🎤 Record / Upload Voice Note
+                </button>
+                <p className="px-3 py-1.5 text-[10px] text-muted-foreground border-t mt-1">
+                  Photos & audio ≤ 5MB · Video ≤ 15MB
+                </p>
+              </PopoverContent>
+            </Popover>
+          </>
+        )}
         {isDateNode ? (
           <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
             <PopoverTrigger asChild>
@@ -1727,6 +1802,8 @@ export default function PublicChatPage() {
                 ? "Conversation complete"
                 : isSelectionNode
                 ? "Please choose an option above ☝️"
+                : isIssueNode
+                ? "Describe the issue, or attach media…"
                 : "Type your answer..."
             }
             className="flex-1"
@@ -1737,11 +1814,12 @@ export default function PublicChatPage() {
           <Button
             size="icon"
             onClick={handleSend}
-            disabled={!input.trim() || isComplete || isSelectionNode}
+            disabled={(!input.trim() && !(isIssueNode && chatMedia.length > 0)) || isComplete || isSelectionNode}
           >
             <Send className="w-4 h-4" />
           </Button>
         )}
+        </div>
       </div>
     </div>
   );
