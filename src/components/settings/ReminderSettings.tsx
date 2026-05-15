@@ -61,26 +61,54 @@ function emptyRule(
   };
 }
 
+interface PredictiveCfg {
+  enabled: boolean;
+  interval_months: number;
+}
+
 export default function ReminderSettings() {
   const { tenantId } = useAuth();
   const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [predictive, setPredictive] = useState<PredictiveCfg>({ enabled: true, interval_months: 6 });
+  const [savingPredictive, setSavingPredictive] = useState(false);
 
   useEffect(() => {
     if (!tenantId) return;
     (async () => {
-      const { data, error } = await supabase
-        .from("booking_reminder_rules")
-        .select("*")
-        .eq("tenant_id", tenantId)
-        .order("booking_type", { ascending: true })
-        .order("offset_days", { ascending: true });
+      const [{ data: rulesData, error }, { data: tenant }] = await Promise.all([
+        supabase
+          .from("booking_reminder_rules")
+          .select("*")
+          .eq("tenant_id", tenantId)
+          .order("booking_type", { ascending: true })
+          .order("offset_days", { ascending: true }),
+        supabase.from("tenants").select("settings").eq("id", tenantId).maybeSingle(),
+      ]);
       if (error) toast.error(error.message);
-      else setRules((data as Rule[]) ?? []);
+      else setRules((rulesData as Rule[]) ?? []);
+      const cfg = (tenant?.settings as Record<string, unknown> | null)?.predictive_service_reminder as
+        | Partial<PredictiveCfg>
+        | undefined;
+      setPredictive({
+        enabled: cfg?.enabled !== false,
+        interval_months: Math.min(36, Math.max(1, Number(cfg?.interval_months ?? 6) || 6)),
+      });
       setLoading(false);
     })();
   }, [tenantId]);
+
+  const savePredictive = async () => {
+    if (!tenantId) return;
+    setSavingPredictive(true);
+    const { data: tenant } = await supabase.from("tenants").select("settings").eq("id", tenantId).maybeSingle();
+    const settings = { ...((tenant?.settings as Record<string, unknown>) || {}), predictive_service_reminder: predictive };
+    const { error } = await supabase.from("tenants").update({ settings } as never).eq("id", tenantId);
+    if (error) toast.error(error.message);
+    else toast.success("Predictive reminder settings saved");
+    setSavingPredictive(false);
+  };
 
   const update = (id: string, patch: Partial<Rule>) =>
     setRules((prev) =>
