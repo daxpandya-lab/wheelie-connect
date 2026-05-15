@@ -61,26 +61,54 @@ function emptyRule(
   };
 }
 
+interface PredictiveCfg {
+  enabled: boolean;
+  interval_months: number;
+}
+
 export default function ReminderSettings() {
   const { tenantId } = useAuth();
   const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [predictive, setPredictive] = useState<PredictiveCfg>({ enabled: true, interval_months: 6 });
+  const [savingPredictive, setSavingPredictive] = useState(false);
 
   useEffect(() => {
     if (!tenantId) return;
     (async () => {
-      const { data, error } = await supabase
-        .from("booking_reminder_rules")
-        .select("*")
-        .eq("tenant_id", tenantId)
-        .order("booking_type", { ascending: true })
-        .order("offset_days", { ascending: true });
+      const [{ data: rulesData, error }, { data: tenant }] = await Promise.all([
+        supabase
+          .from("booking_reminder_rules")
+          .select("*")
+          .eq("tenant_id", tenantId)
+          .order("booking_type", { ascending: true })
+          .order("offset_days", { ascending: true }),
+        supabase.from("tenants").select("settings").eq("id", tenantId).maybeSingle(),
+      ]);
       if (error) toast.error(error.message);
-      else setRules((data as Rule[]) ?? []);
+      else setRules((rulesData as Rule[]) ?? []);
+      const cfg = (tenant?.settings as Record<string, unknown> | null)?.predictive_service_reminder as
+        | Partial<PredictiveCfg>
+        | undefined;
+      setPredictive({
+        enabled: cfg?.enabled !== false,
+        interval_months: Math.min(36, Math.max(1, Number(cfg?.interval_months ?? 6) || 6)),
+      });
       setLoading(false);
     })();
   }, [tenantId]);
+
+  const savePredictive = async () => {
+    if (!tenantId) return;
+    setSavingPredictive(true);
+    const { data: tenant } = await supabase.from("tenants").select("settings").eq("id", tenantId).maybeSingle();
+    const settings = { ...((tenant?.settings as Record<string, unknown>) || {}), predictive_service_reminder: predictive };
+    const { error } = await supabase.from("tenants").update({ settings } as never).eq("id", tenantId);
+    if (error) toast.error(error.message);
+    else toast.success("Predictive reminder settings saved");
+    setSavingPredictive(false);
+  };
 
   const update = (id: string, patch: Partial<Rule>) =>
     setRules((prev) =>
@@ -181,6 +209,47 @@ export default function ReminderSettings() {
             <code className="text-xs">{"{{vehicle_model}}"}</code>,{" "}
             <code className="text-xs">{"{{booking_date}}"}</code>.
           </p>
+        </div>
+      </div>
+
+      <div className="glass-card rounded-xl p-5 space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h4 className="text-sm font-semibold text-foreground">Predictive service reminder</h4>
+            <p className="text-xs text-muted-foreground mt-1">
+              Nudge customers a configurable number of months after their last completed service.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Label htmlFor="predictive-enabled" className="text-xs text-muted-foreground">Enabled</Label>
+            <Switch
+              id="predictive-enabled"
+              checked={predictive.enabled}
+              onCheckedChange={(v) => setPredictive((p) => ({ ...p, enabled: v }))}
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+          <div className="space-y-1">
+            <Label className="text-xs">Interval (months)</Label>
+            <Input
+              type="number"
+              min={1}
+              max={36}
+              value={predictive.interval_months}
+              onChange={(e) =>
+                setPredictive((p) => ({
+                  ...p,
+                  interval_months: Math.min(36, Math.max(1, parseInt(e.target.value || "6", 10) || 6)),
+                }))
+              }
+            />
+          </div>
+          <div className="sm:col-span-2 flex justify-end">
+            <Button size="sm" onClick={savePredictive} disabled={savingPredictive}>
+              {savingPredictive ? "Saving..." : "Save"}
+            </Button>
+          </div>
         </div>
       </div>
 

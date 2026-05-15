@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.transition_service_booking_status(uuid, text, text, jsonb) FROM anon, PUBLIC;

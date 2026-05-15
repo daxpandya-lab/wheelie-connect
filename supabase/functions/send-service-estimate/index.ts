@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { dispatchNotification } from "../_shared/notify.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -41,123 +42,76 @@ Deno.serve(async (req) => {
 
     const { data: booking, error: bErr } = await supabase
       .from("service_bookings")
-      .select("id, tenant_id, customer_name, phone_number, vehicle_model, booking_source")
+      .select("id, tenant_id, customer_name, phone_number, vehicle_model, booking_source, status")
       .eq("id", bookingId).maybeSingle();
     if (bErr || !booking) {
       return new Response(JSON.stringify({ error: "Booking not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Verify caller belongs to tenant
     const { data: profile } = await userClient.from("profiles").select("tenant_id").eq("user_id", claims.claims.sub).maybeSingle();
     if (!profile || profile.tenant_id !== booking.tenant_id) {
       return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Persist estimate
-    const { error: upErr } = await supabase
-      .from("service_bookings")
-      .update({
+    // Atomic transition: locks the row, validates the source state.
+    const { error: rpcErr } = await supabase.rpc("transition_service_booking_status", {
+      _booking_id: bookingId,
+      _expected_status: booking.status,
+      _new_status: "estimation_sent",
+      _patch: {
         estimate_amount: amount,
         estimated_cost: amount,
         work_notes: notes || null,
         parts_required: parts || null,
         approval_status: "pending",
-        status: "estimation_sent",
         estimation_sent_at: new Date().toISOString(),
-      })
-      .eq("id", bookingId);
-    if (upErr) {
-      return new Response(JSON.stringify({ error: upErr.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      },
+    } as never);
+    if (rpcErr) {
+      const status = String(rpcErr.message || "").includes("Stale status") ? 409 : 400;
+      return new Response(JSON.stringify({ error: rpcErr.message }), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Build the estimate text for both channels
     const vehicle = booking.vehicle_model || "your vehicle";
     const formattedAmount = `₹${amount.toLocaleString("en-IN")}`;
     const text = [
-      `🛠️ *Service Estimation*`,
-      ``,
+      `🛠️ *Service Estimation*`, ``,
       `Vehicle: ${vehicle}`,
       `Labor / Service: ${formattedAmount}`,
       notes ? `Work Notes: ${notes}` : null,
       parts ? `Parts Required: ${parts}` : null,
-      ``,
-      `Please choose an option below:`,
+      ``, `Please choose an option below:`,
     ].filter(Boolean).join("\n");
 
-    // Build the public estimate URL (used as the Web Bot rich card link)
     const origin = req.headers.get("origin") || req.headers.get("referer")?.replace(/\/[^/]*$/, "") || "";
     const estimateUrl = origin ? `${origin}/estimate/${bookingId}` : `/estimate/${bookingId}`;
 
-    let whatsappStatus: "sent" | "skipped" | "failed" = "skipped";
-    let whatsappError: string | undefined;
-
-    if (booking.phone_number) {
-      const { data: tenantData } = await supabase.from("tenants").select("whatsapp_config").eq("id", booking.tenant_id).single();
-      const wa = (tenantData?.whatsapp_config as Record<string, any>) || {};
-      const provider: "meta" | "evolution" = wa.provider === "evolution" ? "evolution" : "meta";
-
-      try {
-        if (provider === "evolution") {
-          const evoUrl = wa.evolution?.instance_url;
-          const evoInstance = wa.evolution?.instance_name;
-          const evoApiKey = wa.evolution?.api_key;
-          if (evoUrl && evoInstance && evoApiKey) {
-            const endpoint = `${evoUrl}/message/sendButtons/${encodeURIComponent(evoInstance)}`;
-            const evoBody = {
-              number: booking.phone_number,
-              title: "Service Estimation",
-              description: text,
-              footer: "Reply by tapping a button",
-              buttons: [
-                { type: "reply", displayText: "✅ Approve Work", id: `est_approve_${bookingId}` },
-                { type: "reply", displayText: "📞 Reject / Call Me", id: `est_reject_${bookingId}` },
-              ],
-            };
-            const r = await fetch(endpoint, {
-              method: "POST",
-              headers: { apikey: evoApiKey, "Content-Type": "application/json" },
-              body: JSON.stringify(evoBody),
-            });
-            if (r.ok) whatsappStatus = "sent";
-            else { whatsappStatus = "failed"; whatsappError = (await r.text()).slice(0, 500); }
-          }
-        } else {
-          const accessToken = wa.meta?.access_token || wa.access_token;
-          const phoneNumberId = wa.meta?.phone_number_id;
-          if (accessToken && phoneNumberId) {
-            const endpoint = `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`;
-            const metaBody = {
-              messaging_product: "whatsapp",
-              to: booking.phone_number,
-              type: "interactive",
-              interactive: {
-                type: "button",
-                body: { text },
-                action: {
-                  buttons: [
-                    { type: "reply", reply: { id: `est_approve_${bookingId}`, title: "Approve Work" } },
-                    { type: "reply", reply: { id: `est_reject_${bookingId}`, title: "Reject / Call Me" } },
-                  ],
-                },
-              },
-            };
-            const r = await fetch(endpoint, {
-              method: "POST",
-              headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-              body: JSON.stringify(metaBody),
-            });
-            if (r.ok) whatsappStatus = "sent";
-            else { whatsappStatus = "failed"; whatsappError = (await r.text()).slice(0, 500); }
-          }
-        }
-      } catch (e) {
-        whatsappStatus = "failed";
-        whatsappError = String(e).slice(0, 500);
-      }
-    }
+    const result = await dispatchNotification(
+      supabase,
+      {
+        tenantId: booking.tenant_id,
+        bookingId,
+        bookingSource: booking.booking_source,
+        phoneNumber: booking.phone_number,
+      },
+      {
+        kind: "buttons",
+        text,
+        buttons: [
+          { id: `est_approve_${bookingId}`, title: "✅ Approve Work" },
+          { id: `est_reject_${bookingId}`, title: "📞 Reject / Call Me" },
+        ],
+      },
+    );
 
     return new Response(
-      JSON.stringify({ success: true, whatsapp: whatsappStatus, whatsapp_error: whatsappError, estimate_url: estimateUrl }),
+      JSON.stringify({
+        success: true,
+        channel: result.channel,
+        whatsapp: result.status,
+        whatsapp_error: result.error,
+        estimate_url: estimateUrl,
+      }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {

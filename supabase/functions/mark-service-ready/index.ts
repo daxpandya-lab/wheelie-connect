@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { PDFDocument, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
+import { dispatchNotification } from "../_shared/notify.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -34,7 +35,7 @@ Deno.serve(async (req) => {
 
     const { data: booking } = await supabase
       .from("service_bookings")
-      .select("id, tenant_id, customer_name, phone_number, vehicle_model, service_type, booking_date, estimate_amount, work_notes, parts_required")
+      .select("id, tenant_id, customer_name, phone_number, vehicle_model, service_type, booking_date, estimate_amount, work_notes, parts_required, booking_source, status")
       .eq("id", bookingId).maybeSingle();
     if (!booking) return new Response(JSON.stringify({ error: "Not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
@@ -84,65 +85,38 @@ Deno.serve(async (req) => {
     const { data: pub } = supabase.storage.from("service_invoices").getPublicUrl(path);
     const invoiceUrl = pub.publicUrl;
 
-    // Update booking
-    await supabase.from("service_bookings").update({
-      status: "ready_for_pickup",
-      total_amount: amount,
-      ready_at: new Date().toISOString(),
-    }).eq("id", bookingId);
-
-    // Send WhatsApp message + PDF document
-    const wa = (tenant?.whatsapp_config as Record<string, any>) || {};
-    const provider: "meta" | "evolution" = wa.provider === "evolution" ? "evolution" : "meta";
-    const text = `🚗 Your vehicle ${booking.vehicle_model} is ready! Total Amount: ₹${amount.toLocaleString("en-IN")}. You can pay at the counter.`;
-    let waStatus: "sent" | "skipped" | "failed" = "skipped";
-    let waError: string | undefined;
-
-    if (booking.phone_number) {
-      try {
-        if (provider === "evolution" && wa.evolution?.instance_url && wa.evolution?.instance_name && wa.evolution?.api_key) {
-          const base = `${wa.evolution.instance_url}/message`;
-          const headers = { apikey: wa.evolution.api_key, "Content-Type": "application/json" };
-          // Send text
-          await fetch(`${base}/sendText/${encodeURIComponent(wa.evolution.instance_name)}`, {
-            method: "POST", headers, body: JSON.stringify({ number: booking.phone_number, text }),
-          });
-          // Send PDF document
-          const r = await fetch(`${base}/sendMedia/${encodeURIComponent(wa.evolution.instance_name)}`, {
-            method: "POST", headers,
-            body: JSON.stringify({
-              number: booking.phone_number,
-              mediatype: "document",
-              fileName: `invoice-${bookingId.slice(0, 8)}.pdf`,
-              media: invoiceUrl,
-              caption: "Pro-forma Invoice",
-            }),
-          });
-          waStatus = r.ok ? "sent" : "failed";
-          if (!r.ok) waError = (await r.text()).slice(0, 300);
-        } else if (provider === "meta" && (wa.meta?.access_token || wa.access_token) && wa.meta?.phone_number_id) {
-          const token = wa.meta?.access_token || wa.access_token;
-          const endpoint = `https://graph.facebook.com/v21.0/${wa.meta.phone_number_id}/messages`;
-          await fetch(endpoint, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ messaging_product: "whatsapp", to: booking.phone_number, type: "text", text: { body: text } }),
-          });
-          const r = await fetch(endpoint, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              messaging_product: "whatsapp", to: booking.phone_number, type: "document",
-              document: { link: invoiceUrl, filename: `invoice-${bookingId.slice(0, 8)}.pdf`, caption: "Pro-forma Invoice" },
-            }),
-          });
-          waStatus = r.ok ? "sent" : "failed";
-          if (!r.ok) waError = (await r.text()).slice(0, 300);
-        }
-      } catch (e) {
-        waStatus = "failed"; waError = String(e).slice(0, 300);
-      }
+    // Atomic transition: lock the row, validate state, write fields.
+    const { error: rpcErr } = await supabase.rpc("transition_service_booking_status", {
+      _booking_id: bookingId,
+      _expected_status: booking.status,
+      _new_status: "ready_for_pickup",
+      _patch: {
+        total_amount: amount,
+        ready_at: new Date().toISOString(),
+      },
+    } as never);
+    if (rpcErr) {
+      const status = String(rpcErr.message || "").includes("Stale status") ? 409 : 400;
+      return new Response(JSON.stringify({ error: rpcErr.message }), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+
+    const text = `🚗 Your vehicle ${booking.vehicle_model} is ready! Total Amount: ₹${amount.toLocaleString("en-IN")}. You can pay at the counter.`;
+    const result = await dispatchNotification(
+      supabase,
+      {
+        tenantId: booking.tenant_id,
+        bookingId,
+        bookingSource: booking.booking_source,
+        phoneNumber: booking.phone_number,
+      },
+      {
+        kind: "document",
+        text,
+        document: { url: invoiceUrl, filename: `invoice-${bookingId.slice(0, 8)}.pdf` },
+      },
+    );
+    const waStatus = result.status;
+    const waError = result.error;
 
     return new Response(JSON.stringify({ success: true, invoice_url: invoiceUrl, whatsapp: waStatus, whatsapp_error: waError }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },

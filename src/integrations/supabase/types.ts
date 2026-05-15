@@ -1709,6 +1709,57 @@ export type Database = {
         Args: { _feature: string; _tenant_id: string }
         Returns: boolean
       }
+      transition_service_booking_status: {
+        Args: {
+          _booking_id: string
+          _expected_status: string
+          _new_status: string
+          _patch?: Json
+        }
+        Returns: {
+          approval_status: string | null
+          assigned_to: string | null
+          booking_date: string
+          booking_source: string
+          completed_at: string | null
+          created_at: string
+          csat_sent_at: string | null
+          customer_id: string | null
+          customer_name: string
+          drop_required: boolean | null
+          estimate_amount: number | null
+          estimated_cost: number | null
+          estimation_sent_at: string | null
+          executive_notes: string | null
+          id: string
+          issue_description: string | null
+          kms_driven: number | null
+          media_attachments: Json
+          metadata: Json
+          notes: string | null
+          parts_required: string | null
+          phone_number: string
+          pickup_required: boolean | null
+          predictive_reminder_sent_at: string | null
+          preferred_time: string | null
+          quotation_notes: string | null
+          ready_at: string | null
+          service_type: string
+          status: Database["public"]["Enums"]["service_status"]
+          tenant_id: string
+          total_amount: number | null
+          updated_at: string
+          vehicle_id: string | null
+          vehicle_model: string
+          work_notes: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "service_bookings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
       app_role: "super_admin" | "tenant_admin" | "staff"
