@@ -212,6 +212,47 @@ export default function ReminderSettings() {
         </div>
       </div>
 
+      <div className="glass-card rounded-xl p-5 space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h4 className="text-sm font-semibold text-foreground">Predictive service reminder</h4>
+            <p className="text-xs text-muted-foreground mt-1">
+              Nudge customers a configurable number of months after their last completed service.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Label htmlFor="predictive-enabled" className="text-xs text-muted-foreground">Enabled</Label>
+            <Switch
+              id="predictive-enabled"
+              checked={predictive.enabled}
+              onCheckedChange={(v) => setPredictive((p) => ({ ...p, enabled: v }))}
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+          <div className="space-y-1">
+            <Label className="text-xs">Interval (months)</Label>
+            <Input
+              type="number"
+              min={1}
+              max={36}
+              value={predictive.interval_months}
+              onChange={(e) =>
+                setPredictive((p) => ({
+                  ...p,
+                  interval_months: Math.min(36, Math.max(1, parseInt(e.target.value || "6", 10) || 6)),
+                }))
+              }
+            />
+          </div>
+          <div className="sm:col-span-2 flex justify-end">
+            <Button size="sm" onClick={savePredictive} disabled={savingPredictive}>
+              {savingPredictive ? "Saving..." : "Save"}
+            </Button>
+          </div>
+        </div>
+      </div>
+
       {sections.map((sec) => {
         const list = rules.filter((r) => r.booking_type === sec.key);
         return (
