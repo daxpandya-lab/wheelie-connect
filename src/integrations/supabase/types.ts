@@ -1052,6 +1052,7 @@ export type Database = {
           assigned_to: string | null
           booking_date: string
           booking_source: string
+          completed_at: string | null
           created_at: string
           csat_sent_at: string | null
           customer_id: string | null
@@ -1070,6 +1071,7 @@ export type Database = {
           parts_required: string | null
           phone_number: string
           pickup_required: boolean | null
+          predictive_reminder_sent_at: string | null
           preferred_time: string | null
           quotation_notes: string | null
           ready_at: string | null
@@ -1087,6 +1089,7 @@ export type Database = {
           assigned_to?: string | null
           booking_date: string
           booking_source?: string
+          completed_at?: string | null
           created_at?: string
           csat_sent_at?: string | null
           customer_id?: string | null
@@ -1105,6 +1108,7 @@ export type Database = {
           parts_required?: string | null
           phone_number: string
           pickup_required?: boolean | null
+          predictive_reminder_sent_at?: string | null
           preferred_time?: string | null
           quotation_notes?: string | null
           ready_at?: string | null
@@ -1122,6 +1126,7 @@ export type Database = {
           assigned_to?: string | null
           booking_date?: string
           booking_source?: string
+          completed_at?: string | null
           created_at?: string
           csat_sent_at?: string | null
           customer_id?: string | null
@@ -1140,6 +1145,7 @@ export type Database = {
           parts_required?: string | null
           phone_number?: string
           pickup_required?: boolean | null
+          predictive_reminder_sent_at?: string | null
           preferred_time?: string | null
           quotation_notes?: string | null
           ready_at?: string | null

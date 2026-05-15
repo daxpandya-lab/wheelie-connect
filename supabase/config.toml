@@ -2,3 +2,9 @@ project_id = "vnxjqhlyddouyicwqsjc"
 
 [functions.dispatch-booking-reminders]
 verify_jwt = false
+
+[functions.predictive-service-reminders]
+verify_jwt = false
+
+[functions.csat-followup]
+verify_jwt = false
