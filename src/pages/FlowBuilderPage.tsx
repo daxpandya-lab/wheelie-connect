@@ -11,9 +11,13 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Save, Play, ZoomIn, ZoomOut, Maximize2,
   MessageSquare, Car, Loader2, Plus, ChevronLeft,
-  ArrowUp, ArrowDown, Trash2, Copy, Share2,
+  ArrowUp, ArrowDown, Trash2, Copy, Share2, RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { FlowData, FlowNode, NodeType } from "@/types/chatbot-flow";
