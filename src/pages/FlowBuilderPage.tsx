@@ -411,6 +411,16 @@ export default function FlowBuilderPage() {
                       <Button variant="outline" size="sm" onClick={() => createNewFlow(f)} disabled={saving} title="Duplicate">
                         <Copy className="w-4 h-4" />
                       </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setDeleteFlowId(f.id)}
+                        disabled={f.is_active}
+                        title={f.is_active ? "Deactivate this flow before deleting" : "Delete flow"}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                       <Button size="sm" onClick={() => openFlow(f)}>
                         Edit Flow
                       </Button>
