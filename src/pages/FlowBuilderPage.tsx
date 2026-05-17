@@ -11,9 +11,13 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Save, Play, ZoomIn, ZoomOut, Maximize2,
   MessageSquare, Car, Loader2, Plus, ChevronLeft,
-  ArrowUp, ArrowDown, Trash2, Copy, Share2,
+  ArrowUp, ArrowDown, Trash2, Copy, Share2, RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { FlowData, FlowNode, NodeType } from "@/types/chatbot-flow";
@@ -58,6 +62,8 @@ export default function FlowBuilderPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [listView, setListView] = useState(true);
+  const [deleteFlowId, setDeleteFlowId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Fetch flows
   const fetchFlows = async () => {
@@ -130,6 +136,50 @@ export default function FlowBuilderPage() {
     toast.success("Master templates cloned to your dealership");
     fetchFlows();
   };
+
+  // Restore Defaults — re-clone missing master templates; toast if nothing to do.
+  const restoreDefaultFlows = async () => {
+    if (!tenantId) return;
+    setSaving(true);
+    const before = flows.length;
+    const { error } = await (supabase as any).rpc("clone_master_flows_for_tenant", { _tenant_id: tenantId });
+    if (error) { setSaving(false); toast.error(error.message); return; }
+    const { data: after } = await supabase
+      .from("chatbot_flows")
+      .select("id, name, description, flow_data, is_active, language, channel, updated_at")
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: false });
+    setSaving(false);
+    if (after) setFlows(after.map((f) => ({ ...f, flow_data: f.flow_data as unknown as FlowData })));
+    const added = (after?.length ?? before) - before;
+    if (added <= 0) toast("Default templates are already present");
+    else toast.success(`Restored ${added} default flow${added === 1 ? "" : "s"}`);
+  };
+
+  // Delete a flow (with safety check — must be inactive)
+  const confirmDeleteFlow = async () => {
+    if (!deleteFlowId || !tenantId) return;
+    const flow = flows.find((f) => f.id === deleteFlowId);
+    if (!flow) { setDeleteFlowId(null); return; }
+    if (flow.is_active) {
+      toast.error("Deactivate this flow before deleting it");
+      setDeleteFlowId(null);
+      return;
+    }
+    setDeleting(true);
+    const { error } = await supabase
+      .from("chatbot_flows")
+      .delete()
+      .eq("id", deleteFlowId)
+      .eq("tenant_id", tenantId);
+    setDeleting(false);
+    setDeleteFlowId(null);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Flow deleted");
+    if (activeFlowId === flow.id) { setActiveFlowId(null); setListView(true); }
+    fetchFlows();
+  };
+
 
 
   // Create a new flow — blank or a duplicate of an existing one
@@ -283,6 +333,10 @@ export default function FlowBuilderPage() {
                     </Button>
                   </>
                 )}
+                <Button variant="outline" onClick={restoreDefaultFlows} disabled={saving} title="Re-clone any missing Service Booking / Test Drive master templates from the global library">
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                  Restore Default Flows
+                </Button>
                 <Button onClick={() => createNewFlow()} disabled={saving}>
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                   Create New Flow
@@ -357,6 +411,16 @@ export default function FlowBuilderPage() {
                       <Button variant="outline" size="sm" onClick={() => createNewFlow(f)} disabled={saving} title="Duplicate">
                         <Copy className="w-4 h-4" />
                       </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setDeleteFlowId(f.id)}
+                        disabled={f.is_active}
+                        title={f.is_active ? "Deactivate this flow before deleting" : "Delete flow"}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                       <Button size="sm" onClick={() => openFlow(f)}>
                         Edit Flow
                       </Button>
@@ -367,6 +431,27 @@ export default function FlowBuilderPage() {
             )}
           </div>
         </div>
+
+        <AlertDialog open={!!deleteFlowId} onOpenChange={(o) => !o && setDeleteFlowId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete this flow?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete this flow? This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => { e.preventDefault(); confirmDeleteFlow(); }}
+                disabled={deleting}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </>
     );
   }
