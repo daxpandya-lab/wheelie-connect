@@ -784,8 +784,25 @@ export default function PublicChatPage() {
     endNode: FlowNode,
     data: ChatbotCollectedData
   ): Promise<{ ok: boolean; reason?: "address" | "date" | "db" | "no_action" }> => {
-    if (!dealer) return { ok: false, reason: "db" };
+    if (!dealer?.id) {
+      console.error("[booking-insert] aborted — no active tenant_id bound to session", { dealer, endNodeId: endNode.id });
+      return { ok: false, reason: "db" };
+    }
+    const tenantId = dealer.id; // explicit, single source of truth for this insert
     const action = (endNode.metadata?.action as string) || "";
+    // Always send 'pending' — must match transition_service_booking_status allowed-state keys.
+    const INITIAL_STATUS = "pending" as const;
+    const logSupabaseError = (label: string, err: unknown) => {
+      const e = (err ?? {}) as { code?: string; message?: string; details?: string; hint?: string };
+      console.error(`[booking-insert] ${label} failed`, {
+        tenant_id: tenantId,
+        code: e.code,
+        message: e.message,
+        details: e.details,
+        hint: e.hint,
+        raw: err,
+      });
+    };
 
     // Shared pickup/drop address pre-flight: required when pickup or drop is requested,
     // length-checked, and (best-effort) geocoded so coords are persisted in metadata.
