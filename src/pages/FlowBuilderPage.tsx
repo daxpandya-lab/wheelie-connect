@@ -62,6 +62,8 @@ export default function FlowBuilderPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [listView, setListView] = useState(true);
+  const [deleteFlowId, setDeleteFlowId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Fetch flows
   const fetchFlows = async () => {
