@@ -714,6 +714,16 @@ export default function PublicChatPage() {
       const r = validateAddress(value);
       return r.ok ? { ok: true, value: r.value } : { ok: false, kind: "address" };
     }
+    // Vehicle registration plate (Indian formats — standard + Bharat series)
+    if (node.dataField === "registration_number") {
+      const cleaned = value.toUpperCase().replace(/[\s\-]+/g, "");
+      const standard = /^[A-Z]{2}[0-9]{1,2}[A-Z]{0,2}[0-9]{4}$/;
+      const bharat = /^[0-9]{2}BH[0-9]{4}[A-Z]{1,2}$/;
+      if (!cleaned || (!standard.test(cleaned) && !bharat.test(cleaned))) {
+        return { ok: false, kind: "plate" };
+      }
+      return { ok: true, value: cleaned };
+    }
     if (!value) return { ok: false, kind: node.validationType || "text" };
     switch (node.validationType) {
       case "date": {
