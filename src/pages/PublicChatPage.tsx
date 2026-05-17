@@ -494,6 +494,11 @@ export default function PublicChatPage() {
         hi: "⚠️ कृपया एक वैध पिकअप/ड्रॉप पता दर्ज करें (10–250 वर्ण)।",
         ar: "⚠️ يرجى إدخال عنوان استلام/تسليم صالح (10–250 حرفًا).",
       },
+      plate: {
+        en: "❌ That doesn't look like a valid vehicle number plate. Please enter it without spaces (e.g., GJ01AB1234 or 22BH1234AA).",
+        hi: "❌ यह वैध वाहन नंबर प्लेट नहीं लगती। कृपया बिना स्पेस के दर्ज करें (जैसे GJ01AB1234 या 22BH1234AA)।",
+        ar: "❌ هذا لا يبدو رقم لوحة سيارة صالح. يرجى إدخاله بدون مسافات (مثل GJ01AB1234 أو 22BH1234AA).",
+      },
     };
     return msgs[kind]?.[lang] || msgs[kind]?.en || msgs.text.en;
   };
