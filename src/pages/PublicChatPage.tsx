@@ -494,6 +494,11 @@ export default function PublicChatPage() {
         hi: "⚠️ कृपया एक वैध पिकअप/ड्रॉप पता दर्ज करें (10–250 वर्ण)।",
         ar: "⚠️ يرجى إدخال عنوان استلام/تسليم صالح (10–250 حرفًا).",
       },
+      plate: {
+        en: "❌ That doesn't look like a valid vehicle number plate. Please enter it without spaces (e.g., GJ01AB1234 or 22BH1234AA).",
+        hi: "❌ यह वैध वाहन नंबर प्लेट नहीं लगती। कृपया बिना स्पेस के दर्ज करें (जैसे GJ01AB1234 या 22BH1234AA)।",
+        ar: "❌ هذا لا يبدو رقم لوحة سيارة صالح. يرجى إدخاله بدون مسافات (مثل GJ01AB1234 أو 22BH1234AA).",
+      },
     };
     return msgs[kind]?.[lang] || msgs[kind]?.en || msgs.text.en;
   };
@@ -708,6 +713,16 @@ export default function PublicChatPage() {
     if (node.dataField && /address/i.test(node.dataField)) {
       const r = validateAddress(value);
       return r.ok ? { ok: true, value: r.value } : { ok: false, kind: "address" };
+    }
+    // Vehicle registration plate (Indian formats — standard + Bharat series)
+    if (node.dataField === "registration_number") {
+      const cleaned = value.toUpperCase().replace(/[\s\-]+/g, "");
+      const standard = /^[A-Z]{2}[0-9]{1,2}[A-Z]{0,2}[0-9]{4}$/;
+      const bharat = /^[0-9]{2}BH[0-9]{4}[A-Z]{1,2}$/;
+      if (!cleaned || (!standard.test(cleaned) && !bharat.test(cleaned))) {
+        return { ok: false, kind: "plate" };
+      }
+      return { ok: true, value: cleaned };
     }
     if (!value) return { ok: false, kind: node.validationType || "text" };
     switch (node.validationType) {
