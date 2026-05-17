@@ -913,47 +913,58 @@ export default function PublicChatPage() {
       const vehicleParts = [data.vehicle_type, data.vehicle_model, data.registration_number]
         .filter(Boolean)
         .join(" • ");
-      const { error: insertErr } = await supabase.from("service_bookings").insert({
-        tenant_id: dealer.id,
-        customer_name: String(data.customer_name || "Chatbot Visitor"),
-        phone_number: String(data.phone_number || ""),
-        vehicle_model: vehicleParts || String(data.vehicle_model || "Unknown"),
-        kms_driven: typeof data.kms_driven === "number" ? data.kms_driven : null,
-        service_type: String(data.service_type || ""),
-        booking_date: isoDate,
-        preferred_time: data.preferred_time ? String(data.preferred_time) : null,
-        pickup_required: !!data.pickup_required,
-        drop_required: !!data.drop_required,
-        issue_description: data.issue_description ? String(data.issue_description) : null,
-        notes: needsAddress ? `Pickup/Drop address: ${addressClean}` : null,
-        booking_source: "Web Bot",
-        status: "pending",
-        media_attachments: chatMedia.length
-          ? chatMedia.map((m) => ({ url: m.url, mime: m.mime, kind: m.kind, source: "web_chat", received_at: new Date().toISOString() }))
-          : null,
-        metadata: { ...data, ...addressMeta, source_session_id: sessionId },
-      } as never);
-      if (insertErr) {
-        console.error("service_bookings insert failed", insertErr);
+      try {
+        const { error: insertErr } = await supabase.from("service_bookings").insert({
+          tenant_id: tenantId,
+          customer_name: String(data.customer_name || "Chatbot Visitor"),
+          phone_number: String(data.phone_number || ""),
+          vehicle_model: vehicleParts || String(data.vehicle_model || "Unknown"),
+          kms_driven: typeof data.kms_driven === "number" ? data.kms_driven : null,
+          service_type: String(data.service_type || ""),
+          booking_date: isoDate,
+          preferred_time: data.preferred_time ? String(data.preferred_time) : null,
+          pickup_required: !!data.pickup_required,
+          drop_required: !!data.drop_required,
+          issue_description: data.issue_description ? String(data.issue_description) : null,
+          notes: needsAddress ? `Pickup/Drop address: ${addressClean}` : null,
+          booking_source: "Web Bot",
+          status: INITIAL_STATUS,
+          media_attachments: chatMedia.length
+            ? chatMedia.map((m) => ({ url: m.url, mime: m.mime, kind: m.kind, source: "web_chat", received_at: new Date().toISOString() }))
+            : null,
+          metadata: { ...data, ...addressMeta, source_session_id: sessionId },
+        } as never);
+        if (insertErr) {
+          logSupabaseError("service_bookings", insertErr);
+          return { ok: false, reason: "db" };
+        }
+        return { ok: true };
+      } catch (err) {
+        logSupabaseError("service_bookings (thrown)", err);
         return { ok: false, reason: "db" };
       }
-      return { ok: true };
     } else if (action === "create_test_drive_booking") {
       const isoDate = normalizeDate(String(data.preferred_date || ""));
       if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return { ok: false, reason: "date" };
-      const { error: insertErr } = await supabase.from("test_drive_bookings").insert({
-        tenant_id: dealer.id,
-        customer_name: String(data.customer_name || "Chatbot Visitor"),
-        phone_number: String(data.phone_number || ""),
-        vehicle_model: String(data.vehicle_model || "Unknown"),
-        preferred_date: isoDate,
-        preferred_time: data.preferred_time ? String(data.preferred_time) : null,
-        booking_source: "Web Bot",
-        status: "pending",
-        metadata: { ...data, source_session_id: sessionId },
-      } as never);
-      if (insertErr) {
-        console.error("test_drive_bookings insert failed", insertErr);
+      try {
+        const { error: insertErr } = await supabase.from("test_drive_bookings").insert({
+          tenant_id: tenantId,
+          customer_name: String(data.customer_name || "Chatbot Visitor"),
+          phone_number: String(data.phone_number || ""),
+          vehicle_model: String(data.vehicle_model || "Unknown"),
+          preferred_date: isoDate,
+          preferred_time: data.preferred_time ? String(data.preferred_time) : null,
+          booking_source: "Web Bot",
+          status: INITIAL_STATUS,
+          metadata: { ...data, source_session_id: sessionId },
+        } as never);
+        if (insertErr) {
+          logSupabaseError("test_drive_bookings", insertErr);
+          return { ok: false, reason: "db" };
+        }
+        return { ok: true };
+      } catch (err) {
+        logSupabaseError("test_drive_bookings (thrown)", err);
         return { ok: false, reason: "db" };
       }
       return { ok: true };
