@@ -333,6 +333,10 @@ export default function FlowBuilderPage() {
                     </Button>
                   </>
                 )}
+                <Button variant="outline" onClick={restoreDefaultFlows} disabled={saving} title="Re-clone any missing Service Booking / Test Drive master templates from the global library">
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                  Restore Default Flows
+                </Button>
                 <Button onClick={() => createNewFlow()} disabled={saving}>
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                   Create New Flow
