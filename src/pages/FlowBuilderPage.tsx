@@ -137,6 +137,50 @@ export default function FlowBuilderPage() {
     fetchFlows();
   };
 
+  // Restore Defaults — re-clone missing master templates; toast if nothing to do.
+  const restoreDefaultFlows = async () => {
+    if (!tenantId) return;
+    setSaving(true);
+    const before = flows.length;
+    const { error } = await (supabase as any).rpc("clone_master_flows_for_tenant", { _tenant_id: tenantId });
+    if (error) { setSaving(false); toast.error(error.message); return; }
+    const { data: after } = await supabase
+      .from("chatbot_flows")
+      .select("id, name, description, flow_data, is_active, language, channel, updated_at")
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: false });
+    setSaving(false);
+    if (after) setFlows(after.map((f) => ({ ...f, flow_data: f.flow_data as unknown as FlowData })));
+    const added = (after?.length ?? before) - before;
+    if (added <= 0) toast("Default templates are already present");
+    else toast.success(`Restored ${added} default flow${added === 1 ? "" : "s"}`);
+  };
+
+  // Delete a flow (with safety check — must be inactive)
+  const confirmDeleteFlow = async () => {
+    if (!deleteFlowId || !tenantId) return;
+    const flow = flows.find((f) => f.id === deleteFlowId);
+    if (!flow) { setDeleteFlowId(null); return; }
+    if (flow.is_active) {
+      toast.error("Deactivate this flow before deleting it");
+      setDeleteFlowId(null);
+      return;
+    }
+    setDeleting(true);
+    const { error } = await supabase
+      .from("chatbot_flows")
+      .delete()
+      .eq("id", deleteFlowId)
+      .eq("tenant_id", tenantId);
+    setDeleting(false);
+    setDeleteFlowId(null);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Flow deleted");
+    if (activeFlowId === flow.id) { setActiveFlowId(null); setListView(true); }
+    fetchFlows();
+  };
+
+
 
   // Create a new flow — blank or a duplicate of an existing one
   const createNewFlow = async (sourceFlow?: FlowRecord) => {
