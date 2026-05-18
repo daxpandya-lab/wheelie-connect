@@ -143,6 +143,8 @@ export default function PublicChatPage() {
   const [holidays, setHolidays] = useState<Set<string>>(new Set());
   const [dailyLimit, setDailyLimit] = useState<number>(0);
   const [bookedDates, setBookedDates] = useState<Set<string>>(new Set());
+  const [workingHours, setWorkingHours] = useState<{ start: string; end: string }>({ start: "09:00", end: "18:00" });
+
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
   const [chatMedia, setChatMedia] = useState<{ url: string; path: string; mime: string; kind: "image" | "video" | "audio"; name: string }[]>([]);
   const [uploadingMedia, setUploadingMedia] = useState(false);
@@ -190,6 +192,11 @@ export default function PublicChatPage() {
         tSettings.daily_booking_limit ?? tSettings.max_vehicles_per_day ?? 0
       ) || 0;
       setDailyLimit(_limit);
+      const wh = tSettings.working_hours as { start?: string; end?: string } | undefined;
+      if (wh && typeof wh.start === "string" && typeof wh.end === "string") {
+        setWorkingHours({ start: wh.start, end: wh.end });
+      }
+
 
       let resolvedFlow: { id: string; flow_data: FlowData } | null = null;
       if (flowIdParam) {
@@ -457,6 +464,34 @@ export default function PublicChatPage() {
     if (node.multiSelect) setPendingMultiSelect(new Set());
   };
 
+  // Parse a time string like "9", "9:30", "9 AM", "09:30", "5:30 PM" → minutes since midnight.
+  // Returns null if unparsable.
+  const parseTimeToMinutes = (raw: string): number | null => {
+    if (!raw) return null;
+    const s = raw.trim().toUpperCase().replace(/\./g, "");
+    const m = s.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?$/);
+    if (!m) return null;
+    let h = parseInt(m[1], 10);
+    const min = m[2] ? parseInt(m[2], 10) : 0;
+    const ap = m[3];
+    if (Number.isNaN(h) || Number.isNaN(min) || min > 59) return null;
+    if (ap === "AM") { if (h === 12) h = 0; }
+    else if (ap === "PM") { if (h !== 12) h += 12; }
+    if (h > 23) return null;
+    return h * 60 + min;
+  };
+
+  const formatHourLabel = (hhmm: string): string => {
+    const m = parseTimeToMinutes(hhmm);
+    if (m == null) return hhmm;
+    const h = Math.floor(m / 60);
+    const min = m % 60;
+    const period = h >= 12 ? "PM" : "AM";
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:${String(min).padStart(2, "0")} ${period}`;
+  };
+
+
   const validationErrorMessage = (kind: string, lang: string): string => {
     const msgs: Record<string, Record<string, string>> = {
       selection: {
@@ -499,9 +534,15 @@ export default function PublicChatPage() {
         hi: "❌ यह वैध वाहन नंबर प्लेट नहीं लगती। कृपया बिना स्पेस के दर्ज करें (जैसे GJ01AB1234 या 22BH1234AA)।",
         ar: "❌ هذا لا يبدو رقم لوحة سيارة صالح. يرجى إدخاله بدون مسافات (مثل GJ01AB1234 أو 22BH1234AA).",
       },
+      off_hours: {
+        en: `Our workshop is closed during those hours, but we can secure an early slot for you the next morning. Please select a time between ${formatHourLabel(workingHours.start)} and ${formatHourLabel(workingHours.end)}.`,
+        hi: `हमारी वर्कशॉप उस समय बंद है, लेकिन हम अगली सुबह आपके लिए जल्दी का स्लॉट सुरक्षित कर सकते हैं। कृपया ${formatHourLabel(workingHours.start)} और ${formatHourLabel(workingHours.end)} के बीच का समय चुनें।`,
+        ar: `ورشتنا مغلقة في تلك الساعات، لكن يمكننا تأمين موعد مبكر لك في صباح اليوم التالي. يرجى اختيار وقت بين ${formatHourLabel(workingHours.start)} و ${formatHourLabel(workingHours.end)}.`,
+      },
     };
     return msgs[kind]?.[lang] || msgs[kind]?.en || msgs.text.en;
   };
+
 
   // ---------- Address validation + optional geocoding ----------
   const ADDRESS_MIN = 10;
@@ -724,7 +765,18 @@ export default function PublicChatPage() {
       }
       return { ok: true, value: cleaned };
     }
+    // Preferred time — must fall within configured working hours
+    if (node.dataField === "preferred_time") {
+      const mins = parseTimeToMinutes(value);
+      const startMin = parseTimeToMinutes(workingHours.start) ?? 9 * 60;
+      const endMin = parseTimeToMinutes(workingHours.end) ?? 18 * 60;
+      if (mins == null || mins < startMin || mins > endMin) {
+        return { ok: false, kind: "off_hours" };
+      }
+      return { ok: true, value };
+    }
     if (!value) return { ok: false, kind: node.validationType || "text" };
+
     switch (node.validationType) {
       case "date": {
         const iso = normalizeDate(value);
@@ -1139,15 +1191,17 @@ export default function PublicChatPage() {
       if (!available) {
         const friendly =
           language === "hi"
-            ? `क्षमा करें, हम ${date} के लिए पूरी तरह बुक हैं। कृपया कोई और तारीख चुनें।`
+            ? `हम इस तारीख पर पूरी तरह बुक हैं! 🛠️ आपकी गाड़ी को बेहतरीन ध्यान देने के लिए, क्या हम अगला उपलब्ध दिन देख सकते हैं?`
             : language === "ar"
-            ? `عذرًا، نحن محجوزون بالكامل في ${date}. يرجى اختيار تاريخ آخر.`
-            : `Sorry, we are fully booked for ${date}. Please select another date.`;
+            ? `نحن محجوزون بالكامل في هذا التاريخ! 🛠️ لمنح سيارتك أفضل عناية، هل يمكننا النظر في أقرب يوم متاح؟`
+            : `We are fully booked on this date! 🛠️ To give your vehicle the best attention, could we look at the next available day?`;
         setMessages((prev) => [
           ...prev,
           { id: `bot-${Date.now()}-full`, sender: "bot", text: friendly },
         ]);
+        setTimeout(() => setDatePickerOpen(true), 250);
       }
+
 
       if (nextId) setTimeout(() => advanceTo(nextId!, data), 500);
     } else if (checkType === "lookup_booking") {
@@ -1279,16 +1333,26 @@ export default function PublicChatPage() {
       if (holidays.has(canonical) || bookedDates.has(canonical)) {
         altDate = findNextOpen();
         const nextStr = altDate ? fmtNice(altDate) : "";
-        const msg: Record<string, string> = altDate ? {
-          en: `🚫 We are closed then, but our next available slot is ${nextStr}. Would you like to book that?`,
-          hi: `🚫 हम उस दिन बंद हैं, लेकिन हमारा अगला उपलब्ध स्लॉट ${nextStr} है। क्या आप वह बुक करना चाहेंगे?`,
-          ar: `🚫 نحن مغلقون في ذلك اليوم، لكن أقرب موعد متاح لدينا هو ${nextStr}. هل ترغب في حجزه؟`,
-        } : {
-          en: "🚫 We are closed on this day. Please choose another date.",
-          hi: "🚫 हम इस दिन बंद हैं। कृपया कोई दूसरी तारीख चुनें।",
-          ar: "🚫 نحن مغلقون في هذا اليوم. يرجى اختيار تاريخ آخر.",
-        };
+        const isFull = bookedDates.has(canonical) && !holidays.has(canonical);
+        const msg: Record<string, string> = isFull
+          ? {
+              en: `We are fully booked on this date! 🛠️ To give your vehicle the best attention, could we look at the next available day${altDate ? ` (${nextStr})` : ""}?`,
+              hi: `हम इस तारीख पर पूरी तरह बुक हैं! 🛠️ आपकी गाड़ी को बेहतरीन ध्यान देने के लिए, क्या हम अगला उपलब्ध दिन${altDate ? ` (${nextStr})` : ""} देख सकते हैं?`,
+              ar: `نحن محجوزون بالكامل في هذا التاريخ! 🛠️ لمنح سيارتك أفضل عناية، هل يمكننا النظر في أقرب يوم متاح${altDate ? ` (${nextStr})` : ""}؟`,
+            }
+          : altDate
+          ? {
+              en: `🚫 We are closed then, but our next available slot is ${nextStr}. Would you like to book that?`,
+              hi: `🚫 हम उस दिन बंद हैं, लेकिन हमारा अगला उपलब्ध स्लॉट ${nextStr} है। क्या आप वह बुक करना चाहेंगे?`,
+              ar: `🚫 نحن مغلقون في ذلك اليوم، لكن أقرب موعد متاح لدينا هو ${nextStr}. هل ترغب في حجزه؟`,
+            }
+          : {
+              en: "🚫 We are closed on this day. Please choose another date.",
+              hi: "🚫 हम इस दिन बंद हैं। कृपया कोई दूसरी तारीख चुनें।",
+              ar: "🚫 نحن مغلقون في هذا اليوم. يرجى اختيار تاريخ آخر.",
+            };
         blockText = msg[language] || msg.en;
+
       } else {
         const windowDays = advanceBookingDays && advanceBookingDays > 0 ? advanceBookingDays : 30;
         const max = new Date(today);
@@ -1328,7 +1392,10 @@ export default function PublicChatPage() {
             data: collectedData,
           },
         ]);
+        // Re-open the calendar so the user can quickly pick another day
+        setTimeout(() => setDatePickerOpen(true), 250);
         return;
+
       }
     }
 
