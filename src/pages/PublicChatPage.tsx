@@ -1390,7 +1390,10 @@ export default function PublicChatPage() {
             data: collectedData,
           },
         ]);
+        // Re-open the calendar so the user can quickly pick another day
+        setTimeout(() => setDatePickerOpen(true), 250);
         return;
+
       }
     }
 
