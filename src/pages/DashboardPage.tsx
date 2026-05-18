@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import TopBar from "@/components/TopBar";
@@ -6,6 +6,9 @@ import KpiCard from "@/components/KpiCard";
 import { Users, Wrench, Car, MessageSquare, TrendingUp, Clock, CheckCircle, Target, AlertTriangle, Wifi, WifiOff } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { format, isToday } from "date-fns";
+import { toast } from "sonner";
+
+
 
 type GatewayStatus = {
   provider: "meta" | "evolution";
@@ -20,6 +23,8 @@ export default function DashboardPage() {
   const [recentBookings, setRecentBookings] = useState<any[]>([]);
   const [maxPerDay, setMaxPerDay] = useState<number | null>(null);
   const [gatewayStatus, setGatewayStatus] = useState<GatewayStatus | null>(null);
+  const promptShownRef = useRef(false);
+
 
   const fetchDashboard = useCallback(async () => {
     if (!tenantId) return;
@@ -47,6 +52,24 @@ export default function DashboardPage() {
 
     const settings = tenantRes.data?.settings as Record<string, unknown> | null;
     if (settings?.max_vehicles_per_day) setMaxPerDay(Number(settings.max_vehicles_per_day));
+
+    // First-login nudge for incomplete CSAT config (per-tenant, shown once per browser)
+    if (!isExecutive && settings) {
+      const missing: string[] = [];
+      if (!settings.manager_phone) missing.push("Manager WhatsApp");
+      if (!settings.google_review_url) missing.push("Google review URL");
+      const key = `csat-prompt-shown:${tenantId}`;
+      if (missing.length && !sessionStorage.getItem(key) && !promptShownRef.current) {
+        promptShownRef.current = true;
+        sessionStorage.setItem(key, "1");
+        toast.message("Finish dealership setup", {
+          description: `Add your ${missing.join(" and ")} to enable customer feedback follow-ups.`,
+          action: { label: "Open Settings", onClick: () => { window.location.href = "/settings"; } },
+          duration: 12000,
+        });
+      }
+    }
+
 
     // Gateway connection status
     const wa = (tenantRes.data?.whatsapp_config as Record<string, any> | null) || {};
