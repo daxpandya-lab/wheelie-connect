@@ -1,14 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import TopBar from "@/components/TopBar";
 import KpiCard from "@/components/KpiCard";
+import SetupWizardBanner from "@/components/SetupWizardBanner";
 import { Users, Wrench, Car, MessageSquare, TrendingUp, Clock, CheckCircle, Target, AlertTriangle, Wifi, WifiOff } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { format, isToday } from "date-fns";
-import { toast } from "sonner";
-
-
 
 type GatewayStatus = {
   provider: "meta" | "evolution";
@@ -23,7 +21,8 @@ export default function DashboardPage() {
   const [recentBookings, setRecentBookings] = useState<any[]>([]);
   const [maxPerDay, setMaxPerDay] = useState<number | null>(null);
   const [gatewayStatus, setGatewayStatus] = useState<GatewayStatus | null>(null);
-  const promptShownRef = useRef(false);
+  const [setupMissing, setSetupMissing] = useState<{ phone: boolean; review: boolean } | null>(null);
+
 
 
   const fetchDashboard = useCallback(async () => {
