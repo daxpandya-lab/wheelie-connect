@@ -506,9 +506,15 @@ export default function PublicChatPage() {
         hi: "❌ यह वैध वाहन नंबर प्लेट नहीं लगती। कृपया बिना स्पेस के दर्ज करें (जैसे GJ01AB1234 या 22BH1234AA)।",
         ar: "❌ هذا لا يبدو رقم لوحة سيارة صالح. يرجى إدخاله بدون مسافات (مثل GJ01AB1234 أو 22BH1234AA).",
       },
+      off_hours: {
+        en: `Our workshop is closed during those hours, but we can secure an early slot for you the next morning. Please select a time between ${formatHourLabel(workingHours.start)} and ${formatHourLabel(workingHours.end)}.`,
+        hi: `हमारी वर्कशॉप उस समय बंद है, लेकिन हम अगली सुबह आपके लिए जल्दी का स्लॉट सुरक्षित कर सकते हैं। कृपया ${formatHourLabel(workingHours.start)} और ${formatHourLabel(workingHours.end)} के बीच का समय चुनें।`,
+        ar: `ورشتنا مغلقة في تلك الساعات، لكن يمكننا تأمين موعد مبكر لك في صباح اليوم التالي. يرجى اختيار وقت بين ${formatHourLabel(workingHours.start)} و ${formatHourLabel(workingHours.end)}.`,
+      },
     };
     return msgs[kind]?.[lang] || msgs[kind]?.en || msgs.text.en;
   };
+
 
   // ---------- Address validation + optional geocoding ----------
   const ADDRESS_MIN = 10;
