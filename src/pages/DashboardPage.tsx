@@ -1,14 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import TopBar from "@/components/TopBar";
 import KpiCard from "@/components/KpiCard";
+import SetupWizardBanner from "@/components/SetupWizardBanner";
 import { Users, Wrench, Car, MessageSquare, TrendingUp, Clock, CheckCircle, Target, AlertTriangle, Wifi, WifiOff } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { format, isToday } from "date-fns";
-import { toast } from "sonner";
-
-
 
 type GatewayStatus = {
   provider: "meta" | "evolution";
@@ -23,7 +21,8 @@ export default function DashboardPage() {
   const [recentBookings, setRecentBookings] = useState<any[]>([]);
   const [maxPerDay, setMaxPerDay] = useState<number | null>(null);
   const [gatewayStatus, setGatewayStatus] = useState<GatewayStatus | null>(null);
-  const promptShownRef = useRef(false);
+  const [setupMissing, setSetupMissing] = useState<{ phone: boolean; review: boolean } | null>(null);
+
 
 
   const fetchDashboard = useCallback(async () => {
@@ -53,22 +52,15 @@ export default function DashboardPage() {
     const settings = tenantRes.data?.settings as Record<string, unknown> | null;
     if (settings?.max_vehicles_per_day) setMaxPerDay(Number(settings.max_vehicles_per_day));
 
-    // First-login nudge for incomplete CSAT config (per-tenant, shown once per browser)
+    // First-login wizard banner for incomplete CSAT config
     if (!isExecutive && settings) {
-      const missing: string[] = [];
-      if (!settings.manager_phone) missing.push("Manager WhatsApp");
-      if (!settings.google_review_url) missing.push("Google review URL");
-      const key = `csat-prompt-shown:${tenantId}`;
-      if (missing.length && !sessionStorage.getItem(key) && !promptShownRef.current) {
-        promptShownRef.current = true;
-        sessionStorage.setItem(key, "1");
-        toast.message("Finish dealership setup", {
-          description: `Add your ${missing.join(" and ")} to enable customer feedback follow-ups.`,
-          action: { label: "Open Settings", onClick: () => { window.location.href = "/settings"; } },
-          duration: 12000,
-        });
-      }
+      const phoneMissing = !settings.manager_phone;
+      const reviewMissing = !settings.google_review_url;
+      setSetupMissing(phoneMissing || reviewMissing ? { phone: phoneMissing, review: reviewMissing } : null);
+    } else {
+      setSetupMissing(null);
     }
+
 
 
     // Gateway connection status
@@ -153,7 +145,17 @@ export default function DashboardPage() {
     <>
       <TopBar title="Dashboard" />
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {/* WhatsApp Connection Status */}
+        {/* First-time setup wizard */}
+        {tenantId && setupMissing && (
+          <SetupWizardBanner
+            tenantId={tenantId}
+            missingPhone={setupMissing.phone}
+            missingReview={setupMissing.review}
+            onComplete={() => setSetupMissing(null)}
+          />
+        )}
+
+
         {gatewayStatus && (
           <div
             className={`rounded-xl p-4 flex items-center gap-3 border ${
