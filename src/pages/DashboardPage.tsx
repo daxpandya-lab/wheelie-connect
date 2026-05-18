@@ -145,7 +145,17 @@ export default function DashboardPage() {
     <>
       <TopBar title="Dashboard" />
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {/* WhatsApp Connection Status */}
+        {/* First-time setup wizard */}
+        {tenantId && setupMissing && (
+          <SetupWizardBanner
+            tenantId={tenantId}
+            missingPhone={setupMissing.phone}
+            missingReview={setupMissing.review}
+            onComplete={() => setSetupMissing(null)}
+          />
+        )}
+
+
         {gatewayStatus && (
           <div
             className={`rounded-xl p-4 flex items-center gap-3 border ${
