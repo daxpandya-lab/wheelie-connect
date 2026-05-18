@@ -52,22 +52,15 @@ export default function DashboardPage() {
     const settings = tenantRes.data?.settings as Record<string, unknown> | null;
     if (settings?.max_vehicles_per_day) setMaxPerDay(Number(settings.max_vehicles_per_day));
 
-    // First-login nudge for incomplete CSAT config (per-tenant, shown once per browser)
+    // First-login wizard banner for incomplete CSAT config
     if (!isExecutive && settings) {
-      const missing: string[] = [];
-      if (!settings.manager_phone) missing.push("Manager WhatsApp");
-      if (!settings.google_review_url) missing.push("Google review URL");
-      const key = `csat-prompt-shown:${tenantId}`;
-      if (missing.length && !sessionStorage.getItem(key) && !promptShownRef.current) {
-        promptShownRef.current = true;
-        sessionStorage.setItem(key, "1");
-        toast.message("Finish dealership setup", {
-          description: `Add your ${missing.join(" and ")} to enable customer feedback follow-ups.`,
-          action: { label: "Open Settings", onClick: () => { window.location.href = "/settings"; } },
-          duration: 12000,
-        });
-      }
+      const phoneMissing = !settings.manager_phone;
+      const reviewMissing = !settings.google_review_url;
+      setSetupMissing(phoneMissing || reviewMissing ? { phone: phoneMissing, review: reviewMissing } : null);
+    } else {
+      setSetupMissing(null);
     }
+
 
 
     // Gateway connection status
