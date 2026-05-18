@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import TopBar from "@/components/TopBar";
@@ -6,6 +6,9 @@ import KpiCard from "@/components/KpiCard";
 import { Users, Wrench, Car, MessageSquare, TrendingUp, Clock, CheckCircle, Target, AlertTriangle, Wifi, WifiOff } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { format, isToday } from "date-fns";
+import { toast } from "sonner";
+import { Link } from "react-router-dom";
+
 
 type GatewayStatus = {
   provider: "meta" | "evolution";
