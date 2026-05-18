@@ -61,7 +61,7 @@ export default function SetupWizardBanner({ tenantId, missingPhone, missingRevie
       const { error } = await supabase.from("tenants").update({ settings: next } as never).eq("id", tenantId);
       if (error) throw error;
       toast.success("Lifecycle automations are now fully configured!");
-      onComplete(parsed.data);
+      onComplete({ manager_phone: parsed.data.manager_phone, google_review_url: parsed.data.google_review_url });
       setOpen(false);
     } catch (e: any) {
       toast.error(e?.message || "Failed to save settings");
