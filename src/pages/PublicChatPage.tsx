@@ -1331,16 +1331,26 @@ export default function PublicChatPage() {
       if (holidays.has(canonical) || bookedDates.has(canonical)) {
         altDate = findNextOpen();
         const nextStr = altDate ? fmtNice(altDate) : "";
-        const msg: Record<string, string> = altDate ? {
-          en: `🚫 We are closed then, but our next available slot is ${nextStr}. Would you like to book that?`,
-          hi: `🚫 हम उस दिन बंद हैं, लेकिन हमारा अगला उपलब्ध स्लॉट ${nextStr} है। क्या आप वह बुक करना चाहेंगे?`,
-          ar: `🚫 نحن مغلقون في ذلك اليوم، لكن أقرب موعد متاح لدينا هو ${nextStr}. هل ترغب في حجزه؟`,
-        } : {
-          en: "🚫 We are closed on this day. Please choose another date.",
-          hi: "🚫 हम इस दिन बंद हैं। कृपया कोई दूसरी तारीख चुनें।",
-          ar: "🚫 نحن مغلقون في هذا اليوم. يرجى اختيار تاريخ آخر.",
-        };
+        const isFull = bookedDates.has(canonical) && !holidays.has(canonical);
+        const msg: Record<string, string> = isFull
+          ? {
+              en: `We are fully booked on this date! 🛠️ To give your vehicle the best attention, could we look at the next available day${altDate ? ` (${nextStr})` : ""}?`,
+              hi: `हम इस तारीख पर पूरी तरह बुक हैं! 🛠️ आपकी गाड़ी को बेहतरीन ध्यान देने के लिए, क्या हम अगला उपलब्ध दिन${altDate ? ` (${nextStr})` : ""} देख सकते हैं?`,
+              ar: `نحن محجوزون بالكامل في هذا التاريخ! 🛠️ لمنح سيارتك أفضل عناية، هل يمكننا النظر في أقرب يوم متاح${altDate ? ` (${nextStr})` : ""}؟`,
+            }
+          : altDate
+          ? {
+              en: `🚫 We are closed then, but our next available slot is ${nextStr}. Would you like to book that?`,
+              hi: `🚫 हम उस दिन बंद हैं, लेकिन हमारा अगला उपलब्ध स्लॉट ${nextStr} है। क्या आप वह बुक करना चाहेंगे?`,
+              ar: `🚫 نحن مغلقون في ذلك اليوم، لكن أقرب موعد متاح لدينا هو ${nextStr}. هل ترغب في حجزه؟`,
+            }
+          : {
+              en: "🚫 We are closed on this day. Please choose another date.",
+              hi: "🚫 हम इस दिन बंद हैं। कृपया कोई दूसरी तारीख चुनें।",
+              ar: "🚫 نحن مغلقون في هذا اليوم. يرجى اختيار تاريخ آخر.",
+            };
         blockText = msg[language] || msg.en;
+
       } else {
         const windowDays = advanceBookingDays && advanceBookingDays > 0 ? advanceBookingDays : 30;
         const max = new Date(today);
