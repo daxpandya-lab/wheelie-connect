@@ -143,6 +143,8 @@ export default function PublicChatPage() {
   const [holidays, setHolidays] = useState<Set<string>>(new Set());
   const [dailyLimit, setDailyLimit] = useState<number>(0);
   const [bookedDates, setBookedDates] = useState<Set<string>>(new Set());
+  const [workingHours, setWorkingHours] = useState<{ start: string; end: string }>({ start: "09:00", end: "18:00" });
+
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
   const [chatMedia, setChatMedia] = useState<{ url: string; path: string; mime: string; kind: "image" | "video" | "audio"; name: string }[]>([]);
   const [uploadingMedia, setUploadingMedia] = useState(false);
