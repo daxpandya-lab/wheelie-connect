@@ -766,7 +766,7 @@ export default function PublicChatPage() {
       return { ok: true, value: cleaned };
     }
     // Preferred time — must fall within configured working hours
-    if (node.dataField === "preferred_time" || node.validationType === "time") {
+    if (node.dataField === "preferred_time") {
       const mins = parseTimeToMinutes(value);
       const startMin = parseTimeToMinutes(workingHours.start) ?? 9 * 60;
       const endMin = parseTimeToMinutes(workingHours.end) ?? 18 * 60;
