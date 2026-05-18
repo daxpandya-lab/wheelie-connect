@@ -1191,15 +1191,17 @@ export default function PublicChatPage() {
       if (!available) {
         const friendly =
           language === "hi"
-            ? `क्षमा करें, हम ${date} के लिए पूरी तरह बुक हैं। कृपया कोई और तारीख चुनें।`
+            ? `हम इस तारीख पर पूरी तरह बुक हैं! 🛠️ आपकी गाड़ी को बेहतरीन ध्यान देने के लिए, क्या हम अगला उपलब्ध दिन देख सकते हैं?`
             : language === "ar"
-            ? `عذرًا، نحن محجوزون بالكامل في ${date}. يرجى اختيار تاريخ آخر.`
-            : `Sorry, we are fully booked for ${date}. Please select another date.`;
+            ? `نحن محجوزون بالكامل في هذا التاريخ! 🛠️ لمنح سيارتك أفضل عناية، هل يمكننا النظر في أقرب يوم متاح؟`
+            : `We are fully booked on this date! 🛠️ To give your vehicle the best attention, could we look at the next available day?`;
         setMessages((prev) => [
           ...prev,
           { id: `bot-${Date.now()}-full`, sender: "bot", text: friendly },
         ]);
+        setTimeout(() => setDatePickerOpen(true), 250);
       }
+
 
       if (nextId) setTimeout(() => advanceTo(nextId!, data), 500);
     } else if (checkType === "lookup_booking") {
