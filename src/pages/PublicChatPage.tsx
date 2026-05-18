@@ -765,7 +765,18 @@ export default function PublicChatPage() {
       }
       return { ok: true, value: cleaned };
     }
+    // Preferred time — must fall within configured working hours
+    if (node.dataField === "preferred_time" || node.validationType === "time") {
+      const mins = parseTimeToMinutes(value);
+      const startMin = parseTimeToMinutes(workingHours.start) ?? 9 * 60;
+      const endMin = parseTimeToMinutes(workingHours.end) ?? 18 * 60;
+      if (mins == null || mins < startMin || mins > endMin) {
+        return { ok: false, kind: "off_hours" };
+      }
+      return { ok: true, value };
+    }
     if (!value) return { ok: false, kind: node.validationType || "text" };
+
     switch (node.validationType) {
       case "date": {
         const iso = normalizeDate(value);
