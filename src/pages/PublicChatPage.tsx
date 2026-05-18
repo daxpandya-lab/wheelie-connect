@@ -192,6 +192,11 @@ export default function PublicChatPage() {
         tSettings.daily_booking_limit ?? tSettings.max_vehicles_per_day ?? 0
       ) || 0;
       setDailyLimit(_limit);
+      const wh = tSettings.working_hours as { start?: string; end?: string } | undefined;
+      if (wh && typeof wh.start === "string" && typeof wh.end === "string") {
+        setWorkingHours({ start: wh.start, end: wh.end });
+      }
+
 
       let resolvedFlow: { id: string; flow_data: FlowData } | null = null;
       if (flowIdParam) {
