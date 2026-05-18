@@ -51,6 +51,24 @@ export default function DashboardPage() {
     const settings = tenantRes.data?.settings as Record<string, unknown> | null;
     if (settings?.max_vehicles_per_day) setMaxPerDay(Number(settings.max_vehicles_per_day));
 
+    // First-login nudge for incomplete CSAT config (per-tenant, shown once per browser)
+    if (!isExecutive && settings) {
+      const missing: string[] = [];
+      if (!settings.manager_phone) missing.push("Manager WhatsApp");
+      if (!settings.google_review_url) missing.push("Google review URL");
+      const key = `csat-prompt-shown:${tenantId}`;
+      if (missing.length && !sessionStorage.getItem(key) && !promptShownRef.current) {
+        promptShownRef.current = true;
+        sessionStorage.setItem(key, "1");
+        toast.message("Finish dealership setup", {
+          description: `Add your ${missing.join(" and ")} to enable customer feedback follow-ups.`,
+          action: { label: "Open Settings", onClick: () => { window.location.href = "/settings"; } },
+          duration: 12000,
+        });
+      }
+    }
+
+
     // Gateway connection status
     const wa = (tenantRes.data?.whatsapp_config as Record<string, any> | null) || {};
     const provider: "meta" | "evolution" = wa.provider === "evolution" ? "evolution" : "meta";
