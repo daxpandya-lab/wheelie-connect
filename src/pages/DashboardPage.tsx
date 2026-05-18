@@ -23,6 +23,8 @@ export default function DashboardPage() {
   const [recentBookings, setRecentBookings] = useState<any[]>([]);
   const [maxPerDay, setMaxPerDay] = useState<number | null>(null);
   const [gatewayStatus, setGatewayStatus] = useState<GatewayStatus | null>(null);
+  const promptShownRef = useRef(false);
+
 
   const fetchDashboard = useCallback(async () => {
     if (!tenantId) return;
