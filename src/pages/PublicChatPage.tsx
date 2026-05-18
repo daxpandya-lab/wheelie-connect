@@ -464,6 +464,34 @@ export default function PublicChatPage() {
     if (node.multiSelect) setPendingMultiSelect(new Set());
   };
 
+  // Parse a time string like "9", "9:30", "9 AM", "09:30", "5:30 PM" → minutes since midnight.
+  // Returns null if unparsable.
+  const parseTimeToMinutes = (raw: string): number | null => {
+    if (!raw) return null;
+    const s = raw.trim().toUpperCase().replace(/\./g, "");
+    const m = s.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?$/);
+    if (!m) return null;
+    let h = parseInt(m[1], 10);
+    const min = m[2] ? parseInt(m[2], 10) : 0;
+    const ap = m[3];
+    if (Number.isNaN(h) || Number.isNaN(min) || min > 59) return null;
+    if (ap === "AM") { if (h === 12) h = 0; }
+    else if (ap === "PM") { if (h !== 12) h += 12; }
+    if (h > 23) return null;
+    return h * 60 + min;
+  };
+
+  const formatHourLabel = (hhmm: string): string => {
+    const m = parseTimeToMinutes(hhmm);
+    if (m == null) return hhmm;
+    const h = Math.floor(m / 60);
+    const min = m % 60;
+    const period = h >= 12 ? "PM" : "AM";
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:${String(min).padStart(2, "0")} ${period}`;
+  };
+
+
   const validationErrorMessage = (kind: string, lang: string): string => {
     const msgs: Record<string, Record<string, string>> = {
       selection: {
