@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { format, isToday, isFuture } from "date-fns";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { format, isToday, isTomorrow, isFuture } from "date-fns";
 import {
   Search, CalendarIcon, Loader2, RefreshCw, Phone, Wrench,
   Clock, CheckCircle, XCircle, Play, AlertCircle, Eye, ClipboardList, Bot, User, Settings2,
@@ -169,6 +170,13 @@ export default function ServiceBookingsPage() {
     if (!id) return "—";
     return teamMembers.find(t => t.user_id === id)?.full_name || "Unknown";
   };
+
+  function formatArrivalDate(dateStr: string): string {
+    const d = new Date(dateStr + "T00:00:00");
+    if (isToday(d)) return "Today";
+    if (isTomorrow(d)) return "Tomorrow";
+    return format(d, "d MMM yyyy");
+  }
 
   const openJobDetail = (b: ServiceBooking) => {
     setSelectedJob(b);
@@ -396,6 +404,7 @@ export default function ServiceBookingsPage() {
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Customer</th>
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium hidden lg:table-cell">Vehicle</th>
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Service</th>
+                        <th className="text-left py-3 px-4 text-muted-foreground font-medium">Date</th>
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Source</th>
                         {!isExecutive && <th className="text-left py-3 px-4 text-muted-foreground font-medium hidden md:table-cell">Assigned</th>}
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Status</th>
@@ -423,6 +432,21 @@ export default function ServiceBookingsPage() {
                             <td className="py-3 px-4 text-foreground hidden lg:table-cell">{b.vehicle_model}</td>
                             <td className="py-3 px-4">
                               <Badge variant="outline" className="text-xs capitalize">{b.service_type}</Badge>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-foreground">{formatArrivalDate(b.booking_date)}</span>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex items-center gap-1 text-[10px] bg-info/10 text-info border border-info/20 px-1.5 py-0.5 rounded cursor-help">
+                                      <Clock className="w-3 h-3" /> Drop-off
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top">
+                                    <p className="text-xs">Expected Drop-off: 9:00 AM – 12:00 PM</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </div>
                             </td>
                             <td className="py-3 px-4">
                               <SourceBadge source={b.booking_source || "manual"} />
