@@ -171,6 +171,13 @@ export default function ServiceBookingsPage() {
     return teamMembers.find(t => t.user_id === id)?.full_name || "Unknown";
   };
 
+  function formatArrivalDate(dateStr: string): string {
+    const d = new Date(dateStr + "T00:00:00");
+    if (isToday(d)) return "Today";
+    if (isTomorrow(d)) return "Tomorrow";
+    return format(d, "d MMM yyyy");
+  }
+
   const openJobDetail = (b: ServiceBooking) => {
     setSelectedJob(b);
     setJobForm({
