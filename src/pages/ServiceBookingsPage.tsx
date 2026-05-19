@@ -434,6 +434,21 @@ export default function ServiceBookingsPage() {
                               <Badge variant="outline" className="text-xs capitalize">{b.service_type}</Badge>
                             </td>
                             <td className="py-3 px-4">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-foreground">{formatArrivalDate(b.booking_date)}</span>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex items-center gap-1 text-[10px] bg-info/10 text-info border border-info/20 px-1.5 py-0.5 rounded cursor-help">
+                                      <Clock className="w-3 h-3" /> Drop-off
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top">
+                                    <p className="text-xs">Expected Drop-off: 9:00 AM – 12:00 PM</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
                               <SourceBadge source={b.booking_source || "manual"} />
                             </td>
                             {!isExecutive && (
