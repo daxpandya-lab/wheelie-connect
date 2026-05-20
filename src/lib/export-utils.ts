@@ -114,18 +114,81 @@ export function exportToPDF(
   doc.text(wrapped, margin, y + 12);
   y += 12 + wrapped.length * 11 + 8;
 
+  // --- Consolidate columns for clean print layout (PDF only) ---
+  // 1) Hide internal/system columns
+  const BLACKLIST = /(session_id|metadata|tenant_id|^id$|_id$|assigned_to$)/i;
+  let printCols = columns.filter((c) => !BLACKLIST.test(c.key));
+
+  const has = (k: string) => printCols.some((c) => c.key === k);
+  const drop = (...keys: string[]) => {
+    printCols = printCols.filter((c) => !keys.includes(c.key));
+  };
+  const insertAfter = (afterKey: string, col: ExportColumn) => {
+    const idx = printCols.findIndex((c) => c.key === afterKey);
+    if (idx >= 0) printCols.splice(idx + 1, 0, col);
+    else printCols.unshift(col);
+  };
+
+  // 2) Merge customer_name + phone_number → Customer
+  if (has("customer_name") && has("phone_number")) {
+    insertAfter("customer_name", { key: "__customer", label: "Customer" });
+    drop("customer_name", "phone_number");
+  }
+
+  // 3) Merge vehicle_type + vehicle_model + registration_number → Vehicle Details
+  const vehicleKeys = ["vehicle_type", "vehicle_model", "registration_number", "vehicle_number"];
+  if (vehicleKeys.some(has)) {
+    const anchor = vehicleKeys.find(has)!;
+    insertAfter(anchor, { key: "__vehicle", label: "Vehicle Details" });
+    drop(...vehicleKeys);
+  }
+
+  // Row resolver for merged keys
+  const resolve = (row: any, key: string): string => {
+    if (key === "__customer") {
+      return [fmt(row.customer_name), fmt(row.phone_number)].filter(Boolean).join("\n");
+    }
+    if (key === "__vehicle") {
+      const model = [fmt(row.vehicle_type), fmt(row.vehicle_model)].filter(Boolean).join(" ");
+      const reg = fmt(row.registration_number || row.vehicle_number);
+      return [model, reg].filter(Boolean).join("\n");
+    }
+    return fmt(row[key]);
+  };
+
+  // 4) Proportional column widths (weights). Long-text fields get more room.
+  const weightFor = (key: string): number => {
+    if (key === "__customer") return 2.2;
+    if (key === "__vehicle") return 2.2;
+    if (/(issue_description|notes|work_notes|parts_required|description|quotation)/i.test(key)) return 3;
+    if (/(service_type|vehicle_interest|email)/i.test(key)) return 2;
+    if (/(status|approval|source)/i.test(key)) return 1.1;
+    if (/(date|time|created|updated)/i.test(key)) return 1.2;
+    return 1.4;
+  };
+  const usableWidth = pageWidth - margin * 2;
+  const weights = printCols.map((c) => weightFor(c.key));
+  const totalWeight = weights.reduce((a, b) => a + b, 0) || 1;
+  const columnStyles: Record<number, { cellWidth: number }> = {};
+  printCols.forEach((_, i) => {
+    columnStyles[i] = { cellWidth: (usableWidth * weights[i]) / totalWeight };
+  });
+
   autoTable(doc, {
     startY: y,
-    head: [columns.map((c) => c.label)],
-    body: rows.map((r) => columns.map((c) => fmt(r[c.key]))),
+    head: [printCols.map((c) => c.label)],
+    body: rows.map((r) => printCols.map((c) => resolve(r, c.key))),
     margin: { left: margin, right: margin, top: 70, bottom: 40 },
+    tableWidth: usableWidth,
     styles: {
       fontSize: 9,
-      cellPadding: 6,
+      cellPadding: { top: 6, right: 6, bottom: 6, left: 6 },
       lineColor: border,
       lineWidth: 0.5,
       textColor: slate,
       overflow: "linebreak",
+      valign: "top",
+      minCellHeight: 18,
     },
     headStyles: {
       fillColor: [243, 244, 246],
@@ -133,10 +196,15 @@ export function exportToPDF(
       fontStyle: "bold",
       fontSize: 9.5,
       halign: "left",
+      valign: "middle",
       lineColor: border,
       lineWidth: 0.5,
+      cellPadding: { top: 9, right: 6, bottom: 9, left: 6 },
+      minCellHeight: 24,
     },
+    bodyStyles: { lineHeight: 1.25 },
     alternateRowStyles: { fillColor: zebra },
+    columnStyles,
     didDrawPage: (data) => {
       if (data.pageNumber > 1) drawHeader();
       const pageCount = doc.getNumberOfPages();
@@ -146,6 +214,7 @@ export function exportToPDF(
       doc.text(`Page ${current} of ${pageCount}`, pageWidth / 2, pageHeight - 18, { align: "center" });
     },
   });
+
 
   doc.save(`${filename}${buildFilenameSuffix(filters)}.pdf`);
 }
