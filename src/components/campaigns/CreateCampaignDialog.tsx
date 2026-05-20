@@ -377,6 +377,49 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
             </div>
           )}
 
+          {/* Media upload zone */}
+          <div className="space-y-2">
+            <Label>Media Attachment (optional)</Label>
+            {media ? (
+              <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-3">
+                {media.type === "image" ? <ImageIcon className="w-5 h-5 text-primary" /> :
+                  media.type === "video" ? <VideoIcon className="w-5 h-5 text-primary" /> :
+                  <FileText className="w-5 h-5 text-primary" />}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{media.filename}</p>
+                  <p className="text-xs text-muted-foreground capitalize">{media.type} · uploaded</p>
+                </div>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setMedia(null)}>
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            ) : (
+              <label className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border bg-muted/20 p-4 cursor-pointer hover:bg-muted/40 transition-colors">
+                {uploadingMedia ? (
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                ) : (
+                  <Upload className="w-5 h-5 text-muted-foreground" />
+                )}
+                <p className="text-xs text-muted-foreground text-center">
+                  Click to upload — Images (JPG/PNG, 5MB) · Videos (MP4, 15MB) · Documents (PDF/DOCX, 10MB)
+                </p>
+                <input
+                  type="file"
+                  className="hidden"
+                  accept={[
+                    ...MEDIA_LIMITS.image.mimes,
+                    ...MEDIA_LIMITS.video.mimes,
+                    ...MEDIA_LIMITS.document.mimes,
+                  ].join(",")}
+                  disabled={uploadingMedia}
+                  onChange={(e) => { handleMediaUpload(e.target.files?.[0] ?? null); e.target.value = ""; }}
+                />
+              </label>
+            )}
+          </div>
+
+
+
           <div>
             <Label>Recipients Source</Label>
             <Select
