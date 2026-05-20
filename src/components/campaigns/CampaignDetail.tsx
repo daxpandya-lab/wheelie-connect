@@ -40,13 +40,17 @@ export default function CampaignDetail({ campaignId, onBack }: CampaignDetailPro
     if (!campaign) return;
     setSending(true);
     await supabase.from("campaigns").update({ status: "sending" }).eq("id", campaignId);
-    // Queue messages for each recipient
+    // Queue messages for each recipient (include media + link)
     const messages = recipients.filter((r) => r.status === "pending").map((r) => ({
       tenant_id: campaign.tenant_id,
       recipient_phone: r.phone_number,
       template_name: campaign.template_id,
       status: "queued" as const,
-      message_type: "template",
+      message_type: campaign.media_url ? (campaign.media_type || "document") : "template",
+      media_url: campaign.media_url ?? null,
+      media_type: campaign.media_type ?? null,
+      media_filename: campaign.media_filename ?? null,
+      campaign_recipient_id: r.id,
     }));
     if (messages.length > 0) {
       await supabase.from("whatsapp_message_queue").insert(messages);
