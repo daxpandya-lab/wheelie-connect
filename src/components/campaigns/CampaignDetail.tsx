@@ -40,13 +40,17 @@ export default function CampaignDetail({ campaignId, onBack }: CampaignDetailPro
     if (!campaign) return;
     setSending(true);
     await supabase.from("campaigns").update({ status: "sending" }).eq("id", campaignId);
-    // Queue messages for each recipient
+    // Queue messages for each recipient (include media + link)
     const messages = recipients.filter((r) => r.status === "pending").map((r) => ({
       tenant_id: campaign.tenant_id,
       recipient_phone: r.phone_number,
       template_name: campaign.template_id,
       status: "queued" as const,
-      message_type: "template",
+      message_type: campaign.media_url ? (campaign.media_type || "document") : "template",
+      media_url: campaign.media_url ?? null,
+      media_type: campaign.media_type ?? null,
+      media_filename: campaign.media_filename ?? null,
+      campaign_recipient_id: r.id,
     }));
     if (messages.length > 0) {
       await supabase.from("whatsapp_message_queue").insert(messages);
@@ -154,7 +158,7 @@ export default function CampaignDetail({ campaignId, onBack }: CampaignDetailPro
                     <th className="text-left p-3 text-muted-foreground font-medium">Contact</th>
                     <th className="text-left p-3 text-muted-foreground font-medium">Phone</th>
                     <th className="text-left p-3 text-muted-foreground font-medium">Status</th>
-                    <th className="text-left p-3 text-muted-foreground font-medium">Reply</th>
+                    <th className="text-left p-3 text-muted-foreground font-medium">{tab === "failed" ? "Error" : "Reply"}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -167,7 +171,9 @@ export default function CampaignDetail({ campaignId, onBack }: CampaignDetailPro
                         <td className="p-3">
                           <div className="flex items-center gap-1.5">{statusIcon(r.status)}<span className="capitalize">{r.status}</span></div>
                         </td>
-                        <td className="p-3 text-muted-foreground">{r.reply_text || "—"}</td>
+                        <td className="p-3 text-muted-foreground max-w-xs truncate" title={tab === "failed" ? (r.error_message || "") : (r.reply_text || "")}>
+                          {tab === "failed" ? (r.error_message || "—") : (r.reply_text || "—")}
+                        </td>
                       </tr>
                     ))}
                 </tbody>

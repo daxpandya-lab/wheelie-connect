@@ -7,7 +7,28 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { Loader2, Info } from "lucide-react";
+import { Loader2, Info, Upload, X, FileText, Image as ImageIcon, Video as VideoIcon } from "lucide-react";
+
+type MediaKind = "image" | "video" | "document";
+const MEDIA_LIMITS: Record<MediaKind, { mimes: string[]; maxMB: number; label: string }> = {
+  image: { mimes: ["image/jpeg", "image/jpg", "image/png"], maxMB: 5, label: "JPG / PNG, max 5MB" },
+  video: { mimes: ["video/mp4"], maxMB: 15, label: "MP4, max 15MB" },
+  document: {
+    mimes: [
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ],
+    maxMB: 10,
+    label: "PDF / DOCX, max 10MB",
+  },
+};
+function detectMediaKind(file: File): MediaKind | null {
+  if (MEDIA_LIMITS.image.mimes.includes(file.type)) return "image";
+  if (MEDIA_LIMITS.video.mimes.includes(file.type)) return "video";
+  if (MEDIA_LIMITS.document.mimes.includes(file.type)) return "document";
+  return null;
+}
 
 interface CreateCampaignDialogProps {
   open: boolean;
@@ -88,6 +109,37 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
   );
   // carouselMap: { "0": { variable_key: "vehicle_model", image_url: "https://..." } }
   const [carouselMap, setCarouselMap] = useState<Record<string, { variable_key: string; image_url: string }>>({});
+  const [media, setMedia] = useState<{ url: string; type: MediaKind; filename: string } | null>(null);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+
+  const handleMediaUpload = async (file: File | null) => {
+    if (!file || !tenantId) return;
+    const kind = detectMediaKind(file);
+    if (!kind) {
+      toast.error("Unsupported file type. Allowed: JPG, PNG, MP4, PDF, DOCX.");
+      return;
+    }
+    const limit = MEDIA_LIMITS[kind];
+    if (file.size > limit.maxMB * 1024 * 1024) {
+      toast.error(`File exceeds ${limit.maxMB}MB limit for ${kind}.`);
+      return;
+    }
+    setUploadingMedia(true);
+    const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+    const path = `${tenantId}/${Date.now()}-${safeName}`;
+    const { error: upErr } = await supabase.storage
+      .from("campaign-media")
+      .upload(path, file, { contentType: file.type, upsert: false });
+    if (upErr) {
+      setUploadingMedia(false);
+      toast.error(`Upload failed: ${upErr.message}`);
+      return;
+    }
+    const { data: pub } = supabase.storage.from("campaign-media").getPublicUrl(path);
+    setMedia({ url: pub.publicUrl, type: kind, filename: file.name });
+    setUploadingMedia(false);
+    toast.success("Media uploaded");
+  };
 
   // Reset variable map and provide a sensible default ({{1}} → name) when template changes
   useEffect(() => {
@@ -151,6 +203,9 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
       scheduled_at: form.scheduled_at || null,
       status: form.scheduled_at ? "scheduled" : "draft",
       audience_filter,
+      media_url: media?.url ?? null,
+      media_type: media?.type ?? null,
+      media_filename: media?.filename ?? null,
     }).select("id").single();
     if (error || !created) {
       setLoading(false);
@@ -192,6 +247,7 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
     setForm({ name: "", type: "whatsapp", template_id: "", segment_id: "", scheduled_at: "", sending_speed: "100", recipient_source: "segment" });
     setVarMap({});
     setCarouselMap({});
+    setMedia(null);
   };
 
   return (
@@ -320,6 +376,49 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
               ))}
             </div>
           )}
+
+          {/* Media upload zone */}
+          <div className="space-y-2">
+            <Label>Media Attachment (optional)</Label>
+            {media ? (
+              <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-3">
+                {media.type === "image" ? <ImageIcon className="w-5 h-5 text-primary" /> :
+                  media.type === "video" ? <VideoIcon className="w-5 h-5 text-primary" /> :
+                  <FileText className="w-5 h-5 text-primary" />}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{media.filename}</p>
+                  <p className="text-xs text-muted-foreground capitalize">{media.type} · uploaded</p>
+                </div>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setMedia(null)}>
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            ) : (
+              <label className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border bg-muted/20 p-4 cursor-pointer hover:bg-muted/40 transition-colors">
+                {uploadingMedia ? (
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                ) : (
+                  <Upload className="w-5 h-5 text-muted-foreground" />
+                )}
+                <p className="text-xs text-muted-foreground text-center">
+                  Click to upload — Images (JPG/PNG, 5MB) · Videos (MP4, 15MB) · Documents (PDF/DOCX, 10MB)
+                </p>
+                <input
+                  type="file"
+                  className="hidden"
+                  accept={[
+                    ...MEDIA_LIMITS.image.mimes,
+                    ...MEDIA_LIMITS.video.mimes,
+                    ...MEDIA_LIMITS.document.mimes,
+                  ].join(",")}
+                  disabled={uploadingMedia}
+                  onChange={(e) => { handleMediaUpload(e.target.files?.[0] ?? null); e.target.value = ""; }}
+                />
+              </label>
+            )}
+          </div>
+
+
 
           <div>
             <Label>Recipients Source</Label>

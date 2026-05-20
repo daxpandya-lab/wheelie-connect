@@ -341,6 +341,9 @@ export type Database = {
           created_at: string
           delivered_count: number | null
           id: string
+          media_filename: string | null
+          media_type: string | null
+          media_url: string | null
           name: string
           read_count: number | null
           recipient_count: number | null
@@ -359,6 +362,9 @@ export type Database = {
           created_at?: string
           delivered_count?: number | null
           id?: string
+          media_filename?: string | null
+          media_type?: string | null
+          media_url?: string | null
           name: string
           read_count?: number | null
           recipient_count?: number | null
@@ -377,6 +383,9 @@ export type Database = {
           created_at?: string
           delivered_count?: number | null
           id?: string
+          media_filename?: string | null
+          media_type?: string | null
+          media_url?: string | null
           name?: string
           read_count?: number | null
           recipient_count?: number | null
@@ -1503,6 +1512,7 @@ export type Database = {
       whatsapp_message_queue: {
         Row: {
           attempts: number
+          campaign_recipient_id: string | null
           content: string | null
           conversation_id: string | null
           created_at: string
@@ -1510,6 +1520,9 @@ export type Database = {
           external_message_id: string | null
           id: string
           last_attempt_at: string | null
+          media_filename: string | null
+          media_type: string | null
+          media_url: string | null
           message_type: string
           recipient_phone: string
           status: Database["public"]["Enums"]["wa_message_status"]
@@ -1520,6 +1533,7 @@ export type Database = {
         }
         Insert: {
           attempts?: number
+          campaign_recipient_id?: string | null
           content?: string | null
           conversation_id?: string | null
           created_at?: string
@@ -1527,6 +1541,9 @@ export type Database = {
           external_message_id?: string | null
           id?: string
           last_attempt_at?: string | null
+          media_filename?: string | null
+          media_type?: string | null
+          media_url?: string | null
           message_type?: string
           recipient_phone: string
           status?: Database["public"]["Enums"]["wa_message_status"]
@@ -1537,6 +1554,7 @@ export type Database = {
         }
         Update: {
           attempts?: number
+          campaign_recipient_id?: string | null
           content?: string | null
           conversation_id?: string | null
           created_at?: string
@@ -1544,6 +1562,9 @@ export type Database = {
           external_message_id?: string | null
           id?: string
           last_attempt_at?: string | null
+          media_filename?: string | null
+          media_type?: string | null
+          media_url?: string | null
           message_type?: string
           recipient_phone?: string
           status?: Database["public"]["Enums"]["wa_message_status"]
