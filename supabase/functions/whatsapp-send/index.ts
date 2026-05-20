@@ -177,9 +177,25 @@ Deno.serve(async (req) => {
         let response: Response;
         let result: any;
 
+        const mediaUrl: string | null = msg.media_url || null;
+        const mediaType: string | null = msg.media_type || null; // "image" | "video" | "document"
+        const mediaFilename: string | null = msg.media_filename || null;
+
         if (provider === "meta") {
           let waBody: Record<string, unknown>;
           if (msg.template_name) {
+            // Map media as header parameter for templates that declare a header
+            let components: any[] = Array.isArray(msg.template_params) ? [...msg.template_params] : [];
+            if (mediaUrl && mediaType) {
+              const headerParam =
+                mediaType === "image" ? { type: "image", image: { link: mediaUrl } } :
+                mediaType === "video" ? { type: "video", video: { link: mediaUrl } } :
+                { type: "document", document: { link: mediaUrl, filename: mediaFilename || "document.pdf" } };
+              const hasHeader = components.some((c: any) => (c?.type || "").toLowerCase() === "header");
+              if (!hasHeader) {
+                components = [{ type: "header", parameters: [headerParam] }, ...components];
+              }
+            }
             waBody = {
               messaging_product: "whatsapp",
               to: msg.recipient_phone,
@@ -187,8 +203,20 @@ Deno.serve(async (req) => {
               template: {
                 name: msg.template_name,
                 language: { code: "en" },
-                components: msg.template_params || [],
+                components,
               },
+            };
+          } else if (mediaUrl && mediaType) {
+            // Direct media message
+            const metaType = mediaType === "image" ? "image" : mediaType === "video" ? "video" : "document";
+            const mediaPayload: Record<string, unknown> = { link: mediaUrl };
+            if (renderedContent) (mediaPayload as any).caption = renderedContent;
+            if (metaType === "document") (mediaPayload as any).filename = mediaFilename || "document.pdf";
+            waBody = {
+              messaging_product: "whatsapp",
+              to: msg.recipient_phone,
+              type: metaType,
+              [metaType]: mediaPayload,
             };
           } else {
             waBody = {
@@ -211,12 +239,25 @@ Deno.serve(async (req) => {
           });
           result = await response.json();
         } else {
-          // Evolution API: POST {instance_url}/message/sendText/{instance_name}
-          const evoEndpoint = `${evoUrl}/message/sendText/${encodeURIComponent(evoInstance!)}`;
-          const evoBody = {
-            number: msg.recipient_phone,
-            text: renderedContent ?? "",
-          };
+          // Evolution API
+          let evoEndpoint: string;
+          let evoBody: Record<string, unknown>;
+          if (mediaUrl && mediaType) {
+            evoEndpoint = `${evoUrl}/message/sendMedia/${encodeURIComponent(evoInstance!)}`;
+            evoBody = {
+              number: msg.recipient_phone,
+              mediatype: mediaType, // "image" | "video" | "document"
+              media: mediaUrl,
+              caption: renderedContent ?? "",
+              fileName: mediaFilename || undefined,
+            };
+          } else {
+            evoEndpoint = `${evoUrl}/message/sendText/${encodeURIComponent(evoInstance!)}`;
+            evoBody = {
+              number: msg.recipient_phone,
+              text: renderedContent ?? "",
+            };
+          }
           console.log(`[BATCH-SEND][EVOLUTION] POST ${evoEndpoint}`);
           response = await fetch(evoEndpoint, {
             method: "POST",
@@ -241,22 +282,48 @@ Deno.serve(async (req) => {
             .from("whatsapp_message_queue")
             .update({ status: "sent", external_message_id: externalId })
             .eq("id", msg.id);
+          if (msg.campaign_recipient_id) {
+            await supabase
+              .from("campaign_recipients")
+              .update({ status: "sent", sent_at: new Date().toISOString(), error_message: null })
+              .eq("id", msg.campaign_recipient_id);
+          }
           sent++;
         } else {
+          const errMsg = (() => {
+            const e = result?.error || result;
+            if (!e) return `HTTP ${response.status}`;
+            if (typeof e === "string") return e;
+            return e.message || e.error?.message || JSON.stringify(e).slice(0, 400);
+          })();
           await supabase
             .from("whatsapp_message_queue")
-            .update({ status: "failed", error_message: JSON.stringify(result?.error || result || { status: response.status }) })
+            .update({ status: "failed", error_message: errMsg })
             .eq("id", msg.id);
+          if (msg.campaign_recipient_id) {
+            await supabase
+              .from("campaign_recipients")
+              .update({ status: "failed", error_message: errMsg })
+              .eq("id", msg.campaign_recipient_id);
+          }
           failed++;
         }
       } catch (err) {
+        const errStr = String(err).slice(0, 400);
         await supabase
           .from("whatsapp_message_queue")
-          .update({ status: "failed", error_message: String(err) })
+          .update({ status: "failed", error_message: errStr })
           .eq("id", msg.id);
+        if (msg.campaign_recipient_id) {
+          await supabase
+            .from("campaign_recipients")
+            .update({ status: "failed", error_message: errStr })
+            .eq("id", msg.campaign_recipient_id);
+        }
         failed++;
       }
     }
+
 
     return new Response(JSON.stringify({ processed: messages.length, sent, failed }), {
       status: 200,
