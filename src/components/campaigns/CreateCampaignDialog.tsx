@@ -109,6 +109,37 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
   );
   // carouselMap: { "0": { variable_key: "vehicle_model", image_url: "https://..." } }
   const [carouselMap, setCarouselMap] = useState<Record<string, { variable_key: string; image_url: string }>>({});
+  const [media, setMedia] = useState<{ url: string; type: MediaKind; filename: string } | null>(null);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+
+  const handleMediaUpload = async (file: File | null) => {
+    if (!file || !tenantId) return;
+    const kind = detectMediaKind(file);
+    if (!kind) {
+      toast.error("Unsupported file type. Allowed: JPG, PNG, MP4, PDF, DOCX.");
+      return;
+    }
+    const limit = MEDIA_LIMITS[kind];
+    if (file.size > limit.maxMB * 1024 * 1024) {
+      toast.error(`File exceeds ${limit.maxMB}MB limit for ${kind}.`);
+      return;
+    }
+    setUploadingMedia(true);
+    const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+    const path = `${tenantId}/${Date.now()}-${safeName}`;
+    const { error: upErr } = await supabase.storage
+      .from("campaign-media")
+      .upload(path, file, { contentType: file.type, upsert: false });
+    if (upErr) {
+      setUploadingMedia(false);
+      toast.error(`Upload failed: ${upErr.message}`);
+      return;
+    }
+    const { data: pub } = supabase.storage.from("campaign-media").getPublicUrl(path);
+    setMedia({ url: pub.publicUrl, type: kind, filename: file.name });
+    setUploadingMedia(false);
+    toast.success("Media uploaded");
+  };
 
   // Reset variable map and provide a sensible default ({{1}} → name) when template changes
   useEffect(() => {
