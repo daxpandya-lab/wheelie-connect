@@ -202,7 +202,7 @@ export function exportToPDF(
       cellPadding: { top: 9, right: 6, bottom: 9, left: 6 },
       minCellHeight: 24,
     },
-    bodyStyles: { lineHeight: 1.25 },
+    bodyStyles: { cellPadding: { top: 6, right: 6, bottom: 6, left: 6 } },
     alternateRowStyles: { fillColor: zebra },
     columnStyles,
     didDrawPage: (data) => {
