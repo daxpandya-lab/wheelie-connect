@@ -7,7 +7,28 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { Loader2, Info } from "lucide-react";
+import { Loader2, Info, Upload, X, FileText, Image as ImageIcon, Video as VideoIcon } from "lucide-react";
+
+type MediaKind = "image" | "video" | "document";
+const MEDIA_LIMITS: Record<MediaKind, { mimes: string[]; maxMB: number; label: string }> = {
+  image: { mimes: ["image/jpeg", "image/jpg", "image/png"], maxMB: 5, label: "JPG / PNG, max 5MB" },
+  video: { mimes: ["video/mp4"], maxMB: 15, label: "MP4, max 15MB" },
+  document: {
+    mimes: [
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ],
+    maxMB: 10,
+    label: "PDF / DOCX, max 10MB",
+  },
+};
+function detectMediaKind(file: File): MediaKind | null {
+  if (MEDIA_LIMITS.image.mimes.includes(file.type)) return "image";
+  if (MEDIA_LIMITS.video.mimes.includes(file.type)) return "video";
+  if (MEDIA_LIMITS.document.mimes.includes(file.type)) return "document";
+  return null;
+}
 
 interface CreateCampaignDialogProps {
   open: boolean;
