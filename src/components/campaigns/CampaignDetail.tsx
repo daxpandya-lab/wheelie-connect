@@ -158,7 +158,7 @@ export default function CampaignDetail({ campaignId, onBack }: CampaignDetailPro
                     <th className="text-left p-3 text-muted-foreground font-medium">Contact</th>
                     <th className="text-left p-3 text-muted-foreground font-medium">Phone</th>
                     <th className="text-left p-3 text-muted-foreground font-medium">Status</th>
-                    <th className="text-left p-3 text-muted-foreground font-medium">Reply</th>
+                    <th className="text-left p-3 text-muted-foreground font-medium">{tab === "failed" ? "Error" : "Reply"}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -171,7 +171,9 @@ export default function CampaignDetail({ campaignId, onBack }: CampaignDetailPro
                         <td className="p-3">
                           <div className="flex items-center gap-1.5">{statusIcon(r.status)}<span className="capitalize">{r.status}</span></div>
                         </td>
-                        <td className="p-3 text-muted-foreground">{r.reply_text || "—"}</td>
+                        <td className="p-3 text-muted-foreground max-w-xs truncate" title={tab === "failed" ? (r.error_message || "") : (r.reply_text || "")}>
+                          {tab === "failed" ? (r.error_message || "—") : (r.reply_text || "—")}
+                        </td>
                       </tr>
                     ))}
                 </tbody>
