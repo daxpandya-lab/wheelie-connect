@@ -203,6 +203,9 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
       scheduled_at: form.scheduled_at || null,
       status: form.scheduled_at ? "scheduled" : "draft",
       audience_filter,
+      media_url: media?.url ?? null,
+      media_type: media?.type ?? null,
+      media_filename: media?.filename ?? null,
     }).select("id").single();
     if (error || !created) {
       setLoading(false);
