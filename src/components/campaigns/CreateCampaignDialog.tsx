@@ -247,6 +247,7 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
     setForm({ name: "", type: "whatsapp", template_id: "", segment_id: "", scheduled_at: "", sending_speed: "100", recipient_source: "segment" });
     setVarMap({});
     setCarouselMap({});
+    setMedia(null);
   };
 
   return (
