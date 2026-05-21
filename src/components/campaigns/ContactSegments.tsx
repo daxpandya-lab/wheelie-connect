@@ -1,21 +1,20 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { Plus, Users, Loader2, Trash2, Upload, FileText, Hash } from "lucide-react";
+import { Plus, Users, Loader2, Trash2, FileText, Hash } from "lucide-react";
 
 /**
  * Clean a phone number string:
- * - strip all non-digits
- * - drop leading 0
- * - if exactly 10 digits, prefix country code (default 91 / India)
- * - keep numbers that already include a country code (11–15 digits)
+ * - strip everything that isn't a digit (drops +, -, spaces, parens, …)
+ * - drop leading 0s
+ * - if exactly 10 digits, prefix the default country code (91 / India)
+ * - accept numbers that already include a country code (11–15 digits)
  * Returns null if the result isn't a plausible phone number.
  */
 function cleanPhone(raw: string, defaultCc = "91"): string | null {
@@ -27,55 +26,70 @@ function cleanPhone(raw: string, defaultCc = "91"): string | null {
   return digits;
 }
 
-interface ParsedContact {
+interface Contact {
+  id: string;       // local UI id
   name: string;
   phone: string;
   email: string | null;
 }
 
-interface ParseResult {
-  total: number;
-  valid: ParsedContact[];
-  invalid: number;
-  duplicates: number;
-}
-
-function parseCsv(text: string): ParseResult {
-  const lines = text.trim().split(/\r?\n/);
-  if (lines.length === 0) return { total: 0, valid: [], invalid: 0, duplicates: 0 };
-  // Skip header if it looks like one
+/** Parse CSV text with optional header row: name,phone,email */
+function parseCsvText(text: string): { name: string; phone: string; email: string | null }[] {
+  const lines = text.trim().split(/\r?\n/).filter((l) => l.trim().length > 0);
+  if (lines.length === 0) return [];
   const first = lines[0].toLowerCase();
   const rows = /name|phone|mobile|email/.test(first) ? lines.slice(1) : lines;
-  return parseRows(rows.map((line) => {
-    const [name, phone, email] = line.split(",").map((s) => (s ?? "").trim());
-    return { name, phone, email };
-  }));
+  return rows.map((line) => {
+    const parts = line.split(",").map((s) => (s ?? "").trim());
+    const [name, phone, email] = parts;
+    return { name: name || "", phone: phone || "", email: email || null };
+  });
 }
 
-function parseManual(text: string): ParseResult {
-  // Split on newlines, commas, semicolons
-  const tokens = text.split(/[\n,;]+/).map((t) => t.trim()).filter(Boolean);
-  return parseRows(tokens.map((t) => ({ name: "", phone: t, email: "" })));
+/**
+ * Parse pasted free text — split on commas, semicolons, newlines, tabs,
+ * AND spaces, then extract every contiguous run that contains 10+ digits.
+ */
+function parsePastedText(text: string): { name: string; phone: string; email: null }[] {
+  if (!text.trim()) return [];
+  const tokens = text.split(/[\s,;|]+/).map((t) => t.trim()).filter(Boolean);
+  // Fallback: if nothing was tokenised (single big blob), regex-extract digit runs.
+  const candidates = tokens.length
+    ? tokens
+    : (text.match(/[+\d][\d\s\-().]{8,}/g) || []);
+  return candidates.map((t) => ({ name: "", phone: t, email: null }));
 }
 
-function parseRows(rows: { name: string; phone: string; email: string }[]): ParseResult {
-  const total = rows.length;
-  const seen = new Set<string>();
-  const valid: ParsedContact[] = [];
+let LOCAL_ID = 0;
+const nextId = () => `c_${++LOCAL_ID}_${Date.now()}`;
+
+/**
+ * Merge new rows into an existing contact list, de-duplicating by cleaned
+ * phone number. Returns { merged, added, invalid, duplicates }.
+ */
+function mergeContacts(
+  existing: Contact[],
+  incoming: { name: string; phone: string; email: string | null }[],
+): { merged: Contact[]; added: number; invalid: number; duplicates: number } {
+  const seen = new Set(existing.map((c) => c.phone));
+  const merged = [...existing];
+  let added = 0;
   let invalid = 0;
   let duplicates = 0;
-  for (const r of rows) {
-    const cleaned = cleanPhone(r.phone);
-    if (!cleaned) { invalid++; continue; }
-    if (seen.has(cleaned)) { duplicates++; continue; }
-    seen.add(cleaned);
-    valid.push({
-      name: r.name?.trim() || `Contact ${cleaned.slice(-4)}`,
-      phone: cleaned,
+  for (const r of incoming) {
+    const phone = cleanPhone(r.phone);
+    if (!phone) { invalid++; continue; }
+    if (seen.has(phone)) { duplicates++; continue; }
+    seen.add(phone);
+    merged.push({
+      id: nextId(),
+      name: r.name?.trim() || `Contact ${merged.length + 1}`,
+      phone,
       email: r.email?.trim() || null,
     });
+    added++;
   }
-  return { total, valid, invalid, duplicates };
+  return { merged, added, invalid, duplicates };
 }
 
 export default function ContactSegments() {
@@ -83,89 +97,110 @@ export default function ContactSegments() {
   const [segments, setSegments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
-  const [showUpload, setShowUpload] = useState(false);
-  const [form, setForm] = useState({ name: "", description: "", filter_type: "all" });
   const [saving, setSaving] = useState(false);
-  const [uploadTab, setUploadTab] = useState<"csv" | "manual">("csv");
+
+  const [form, setForm] = useState({ name: "", description: "" });
+  const [tab, setTab] = useState<"csv" | "manual">("manual");
   const [csvData, setCsvData] = useState("");
-  const [manualData, setManualData] = useState("");
-  const [preview, setPreview] = useState<ParseResult | null>(null);
+  const [pasteData, setPasteData] = useState("");
+  const [contacts, setContacts] = useState<Contact[]>([]);
 
   const fetchSegments = async () => {
     if (!tenantId) return;
     setLoading(true);
-    const { data } = await supabase.from("contact_segments").select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false });
+    const { data } = await supabase
+      .from("contact_segments")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: false });
     setSegments(data || []);
     setLoading(false);
   };
 
   useEffect(() => { fetchSegments(); }, [tenantId]);
 
-  // Live preview as user types
-  useEffect(() => {
-    if (!showUpload) { setPreview(null); return; }
-    const text = uploadTab === "csv" ? csvData : manualData;
-    if (!text.trim()) { setPreview(null); return; }
-    setPreview(uploadTab === "csv" ? parseCsv(text) : parseManual(text));
-  }, [csvData, manualData, uploadTab, showUpload]);
-
-  const handleCreate = async () => {
-    if (!tenantId || !form.name.trim()) { toast.error("Segment name required"); return; }
-    setSaving(true);
-    const { count } = await supabase.from("customers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId);
-    const { error } = await supabase.from("contact_segments").insert({
-      tenant_id: tenantId,
-      name: form.name.trim(),
-      description: form.description,
-      filter_criteria: { type: form.filter_type },
-      customer_count: count || 0,
-    } as any);
-    setSaving(false);
-    if (error) { toast.error("Failed to create segment"); return; }
-    toast.success("Segment created");
-    setShowCreate(false);
-    setForm({ name: "", description: "", filter_type: "all" });
-    fetchSegments();
+  const resetCreate = () => {
+    setForm({ name: "", description: "" });
+    setCsvData("");
+    setPasteData("");
+    setContacts([]);
+    setTab("manual");
   };
 
-  const handleUpload = async () => {
-    if (!tenantId) return;
-    if (!preview || preview.valid.length === 0) {
-      toast.error("No valid contacts to upload");
-      return;
-    }
-    setSaving(true);
-
-    // De-dupe against existing customers in the tenant
-    const phones = preview.valid.map((c) => c.phone);
-    const { data: existing } = await supabase
-      .from("customers")
-      .select("phone")
-      .eq("tenant_id", tenantId)
-      .in("phone", phones);
-    const existingSet = new Set((existing || []).map((e: any) => e.phone));
-    const fresh = preview.valid.filter((c) => !existingSet.has(c.phone));
-    const dbDuplicates = preview.valid.length - fresh.length;
-
-    if (fresh.length === 0) {
-      setSaving(false);
-      toast.info(`All ${preview.valid.length} contacts already exist`);
-      return;
-    }
-
-    const { error } = await supabase.from("customers").insert(
-      fresh.map((c) => ({ tenant_id: tenantId, name: c.name, phone: c.phone, email: c.email })),
-    );
-    setSaving(false);
-    if (error) { toast.error("Upload failed: " + error.message); return; }
-    toast.success(
-      `${fresh.length} contacts added` +
-        (dbDuplicates ? ` · ${dbDuplicates} already existed` : ""),
-    );
-    setShowUpload(false);
+  const addFromCsv = () => {
+    if (!csvData.trim()) { toast.error("Paste CSV text first"); return; }
+    const rows = parseCsvText(csvData);
+    const { merged, added, invalid, duplicates } = mergeContacts(contacts, rows);
+    setContacts(merged);
     setCsvData("");
-    setManualData("");
-    setPreview(null);
+    toast.success(
+      `${added} added` +
+        (invalid ? ` · ${invalid} invalid` : "") +
+        (duplicates ? ` · ${duplicates} duplicates` : ""),
+    );
+  };
+
+  const addFromPaste = () => {
+    if (!pasteData.trim()) { toast.error("Paste contacts first"); return; }
+    const rows = parsePastedText(pasteData);
+    const { merged, added, invalid, duplicates } = mergeContacts(contacts, rows);
+    setContacts(merged);
+    setPasteData("");
+    toast.success(
+      `${added} added` +
+        (invalid ? ` · ${invalid} invalid` : "") +
+        (duplicates ? ` · ${duplicates} duplicates` : ""),
+    );
+  };
+
+  const removeContact = (id: string) =>
+    setContacts((prev) => prev.filter((c) => c.id !== id));
+
+  const totalSize = contacts.length;
+
+  const handleSaveSegment = async () => {
+    if (!tenantId) return;
+    if (!form.name.trim()) { toast.error("Segment title is required"); return; }
+    if (contacts.length === 0) { toast.error("Add at least one contact"); return; }
+
+    setSaving(true);
+    // 1. Create the segment scoped to this tenant
+    const { data: seg, error: segErr } = await supabase
+      .from("contact_segments")
+      .insert({
+        tenant_id: tenantId,
+        name: form.name.trim(),
+        description: form.description.trim() || null,
+        filter_criteria: { type: "manual_upload" },
+        customer_count: contacts.length,
+      } as any)
+      .select("id")
+      .single();
+
+    if (segErr || !seg) {
+      setSaving(false);
+      toast.error("Failed to save segment: " + (segErr?.message || "unknown error"));
+      return;
+    }
+
+    // 2. Write parsed rows into audience_contacts (tenant-isolated)
+    const rows = contacts.map((c) => ({
+      tenant_id: tenantId,
+      segment_id: seg.id,
+      name: c.name,
+      phone: c.phone,
+      email: c.email,
+    }));
+    const { error: rowsErr } = await supabase.from("audience_contacts").insert(rows);
+    setSaving(false);
+    if (rowsErr) {
+      toast.error("Saved segment but failed to save contacts: " + rowsErr.message);
+      return;
+    }
+
+    toast.success(`Segment "${form.name.trim()}" saved with ${contacts.length} contacts`);
+    resetCreate();
+    setShowCreate(false);
     fetchSegments();
   };
 
@@ -175,18 +210,15 @@ export default function ContactSegments() {
     fetchSegments();
   };
 
+  const tableRows = useMemo(() => contacts.slice(0, 200), [contacts]);
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-semibold text-foreground">Audience Segments</h3>
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => setShowUpload(true)}>
-            <Upload className="w-4 h-4" /> Upload Contacts
-          </Button>
-          <Button size="sm" onClick={() => setShowCreate(true)}>
-            <Plus className="w-4 h-4" /> New Segment
-          </Button>
-        </div>
+        <Button size="sm" onClick={() => setShowCreate(true)}>
+          <Plus className="w-4 h-4" /> New Segment
+        </Button>
       </div>
 
       {loading ? (
@@ -204,7 +236,9 @@ export default function ContactSegments() {
                 <div>
                   <h4 className="font-medium text-foreground">{s.name}</h4>
                   {s.description && <p className="text-sm text-muted-foreground">{s.description}</p>}
-                  <p className="text-lg font-bold text-primary mt-2">{s.customer_count} <span className="text-xs font-normal text-muted-foreground">contacts</span></p>
+                  <p className="text-lg font-bold text-primary mt-2">
+                    {s.customer_count} <span className="text-xs font-normal text-muted-foreground">contacts</span>
+                  </p>
                 </div>
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(s.id)}>
                   <Trash2 className="w-4 h-4" />
@@ -215,96 +249,134 @@ export default function ContactSegments() {
         </div>
       )}
 
-      {/* Create Segment Dialog */}
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent>
+      {/* Create Segment Dialog (unified) */}
+      <Dialog open={showCreate} onOpenChange={(o) => { setShowCreate(o); if (!o) resetCreate(); }}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Create Segment</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Label>Segment Name</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. SUV Owners" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <Label>Segment Title</Label>
+                <Input
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="e.g. SUV Owners — May Campaign"
+                  maxLength={120}
+                />
+              </div>
+              <div>
+                <Label>Description (optional)</Label>
+                <Input
+                  value={form.description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  placeholder="Short note for your team"
+                  maxLength={300}
+                />
+              </div>
             </div>
-            <div>
-              <Label>Description</Label>
-              <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Customers who own SUVs" />
+
+            {/* Summary card */}
+            <div className="rounded-lg border border-border bg-primary/5 px-4 py-3 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Segment Audience Size</p>
+                <p className="text-2xl font-bold text-primary">{totalSize} <span className="text-sm font-normal text-muted-foreground">Contacts</span></p>
+              </div>
+              {totalSize > 0 && (
+                <Button variant="ghost" size="sm" onClick={() => setContacts([])}>
+                  Clear all
+                </Button>
+              )}
             </div>
-            <div>
-              <Label>Filter</Label>
-              <Select value={form.filter_type} onValueChange={(v) => setForm({ ...form, filter_type: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Customers</SelectItem>
-                  <SelectItem value="service_due">Service Due</SelectItem>
-                  <SelectItem value="recent_leads">Recent Leads</SelectItem>
-                  <SelectItem value="test_drive">Test Drive Completed</SelectItem>
-                  <SelectItem value="inactive">Inactive (30+ days)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button onClick={handleCreate} disabled={saving} className="w-full">
-              {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />} Create Segment
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
-      {/* Upload Contacts Dialog */}
-      <Dialog open={showUpload} onOpenChange={(o) => { setShowUpload(o); if (!o) { setCsvData(""); setManualData(""); setPreview(null); } }}>
-        <DialogContent className="sm:max-w-xl">
-          <DialogHeader><DialogTitle>Upload Contacts</DialogTitle></DialogHeader>
-          <Tabs value={uploadTab} onValueChange={(v) => setUploadTab(v as "csv" | "manual")} className="space-y-4">
-            <TabsList className="grid grid-cols-2 w-full">
-              <TabsTrigger value="csv"><FileText className="w-4 h-4 mr-1" /> Upload CSV</TabsTrigger>
-              <TabsTrigger value="manual"><Hash className="w-4 h-4 mr-1" /> Manual Paste</TabsTrigger>
-            </TabsList>
+            <Tabs value={tab} onValueChange={(v) => setTab(v as "csv" | "manual")} className="space-y-3">
+              <TabsList className="grid grid-cols-2 w-full">
+                <TabsTrigger value="manual"><Hash className="w-4 h-4 mr-1" /> Copy / Paste</TabsTrigger>
+                <TabsTrigger value="csv"><FileText className="w-4 h-4 mr-1" /> CSV</TabsTrigger>
+              </TabsList>
 
-            <TabsContent value="csv" className="space-y-2">
-              <p className="text-sm text-muted-foreground">
-                Paste CSV with headers: <code className="bg-muted px-1 rounded">name,phone,email</code>
-              </p>
-              <textarea
-                className="w-full h-40 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
-                value={csvData}
-                onChange={(e) => setCsvData(e.target.value)}
-                placeholder={`name,phone,email\nAhmed Ali,9876543210,ahmed@example.com\nSara Khan,+91 98234 56789,sara@example.com`}
-              />
-            </TabsContent>
+              <TabsContent value="manual" className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Paste phone numbers separated by spaces, commas, semicolons, or newlines.
+                  10-digit numbers automatically get the <code className="bg-muted px-1 rounded">91</code> prefix.
+                </p>
+                <textarea
+                  className="w-full h-32 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+                  value={pasteData}
+                  onChange={(e) => setPasteData(e.target.value)}
+                  placeholder={`9876543210 +91 98234-56789, 91 87654 32109\n9123456780`}
+                />
+                <Button type="button" size="sm" onClick={addFromPaste} disabled={!pasteData.trim()}>
+                  Add to Segment
+                </Button>
+              </TabsContent>
 
-            <TabsContent value="manual" className="space-y-2">
-              <p className="text-sm text-muted-foreground">
-                Paste or type phone numbers — one per line, or separated by commas/semicolons. Numbers are auto-cleaned and 10-digit numbers get a <code className="bg-muted px-1 rounded">91</code> prefix.
-              </p>
-              <textarea
-                className="w-full h-40 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
-                value={manualData}
-                onChange={(e) => setManualData(e.target.value)}
-                placeholder={`9876543210\n+91 98234-56789\n91 87654 32109, 9123456780`}
-              />
-            </TabsContent>
+              <TabsContent value="csv" className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Paste CSV with headers: <code className="bg-muted px-1 rounded">name,phone,email</code>
+                </p>
+                <textarea
+                  className="w-full h-32 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+                  value={csvData}
+                  onChange={(e) => setCsvData(e.target.value)}
+                  placeholder={`name,phone,email\nAhmed Ali,9876543210,ahmed@example.com\nSara Khan,+91 98234 56789,sara@example.com`}
+                />
+                <Button type="button" size="sm" onClick={addFromCsv} disabled={!csvData.trim()}>
+                  Add to Segment
+                </Button>
+              </TabsContent>
+            </Tabs>
 
-            {preview && (
-              <div className="rounded-lg border border-border bg-muted/30 p-3 grid grid-cols-3 gap-2 text-center">
-                <div>
-                  <p className="text-xs text-muted-foreground">Total</p>
-                  <p className="text-lg font-bold text-foreground">{preview.total}</p>
+            {/* Contacts table */}
+            {contacts.length > 0 && (
+              <div className="rounded-lg border border-border overflow-hidden">
+                <div className="max-h-72 overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50 sticky top-0">
+                      <tr className="text-left text-xs text-muted-foreground">
+                        <th className="px-3 py-2 w-12">#</th>
+                        <th className="px-3 py-2">Contact Name</th>
+                        <th className="px-3 py-2">Phone Number</th>
+                        <th className="px-3 py-2 w-12"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tableRows.map((c, idx) => (
+                        <tr key={c.id} className="border-t border-border/60 hover:bg-muted/30">
+                          <td className="px-3 py-2 text-muted-foreground">{idx + 1}</td>
+                          <td className="px-3 py-2 text-foreground">{c.name}</td>
+                          <td className="px-3 py-2 font-mono text-xs">{c.phone}</td>
+                          <td className="px-3 py-2 text-right">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-destructive"
+                              onClick={() => removeContact(c.id)}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Valid</p>
-                  <p className="text-lg font-bold text-success">{preview.valid.length}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Removed</p>
-                  <p className="text-lg font-bold text-destructive">{preview.invalid + preview.duplicates}</p>
-                  <p className="text-[10px] text-muted-foreground">{preview.invalid} invalid · {preview.duplicates} dupes</p>
-                </div>
+                {contacts.length > tableRows.length && (
+                  <p className="text-xs text-muted-foreground px-3 py-2 border-t border-border/60 bg-muted/20">
+                    Showing first {tableRows.length} of {contacts.length} contacts
+                  </p>
+                )}
               </div>
             )}
 
-            <Button onClick={handleUpload} disabled={saving || !preview || preview.valid.length === 0} className="w-full">
+            <Button
+              onClick={handleSaveSegment}
+              disabled={saving || !form.name.trim() || contacts.length === 0}
+              className="w-full"
+            >
               {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-              Upload {preview?.valid.length || 0} Contacts
+              Save Segment ({totalSize} contacts)
             </Button>
-          </Tabs>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
