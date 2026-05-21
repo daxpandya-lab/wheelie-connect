@@ -39,6 +39,16 @@ export default function ProtectedRoute({ requiredRoles, children }: ProtectedRou
   }
 
   if (requiredRoles && requiredRoles.length > 0) {
+    // Roles are fetched asynchronously after auth resolves. Show a loader
+    // while they are still empty so we don't bounce the user to "/" on a
+    // protected route refresh/deep-link.
+    if (roles.length === 0) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-background">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      );
+    }
     const hasRequired = requiredRoles.some((r) => roles.includes(r));
     if (!hasRequired) return <Navigate to="/" replace />;
   }
