@@ -142,11 +142,16 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
       toast.error("Unsupported file type. Allowed: JPG, PNG, MP4, PDF, DOCX.");
       return;
     }
+    if (expectedMediaKind && kind !== expectedMediaKind) {
+      toast.error(`This template expects a ${expectedMediaKind} header.`);
+      return;
+    }
     const limit = MEDIA_LIMITS[kind];
     if (file.size > limit.maxMB * 1024 * 1024) {
       toast.error(`File exceeds ${limit.maxMB}MB limit for ${kind}.`);
       return;
     }
+
     setUploadingMedia(true);
     const safeName = file.name.replace(/[^\w.\-]+/g, "_");
     const path = `${tenantId}/${Date.now()}-${safeName}`;
