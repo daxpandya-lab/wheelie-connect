@@ -186,7 +186,10 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
       carouselCards.forEach((c) => { next[String(c.index)] = { variable_key: "", image_url: "" }; });
       setCarouselMap(next);
     }
+    // Reset media when template changes (kind may no longer match)
+    setMedia(null);
   }, [form.template_id]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   const handleCreate = async () => {
     if (!tenantId || !form.name.trim()) {
