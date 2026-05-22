@@ -119,10 +119,21 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
     () => (selectedTemplate ? extractCarouselCards(selectedTemplate.components) : []),
     [selectedTemplate],
   );
+  const headerFormat = useMemo(
+    () => (selectedTemplate ? detectHeaderFormat(selectedTemplate.components) : "NONE"),
+    [selectedTemplate],
+  );
+  const expectedMediaKind: MediaKind | null = useMemo(() => {
+    if (headerFormat === "IMAGE") return "image";
+    if (headerFormat === "VIDEO") return "video";
+    if (headerFormat === "DOCUMENT") return "document";
+    return null;
+  }, [headerFormat]);
   // carouselMap: { "0": { variable_key: "vehicle_model", image_url: "https://..." } }
   const [carouselMap, setCarouselMap] = useState<Record<string, { variable_key: string; image_url: string }>>({});
   const [media, setMedia] = useState<{ url: string; type: MediaKind; filename: string } | null>(null);
   const [uploadingMedia, setUploadingMedia] = useState(false);
+
 
   const handleMediaUpload = async (file: File | null) => {
     if (!file || !tenantId) return;
