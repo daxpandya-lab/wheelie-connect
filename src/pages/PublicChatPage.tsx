@@ -1630,12 +1630,14 @@ export default function PublicChatPage() {
             id: `bot-rc-${Date.now()}`,
             sender: "bot",
             text: greet,
+            nodeId: currentNode.id,
             options: [
               { label: `🚗 Book for same vehicle: ${rc.vehicle_model}${regPart}`, value: "__rc_same__" },
               { label: "➕ Book for a different vehicle", value: "__rc_diff__" },
             ],
           },
         ]);
+
       })();
       return;
     }
