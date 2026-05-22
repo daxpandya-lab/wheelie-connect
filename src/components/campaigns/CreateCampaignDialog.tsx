@@ -63,6 +63,18 @@ function extractCarouselCards(components: any): { index: number; variables: stri
   }));
 }
 
+/** Detect the template's HEADER format (IMAGE|VIDEO|DOCUMENT|TEXT|NONE). */
+function detectHeaderFormat(components: any): "IMAGE" | "VIDEO" | "DOCUMENT" | "TEXT" | "NONE" {
+  if (!Array.isArray(components)) return "NONE";
+  const header = components.find((c: any) => (c?.type || "").toUpperCase() === "HEADER");
+  if (!header) return "NONE";
+  const fmt = String(header.format || "TEXT").toUpperCase();
+  if (fmt === "IMAGE" || fmt === "VIDEO" || fmt === "DOCUMENT" || fmt === "TEXT") return fmt as any;
+  return "NONE";
+}
+
+
+
 const VARIABLE_FIELDS = [
   { value: "name", label: "Contact name" },
   { value: "phone", label: "Phone number" },
@@ -107,10 +119,21 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
     () => (selectedTemplate ? extractCarouselCards(selectedTemplate.components) : []),
     [selectedTemplate],
   );
+  const headerFormat = useMemo(
+    () => (selectedTemplate ? detectHeaderFormat(selectedTemplate.components) : "NONE"),
+    [selectedTemplate],
+  );
+  const expectedMediaKind: MediaKind | null = useMemo(() => {
+    if (headerFormat === "IMAGE") return "image";
+    if (headerFormat === "VIDEO") return "video";
+    if (headerFormat === "DOCUMENT") return "document";
+    return null;
+  }, [headerFormat]);
   // carouselMap: { "0": { variable_key: "vehicle_model", image_url: "https://..." } }
   const [carouselMap, setCarouselMap] = useState<Record<string, { variable_key: string; image_url: string }>>({});
   const [media, setMedia] = useState<{ url: string; type: MediaKind; filename: string } | null>(null);
   const [uploadingMedia, setUploadingMedia] = useState(false);
+
 
   const handleMediaUpload = async (file: File | null) => {
     if (!file || !tenantId) return;
@@ -119,11 +142,16 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
       toast.error("Unsupported file type. Allowed: JPG, PNG, MP4, PDF, DOCX.");
       return;
     }
+    if (expectedMediaKind && kind !== expectedMediaKind) {
+      toast.error(`This template expects a ${expectedMediaKind} header.`);
+      return;
+    }
     const limit = MEDIA_LIMITS[kind];
     if (file.size > limit.maxMB * 1024 * 1024) {
       toast.error(`File exceeds ${limit.maxMB}MB limit for ${kind}.`);
       return;
     }
+
     setUploadingMedia(true);
     const safeName = file.name.replace(/[^\w.\-]+/g, "_");
     const path = `${tenantId}/${Date.now()}-${safeName}`;
@@ -158,7 +186,10 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
       carouselCards.forEach((c) => { next[String(c.index)] = { variable_key: "", image_url: "" }; });
       setCarouselMap(next);
     }
+    // Reset media when template changes (kind may no longer match)
+    setMedia(null);
   }, [form.template_id]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   const handleCreate = async () => {
     if (!tenantId || !form.name.trim()) {
@@ -323,6 +354,62 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
             </div>
           )}
 
+          {/* Context-aware HEADER media uploader — only when the selected template requires media */}
+          {expectedMediaKind && (
+            <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
+              <Label className="text-xs font-medium flex items-center gap-1">
+                <Info className="w-3.5 h-3.5 text-primary" />
+                {expectedMediaKind === "image" && "Header image (required by template)"}
+                {expectedMediaKind === "video" && "Header video (required by template)"}
+                {expectedMediaKind === "document" && "Header document (required by template)"}
+              </Label>
+              {media && media.type === expectedMediaKind ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3 rounded-md border border-border bg-background p-2">
+                    {media.type === "image" ? <ImageIcon className="w-5 h-5 text-primary" /> :
+                      media.type === "video" ? <VideoIcon className="w-5 h-5 text-primary" /> :
+                      <FileText className="w-5 h-5 text-primary" />}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-foreground truncate">{media.filename}</p>
+                      <p className="text-[11px] text-muted-foreground capitalize">{media.type} · uploaded</p>
+                    </div>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setMedia(null)}>
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  {media.type === "image" && (
+                    <img src={media.url} alt="preview" className="max-h-32 rounded-md border border-border object-contain bg-background" />
+                  )}
+                  {media.type === "video" && (
+                    <video src={media.url} controls className="max-h-32 rounded-md border border-border bg-background" />
+                  )}
+                </div>
+              ) : (
+                <label className="flex flex-col items-center justify-center gap-1.5 rounded-md border-2 border-dashed border-border bg-background p-3 cursor-pointer hover:bg-muted/40 transition-colors">
+                  {uploadingMedia ? (
+                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                  ) : (
+                    <Upload className="w-5 h-5 text-muted-foreground" />
+                  )}
+                  <p className="text-[11px] text-muted-foreground text-center">
+                    {expectedMediaKind === "image" && "Upload JPG / PNG (max 5MB)"}
+                    {expectedMediaKind === "video" && "Upload MP4 (max 15MB)"}
+                    {expectedMediaKind === "document" && "Upload PDF / DOCX (max 10MB)"}
+                  </p>
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept={MEDIA_LIMITS[expectedMediaKind].mimes.join(",")}
+                    disabled={uploadingMedia}
+                    onChange={(e) => { handleMediaUpload(e.target.files?.[0] ?? null); e.target.value = ""; }}
+                  />
+                </label>
+              )}
+            </div>
+          )}
+
+
+
           {/* Carousel cards mapping */}
           {carouselCards.length > 0 && (
             <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-3">
@@ -377,46 +464,7 @@ export default function CreateCampaignDialog({ open, onOpenChange, onCreated }: 
             </div>
           )}
 
-          {/* Media upload zone */}
-          <div className="space-y-2">
-            <Label>Media Attachment (optional)</Label>
-            {media ? (
-              <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-3">
-                {media.type === "image" ? <ImageIcon className="w-5 h-5 text-primary" /> :
-                  media.type === "video" ? <VideoIcon className="w-5 h-5 text-primary" /> :
-                  <FileText className="w-5 h-5 text-primary" />}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{media.filename}</p>
-                  <p className="text-xs text-muted-foreground capitalize">{media.type} · uploaded</p>
-                </div>
-                <Button type="button" variant="ghost" size="sm" onClick={() => setMedia(null)}>
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-            ) : (
-              <label className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border bg-muted/20 p-4 cursor-pointer hover:bg-muted/40 transition-colors">
-                {uploadingMedia ? (
-                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                ) : (
-                  <Upload className="w-5 h-5 text-muted-foreground" />
-                )}
-                <p className="text-xs text-muted-foreground text-center">
-                  Click to upload — Images (JPG/PNG, 5MB) · Videos (MP4, 15MB) · Documents (PDF/DOCX, 10MB)
-                </p>
-                <input
-                  type="file"
-                  className="hidden"
-                  accept={[
-                    ...MEDIA_LIMITS.image.mimes,
-                    ...MEDIA_LIMITS.video.mimes,
-                    ...MEDIA_LIMITS.document.mimes,
-                  ].join(",")}
-                  disabled={uploadingMedia}
-                  onChange={(e) => { handleMediaUpload(e.target.files?.[0] ?? null); e.target.value = ""; }}
-                />
-              </label>
-            )}
-          </div>
+
 
 
 
