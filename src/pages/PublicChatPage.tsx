@@ -1600,7 +1600,48 @@ export default function PublicChatPage() {
     } else nextNodeId = currentNode.nextNodeId;
 
     if (!nextNodeId) return;
+
+    // ---------- Returning-customer recognition hook ----------
+    // When the user just answered the phone-number field, look them up in
+    // service_bookings (scoped to this tenant). If matched, pause the flow
+    // and show a personalized greeting with quick-reply chips instead of
+    // auto-advancing into the vehicle intake wizard.
+    if (currentNode.dataField === "phone_number") {
+      const phoneVal = String(newData.phone_number || canonical || "").trim();
+      (async () => {
+        const rc = await fetchReturningCustomer(phoneVal);
+        if (!rc) {
+          setTimeout(() => advanceTo(nextNodeId!, newData), 500);
+          return;
+        }
+        returningCustomerRef.current = rc;
+        const predicted = predictCurrentKms(rc);
+        const regPart = rc.registration ? ` (${rc.registration})` : "";
+        const greet =
+          `👋 Welcome back, ${rc.name || "friend"}! Great to see you again. ` +
+          `Hope your vehicle is running smoothly!` +
+          (predicted != null && rc.last_kms != null
+            ? `\n\n📊 Based on your last visit at ${rc.last_kms} KMs, we estimate you're now near ~${predicted.toLocaleString()} KMs. ` +
+              `Your next Periodic Maintenance Interval may be approaching — let's secure your spot!`
+            : "");
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `bot-rc-${Date.now()}`,
+            sender: "bot",
+            text: greet,
+            options: [
+              { label: `🚗 Book for same vehicle: ${rc.vehicle_model}${regPart}`, value: "__rc_same__" },
+              { label: "➕ Book for a different vehicle", value: "__rc_diff__" },
+            ],
+          },
+        ]);
+      })();
+      return;
+    }
+
     setTimeout(() => advanceTo(nextNodeId!, newData), 500);
+
   };
 
   const submitMultiSelect = () => {
