@@ -1291,10 +1291,190 @@ export default function PublicChatPage() {
     }
   };
 
+  // ---------- Returning customer recognition ----------
+  // Looks up the most recent service_bookings row for (tenant + phone) and
+  // returns a compact memory record. STRICTLY scoped by dealer.id so it
+  // works out-of-the-box for every current and future tenant.
+  type ReturningCustomer = {
+    name: string;
+    vehicle_model: string;
+    registration: string | null;
+    last_kms: number | null;
+    last_date: string;
+    service_type: string | null;
+    status: string;
+    notes: string | null;
+  };
+  const fetchReturningCustomer = useCallback(
+    async (phone: string): Promise<ReturningCustomer | null> => {
+      if (!dealer || !phone) return null;
+      const digits = phone.replace(/\D+/g, "");
+      if (digits.length < 8) return null;
+      const { data: row } = await supabase
+        .from("service_bookings")
+        .select("customer_name, vehicle_model, vehicle_id, kms_driven, booking_date, service_type, status, work_notes, executive_notes, issue_description")
+        .eq("tenant_id", dealer.id)
+        .eq("phone_number", phone)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!row) return null;
+      let registration: string | null = null;
+      if (row.vehicle_id) {
+        const { data: veh } = await supabase
+          .from("vehicles")
+          .select("license_plate")
+          .eq("tenant_id", dealer.id)
+          .eq("id", row.vehicle_id)
+          .maybeSingle();
+        registration = veh?.license_plate ?? null;
+      }
+      return {
+        name: row.customer_name || "",
+        vehicle_model: row.vehicle_model || "",
+        registration,
+        last_kms: row.kms_driven ?? null,
+        last_date: row.booking_date || "",
+        service_type: row.service_type || null,
+        status: row.status || "pending",
+        notes: row.work_notes || row.executive_notes || row.issue_description || null,
+      };
+    },
+    [dealer],
+  );
+
+  // Find the first node in the flow that is a date input — used to skip the
+  // vehicle intake wizard for returning customers booking the same vehicle.
+  const findFirstDateNodeId = useCallback((): string | null => {
+    if (!flow) return null;
+    const n = flow.nodes.find(
+      (x) => x.type === "date_buttons" || x.validationType === "date",
+    );
+    return n ? n.id : null;
+  }, [flow]);
+
+  // Build a friendly "last service" summary card.
+  const formatHistorySummary = (rc: ReturningCustomer): string => {
+    const dateStr = rc.last_date
+      ? new Date(rc.last_date + "T00:00:00").toLocaleDateString(
+          language === "hi" ? "hi-IN" : language === "ar" ? "ar-EG" : "en-IN",
+          { day: "numeric", month: "short", year: "numeric" },
+        )
+      : "—";
+    const reg = rc.registration ? ` (${rc.registration})` : "";
+    return [
+      `📅 Your Last Service Summary (${dateStr}):`,
+      `• Vehicle: ${rc.vehicle_model}${reg}`,
+      `• Service Type: ${rc.service_type || "—"}`,
+      `• Odometer: ${rc.last_kms ?? "—"} KMs`,
+      `• Status: ${rc.status === "completed" ? "Completed" : rc.status}`,
+      `• Advisor Notes: ${rc.notes || "—"}`,
+    ].join("\n");
+  };
+
+  const formatTrackingSummary = (rc: ReturningCustomer): string => {
+    const reg = rc.registration || rc.vehicle_model || "your vehicle";
+    const stageMap: Record<string, string> = {
+      pending: "Reception / Pending",
+      estimation_sent: "Estimate Sent — Awaiting Approval",
+      confirmed: "Confirmed — Queued for Work",
+      in_progress: "Workshop / In Progress",
+      ready_for_pickup: "Quality Check — Ready for Pickup",
+      completed: "Completed",
+      cancelled: "Cancelled",
+    };
+    const stage = stageMap[rc.status] || rc.status;
+    return `🛠️ Your vehicle ${reg} is currently in the [${stage}] stage. Expected drop-off completion guidelines apply.`;
+  };
+
+  // Predict current odometer using a regional average of 35 KMs/day.
+  const predictCurrentKms = (rc: ReturningCustomer): number | null => {
+    if (rc.last_kms == null || !rc.last_date) return null;
+    const last = new Date(rc.last_date + "T00:00:00").getTime();
+    if (Number.isNaN(last)) return null;
+    const days = Math.max(0, Math.floor((Date.now() - last) / 86_400_000));
+    return rc.last_kms + days * 35;
+  };
+
+  // Cached returning-customer record so quick-reply chips can use it without re-querying.
+  const returningCustomerRef = useRef<ReturningCustomer | null>(null);
+
   const processAnswer = (answer: string, displayLabel?: string) => {
     if (!flow || !currentNodeId || isComplete) return;
     const currentNode = flow.nodes.find((n) => n.id === currentNodeId);
     if (!currentNode) return;
+
+    // ---------- Natural-language intents: history / tracking ----------
+    // These are answered inline without disturbing the active flow node.
+    const lower = answer.trim().toLowerCase();
+    const wantsHistory =
+      /^\/?(history|past\s*service|service\s*history)$/.test(lower) ||
+      lower.includes("past service history") ||
+      lower.includes("view past service");
+    const wantsTrack =
+      /^\/?(track|status)$/.test(lower) ||
+      lower.includes("track my car") ||
+      lower.includes("track my vehicle");
+    if (wantsHistory || wantsTrack) {
+      const phone = String(collectedData.phone_number || "").trim();
+      setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? answer }]);
+      (async () => {
+        const rc = phone ? await fetchReturningCustomer(phone) : null;
+        const text = !rc
+          ? "I couldn't find any past bookings linked to your phone number. Please complete a booking first."
+          : wantsHistory
+          ? formatHistorySummary(rc)
+          : formatTrackingSummary(rc);
+        setMessages((prev) => [
+          ...prev,
+          { id: `bot-intent-${Date.now()}`, sender: "bot", text },
+        ]);
+      })();
+      return;
+    }
+
+    // ---------- Returning-customer quick-reply chips ----------
+    if (answer === "__rc_same__" && returningCustomerRef.current) {
+      const rc = returningCustomerRef.current;
+      const dateNodeId = findFirstDateNodeId();
+      setMessages((prev) => [
+        ...prev,
+        { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? `Same vehicle: ${rc.vehicle_model}` },
+      ]);
+      const newData: ChatbotCollectedData = {
+        ...collectedData,
+        customer_name: rc.name || collectedData.customer_name,
+        vehicle_model: rc.vehicle_model,
+      };
+      if (rc.last_kms != null) {
+        const predicted = predictCurrentKms(rc);
+        newData.kms_driven = predicted ?? rc.last_kms;
+      }
+      if (rc.registration) {
+        (newData as Record<string, unknown>).vehicle_registration = rc.registration;
+        (newData as Record<string, unknown>).registration_number = rc.registration;
+      }
+      setCollectedData(newData);
+      if (dateNodeId) {
+        setTimeout(() => advanceTo(dateNodeId, newData), 400);
+      } else if (currentNode.nextNodeId) {
+        setTimeout(() => advanceTo(currentNode.nextNodeId!, newData), 400);
+      }
+      return;
+    }
+    if (answer === "__rc_diff__") {
+      setMessages((prev) => [
+        ...prev,
+        { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? "Book for a different vehicle" },
+      ]);
+      returningCustomerRef.current = null;
+      if (currentNode.nextNodeId) {
+        setTimeout(() => advanceTo(currentNode.nextNodeId!, collectedData), 400);
+      }
+      return;
+    }
+
+
 
     // Per-node validation (with fuzzy matching for option typos)
     const result = validateAnswer(currentNode, answer);
@@ -1420,7 +1600,50 @@ export default function PublicChatPage() {
     } else nextNodeId = currentNode.nextNodeId;
 
     if (!nextNodeId) return;
+
+    // ---------- Returning-customer recognition hook ----------
+    // When the user just answered the phone-number field, look them up in
+    // service_bookings (scoped to this tenant). If matched, pause the flow
+    // and show a personalized greeting with quick-reply chips instead of
+    // auto-advancing into the vehicle intake wizard.
+    if (currentNode.dataField === "phone_number") {
+      const phoneVal = String(newData.phone_number || canonical || "").trim();
+      (async () => {
+        const rc = await fetchReturningCustomer(phoneVal);
+        if (!rc) {
+          setTimeout(() => advanceTo(nextNodeId!, newData), 500);
+          return;
+        }
+        returningCustomerRef.current = rc;
+        const predicted = predictCurrentKms(rc);
+        const regPart = rc.registration ? ` (${rc.registration})` : "";
+        const greet =
+          `👋 Welcome back, ${rc.name || "friend"}! Great to see you again. ` +
+          `Hope your vehicle is running smoothly!` +
+          (predicted != null && rc.last_kms != null
+            ? `\n\n📊 Based on your last visit at ${rc.last_kms} KMs, we estimate you're now near ~${predicted.toLocaleString()} KMs. ` +
+              `Your next Periodic Maintenance Interval may be approaching — let's secure your spot!`
+            : "");
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `bot-rc-${Date.now()}`,
+            sender: "bot",
+            text: greet,
+            nodeId: currentNode.id,
+            options: [
+              { label: `🚗 Book for same vehicle: ${rc.vehicle_model}${regPart}`, value: "__rc_same__" },
+              { label: "➕ Book for a different vehicle", value: "__rc_diff__" },
+            ],
+          },
+        ]);
+
+      })();
+      return;
+    }
+
     setTimeout(() => advanceTo(nextNodeId!, newData), 500);
+
   };
 
   const submitMultiSelect = () => {
