@@ -63,6 +63,18 @@ function extractCarouselCards(components: any): { index: number; variables: stri
   }));
 }
 
+/** Detect the template's HEADER format (IMAGE|VIDEO|DOCUMENT|TEXT|NONE). */
+function detectHeaderFormat(components: any): "IMAGE" | "VIDEO" | "DOCUMENT" | "TEXT" | "NONE" {
+  if (!Array.isArray(components)) return "NONE";
+  const header = components.find((c: any) => (c?.type || "").toUpperCase() === "HEADER");
+  if (!header) return "NONE";
+  const fmt = String(header.format || "TEXT").toUpperCase();
+  if (fmt === "IMAGE" || fmt === "VIDEO" || fmt === "DOCUMENT" || fmt === "TEXT") return fmt as any;
+  return "NONE";
+}
+
+
+
 const VARIABLE_FIELDS = [
   { value: "name", label: "Contact name" },
   { value: "phone", label: "Phone number" },
