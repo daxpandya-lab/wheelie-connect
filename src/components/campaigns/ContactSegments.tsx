@@ -222,7 +222,13 @@ export default function ContactSegments() {
     fetchSegments();
   };
 
-  const tableRows = useMemo(() => contacts.slice(0, 200), [contacts]);
+  const totalPages = Math.max(1, Math.ceil(contacts.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * PAGE_SIZE;
+  const tableRows = useMemo(
+    () => contacts.slice(pageStart, pageStart + PAGE_SIZE),
+    [contacts, pageStart],
+  );
 
   return (
     <div className="space-y-4">
