@@ -123,7 +123,7 @@ export default function PublicChatPage() {
 
   const [dealer, setDealer] = useState<DealerInfo | null>(null);
   const [flow, setFlow] = useState<FlowData | null>(null);
-  const [, setFlowId] = useState<string | null>(null);
+  const [flowId, setFlowId] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [language, setLanguage] = useState<string>("en");
   const [loading, setLoading] = useState(true);
