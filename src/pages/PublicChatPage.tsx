@@ -1968,9 +1968,11 @@ export default function PublicChatPage() {
               <div>
                 <div
                   className={`px-3 py-2 rounded-2xl text-sm whitespace-pre-line ${
-                    msg.sender === "user"
-                      ? "bg-primary text-primary-foreground rounded-br-md"
-                      : "bg-muted text-foreground rounded-bl-md"
+                    msg.kind === "confirmation"
+                      ? "bg-green-500/15 text-green-800 dark:text-green-200 border border-green-500/40 rounded-xl font-medium leading-relaxed shadow-sm"
+                      : msg.sender === "user"
+                        ? "bg-primary text-primary-foreground rounded-br-md"
+                        : "bg-muted text-foreground rounded-bl-md"
                   }`}
                 >
                   {msg.text}
