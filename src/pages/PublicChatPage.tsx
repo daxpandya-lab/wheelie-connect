@@ -33,6 +33,7 @@ interface ChatMessage {
   // For bot messages: keep raw node ref so we can re-render on language change
   nodeId?: string;
   data?: ChatbotCollectedData;
+  kind?: "confirmation";
 }
 
 const VISITOR_KEY_PREFIX = "wheelie_chat_visitor_";
@@ -974,7 +975,7 @@ export default function PublicChatPage() {
           kms_driven: typeof data.kms_driven === "number" ? data.kms_driven : null,
           service_type: String(data.service_type || ""),
           booking_date: isoDate,
-          preferred_time: data.preferred_time ? String(data.preferred_time) : null,
+          preferred_time: data.preferred_time ? String(data.preferred_time) : "09:00:00",
           pickup_required: !!data.pickup_required,
           drop_required: !!data.drop_required,
           issue_description: data.issue_description ? String(data.issue_description) : null,
@@ -1005,7 +1006,7 @@ export default function PublicChatPage() {
           phone_number: String(data.phone_number || ""),
           vehicle_model: String(data.vehicle_model || "Unknown"),
           preferred_date: isoDate,
-          preferred_time: data.preferred_time ? String(data.preferred_time) : null,
+          preferred_time: data.preferred_time ? String(data.preferred_time) : "09:00:00",
           booking_source: "Web Bot",
           status: INITIAL_STATUS,
           metadata: { ...data, source_session_id: sessionId },
