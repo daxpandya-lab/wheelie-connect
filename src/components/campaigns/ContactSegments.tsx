@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { Plus, Users, Loader2, Trash2, FileText, Hash } from "lucide-react";
+import { Plus, Users, Loader2, Trash2, FileText, Hash, Upload, ChevronLeft, ChevronRight } from "lucide-react";
 
 /**
  * Clean a phone number string:
@@ -104,6 +104,9 @@ export default function ContactSegments() {
   const [csvData, setCsvData] = useState("");
   const [pasteData, setPasteData] = useState("");
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 25;
+  const csvFileRef = useRef<HTMLInputElement>(null);
 
   const fetchSegments = async () => {
     if (!tenantId) return;
@@ -125,32 +128,41 @@ export default function ContactSegments() {
     setPasteData("");
     setContacts([]);
     setTab("manual");
+    setPage(1);
+  };
+
+  const ingestRows = (rows: { name: string; phone: string; email: string | null }[], label: string) => {
+    const { merged, added, invalid, duplicates } = mergeContacts(contacts, rows);
+    setContacts(merged);
+    setPage(1);
+    toast.success(
+      `${label}: ${added} added` +
+        (invalid ? ` · ${invalid} invalid` : "") +
+        (duplicates ? ` · ${duplicates} duplicates` : ""),
+    );
   };
 
   const addFromCsv = () => {
     if (!csvData.trim()) { toast.error("Paste CSV text first"); return; }
-    const rows = parseCsvText(csvData);
-    const { merged, added, invalid, duplicates } = mergeContacts(contacts, rows);
-    setContacts(merged);
+    ingestRows(parseCsvText(csvData), "CSV");
     setCsvData("");
-    toast.success(
-      `${added} added` +
-        (invalid ? ` · ${invalid} invalid` : "") +
-        (duplicates ? ` · ${duplicates} duplicates` : ""),
-    );
   };
 
   const addFromPaste = () => {
     if (!pasteData.trim()) { toast.error("Paste contacts first"); return; }
-    const rows = parsePastedText(pasteData);
-    const { merged, added, invalid, duplicates } = mergeContacts(contacts, rows);
-    setContacts(merged);
+    ingestRows(parsePastedText(pasteData), "Pasted");
     setPasteData("");
-    toast.success(
-      `${added} added` +
-        (invalid ? ` · ${invalid} invalid` : "") +
-        (duplicates ? ` · ${duplicates} duplicates` : ""),
-    );
+  };
+
+  const handleCsvFile = async (file: File | null) => {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { toast.error("CSV file too large (max 5MB)"); return; }
+    try {
+      const text = await file.text();
+      ingestRows(parseCsvText(text), `CSV ${file.name}`);
+    } catch (e: any) {
+      toast.error("Could not read file: " + (e?.message || "unknown"));
+    }
   };
 
   const removeContact = (id: string) =>
