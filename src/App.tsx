@@ -14,6 +14,7 @@ import ServiceBookingsPage from "@/pages/ServiceBookingsPage";
 import TestDrivesPage from "@/pages/TestDrivesPage";
 import ConversationsPage from "@/pages/ConversationsPage";
 import CampaignsPage from "@/pages/CampaignsPage";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import AnalyticsPage from "@/pages/AnalyticsPage";
 import SettingsPage from "@/pages/SettingsPage";
 import SuperAdminPage from "@/pages/SuperAdminPage";
@@ -75,7 +76,9 @@ const App = () => (
                   <Route path="/conversations" element={<ConversationsPage />} />
                   <Route path="/campaigns" element={
                     <ProtectedRoute requiredRoles={["tenant_admin", "super_admin"]}>
-                      <CampaignsPage />
+                      <ErrorBoundary fallbackTitle="Campaigns failed to load">
+                        <CampaignsPage />
+                      </ErrorBoundary>
                     </ProtectedRoute>
                   } />
                   <Route path="/analytics" element={
