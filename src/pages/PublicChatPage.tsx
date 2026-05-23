@@ -1140,18 +1140,25 @@ export default function PublicChatPage() {
           const finalData = { ...data, booking_id: bookingId };
           setCollectedData(finalData);
           const text = interpolate(getNodeMessage(node, finalData, language), finalData);
+          const confirmationText =
+            language === "hi"
+              ? "✅ बुकिंग कन्फर्म! आपकी गाड़ी का रजिस्ट्रेशन चुनी हुई तारीख पर सुबह (9:00 बजे – 12:00 बजे) ड्रॉप-ऑफ़ के लिए दर्ज हो गया है। हमारी टीम आपका इंतज़ार कर रही है!"
+              : language === "ar"
+                ? "✅ تم تأكيد الحجز! تم تسجيل تسجيل مركبتك للتسليم الصباحي (9:00 ص – 12:00 م) في التاريخ الذي اخترته. فريقنا في انتظارك!"
+                : "✅ Booking Confirmed! Your vehicle registration has been logged for morning drop-off (9:00 AM – 12:00 PM) on your selected date. Our team is waiting for you!";
           setMessages((prev) => [
             ...prev,
-            {
-              id: `bot-${Date.now()}-end`,
-              sender: "bot",
-              text,
-              nodeId: node.id,
-              data: finalData,
-            },
+            { id: `bot-${Date.now()}-end`, sender: "bot", text, nodeId: node.id, data: finalData },
+            { id: `bot-${Date.now()}-confirm`, sender: "bot", text: confirmationText, kind: "confirmation" },
           ]);
           setIsComplete(true);
           persistSession({ current_node_id: node.id, collected_data: finalData, is_complete: true });
+          // Clear cached session so a refresh starts fresh
+          if (dealer && flowId) {
+            try {
+              localStorage.removeItem(`${SESSION_KEY_PREFIX}${dealer.id}_${flowId}`);
+            } catch { /* ignore */ }
+          }
         })();
       }
     },
