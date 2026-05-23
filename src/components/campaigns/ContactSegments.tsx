@@ -328,12 +328,29 @@ export default function ContactSegments() {
                 </Button>
               </TabsContent>
 
-              <TabsContent value="csv" className="space-y-2">
-                <p className="text-xs text-muted-foreground">
-                  Paste CSV with headers: <code className="bg-muted px-1 rounded">name,phone,email</code>
-                </p>
+              <TabsContent value="csv" className="space-y-3">
+                <div className="rounded-md border-2 border-dashed border-border bg-background p-4 flex flex-col items-center gap-2">
+                  <Upload className="w-5 h-5 text-muted-foreground" />
+                  <p className="text-xs text-muted-foreground text-center">
+                    Upload a CSV file with headers <code className="bg-muted px-1 rounded">name,phone,email</code>
+                  </p>
+                  <input
+                    ref={csvFileRef}
+                    type="file"
+                    accept=".csv,text/csv"
+                    className="hidden"
+                    onChange={(e) => {
+                      handleCsvFile(e.target.files?.[0] ?? null);
+                      if (csvFileRef.current) csvFileRef.current.value = "";
+                    }}
+                  />
+                  <Button type="button" size="sm" variant="outline" onClick={() => csvFileRef.current?.click()}>
+                    Choose CSV file
+                  </Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">…or paste CSV text below:</p>
                 <textarea
-                  className="w-full h-32 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+                  className="w-full h-24 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
                   value={csvData}
                   onChange={(e) => setCsvData(e.target.value)}
                   placeholder={`name,phone,email\nAhmed Ali,9876543210,ahmed@example.com\nSara Khan,+91 98234 56789,sara@example.com`}
@@ -344,23 +361,23 @@ export default function ContactSegments() {
               </TabsContent>
             </Tabs>
 
-            {/* Contacts table */}
+            {/* Contacts preview grid (paginated) */}
             {contacts.length > 0 && (
               <div className="rounded-lg border border-border overflow-hidden">
-                <div className="max-h-72 overflow-y-auto">
+                <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead className="bg-muted/50 sticky top-0">
+                    <thead className="bg-muted/50">
                       <tr className="text-left text-xs text-muted-foreground">
-                        <th className="px-3 py-2 w-12">#</th>
+                        <th className="px-3 py-2 w-16">Line No.</th>
                         <th className="px-3 py-2">Contact Name</th>
-                        <th className="px-3 py-2">Phone Number</th>
+                        <th className="px-3 py-2">Phone (with 91)</th>
                         <th className="px-3 py-2 w-12"></th>
                       </tr>
                     </thead>
                     <tbody>
                       {tableRows.map((c, idx) => (
                         <tr key={c.id} className="border-t border-border/60 hover:bg-muted/30">
-                          <td className="px-3 py-2 text-muted-foreground">{idx + 1}</td>
+                          <td className="px-3 py-2 text-muted-foreground">{pageStart + idx + 1}</td>
                           <td className="px-3 py-2 text-foreground">{c.name}</td>
                           <td className="px-3 py-2 font-mono text-xs">{c.phone}</td>
                           <td className="px-3 py-2 text-right">
@@ -378,11 +395,34 @@ export default function ContactSegments() {
                     </tbody>
                   </table>
                 </div>
-                {contacts.length > tableRows.length && (
-                  <p className="text-xs text-muted-foreground px-3 py-2 border-t border-border/60 bg-muted/20">
-                    Showing first {tableRows.length} of {contacts.length} contacts
-                  </p>
-                )}
+                <div className="flex items-center justify-between px-3 py-2 border-t border-border/60 bg-muted/20 text-xs text-muted-foreground">
+                  <span>
+                    Showing {pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, contacts.length)} of {contacts.length}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      disabled={currentPage <= 1}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </Button>
+                    <span>Page {currentPage} / {totalPages}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      disabled={currentPage >= totalPages}
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
               </div>
             )}
 
