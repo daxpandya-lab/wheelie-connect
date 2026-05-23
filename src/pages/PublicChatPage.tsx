@@ -33,6 +33,7 @@ interface ChatMessage {
   // For bot messages: keep raw node ref so we can re-render on language change
   nodeId?: string;
   data?: ChatbotCollectedData;
+  kind?: "confirmation";
 }
 
 const VISITOR_KEY_PREFIX = "wheelie_chat_visitor_";
@@ -122,7 +123,7 @@ export default function PublicChatPage() {
 
   const [dealer, setDealer] = useState<DealerInfo | null>(null);
   const [flow, setFlow] = useState<FlowData | null>(null);
-  const [, setFlowId] = useState<string | null>(null);
+  const [flowId, setFlowId] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [language, setLanguage] = useState<string>("en");
   const [loading, setLoading] = useState(true);
@@ -974,7 +975,7 @@ export default function PublicChatPage() {
           kms_driven: typeof data.kms_driven === "number" ? data.kms_driven : null,
           service_type: String(data.service_type || ""),
           booking_date: isoDate,
-          preferred_time: data.preferred_time ? String(data.preferred_time) : null,
+          preferred_time: data.preferred_time ? String(data.preferred_time) : "09:00:00",
           pickup_required: !!data.pickup_required,
           drop_required: !!data.drop_required,
           issue_description: data.issue_description ? String(data.issue_description) : null,
@@ -1005,7 +1006,7 @@ export default function PublicChatPage() {
           phone_number: String(data.phone_number || ""),
           vehicle_model: String(data.vehicle_model || "Unknown"),
           preferred_date: isoDate,
-          preferred_time: data.preferred_time ? String(data.preferred_time) : null,
+          preferred_time: data.preferred_time ? String(data.preferred_time) : "09:00:00",
           booking_source: "Web Bot",
           status: INITIAL_STATUS,
           metadata: { ...data, source_session_id: sessionId },
@@ -1139,18 +1140,25 @@ export default function PublicChatPage() {
           const finalData = { ...data, booking_id: bookingId };
           setCollectedData(finalData);
           const text = interpolate(getNodeMessage(node, finalData, language), finalData);
+          const confirmationText =
+            language === "hi"
+              ? "✅ बुकिंग कन्फर्म! आपकी गाड़ी का रजिस्ट्रेशन चुनी हुई तारीख पर सुबह (9:00 बजे – 12:00 बजे) ड्रॉप-ऑफ़ के लिए दर्ज हो गया है। हमारी टीम आपका इंतज़ार कर रही है!"
+              : language === "ar"
+                ? "✅ تم تأكيد الحجز! تم تسجيل تسجيل مركبتك للتسليم الصباحي (9:00 ص – 12:00 م) في التاريخ الذي اخترته. فريقنا في انتظارك!"
+                : "✅ Booking Confirmed! Your vehicle registration has been logged for morning drop-off (9:00 AM – 12:00 PM) on your selected date. Our team is waiting for you!";
           setMessages((prev) => [
             ...prev,
-            {
-              id: `bot-${Date.now()}-end`,
-              sender: "bot",
-              text,
-              nodeId: node.id,
-              data: finalData,
-            },
+            { id: `bot-${Date.now()}-end`, sender: "bot", text, nodeId: node.id, data: finalData },
+            { id: `bot-${Date.now()}-confirm`, sender: "bot", text: confirmationText, kind: "confirmation" },
           ]);
           setIsComplete(true);
           persistSession({ current_node_id: node.id, collected_data: finalData, is_complete: true });
+          // Clear cached session so a refresh starts fresh
+          if (dealer && flowId) {
+            try {
+              localStorage.removeItem(`${SESSION_KEY_PREFIX}${dealer.id}_${flowId}`);
+            } catch { /* ignore */ }
+          }
         })();
       }
     },
@@ -1960,9 +1968,11 @@ export default function PublicChatPage() {
               <div>
                 <div
                   className={`px-3 py-2 rounded-2xl text-sm whitespace-pre-line ${
-                    msg.sender === "user"
-                      ? "bg-primary text-primary-foreground rounded-br-md"
-                      : "bg-muted text-foreground rounded-bl-md"
+                    msg.kind === "confirmation"
+                      ? "bg-green-500/15 text-green-800 dark:text-green-200 border border-green-500/40 rounded-xl font-medium leading-relaxed shadow-sm"
+                      : msg.sender === "user"
+                        ? "bg-primary text-primary-foreground rounded-br-md"
+                        : "bg-muted text-foreground rounded-bl-md"
                   }`}
                 >
                   {msg.text}
