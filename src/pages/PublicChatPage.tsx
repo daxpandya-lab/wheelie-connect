@@ -984,7 +984,7 @@ export default function PublicChatPage() {
           status: INITIAL_STATUS,
           media_attachments: chatMedia.length
             ? chatMedia.map((m) => ({ url: m.url, mime: m.mime, kind: m.kind, source: "web_chat", received_at: new Date().toISOString() }))
-            : null,
+            : [],
           metadata: { ...data, ...addressMeta, source_session_id: sessionId },
         } as never);
         if (insertErr) {
