@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
-  LayoutDashboard, Users, Car, MessageSquare,
+  LayoutDashboard, Users, MessageSquare,
   BarChart3, Megaphone, Settings, ChevronLeft, ChevronRight,
   Wrench, TestTube2, UserPlus, Shield, UsersRound, LogOut, Bot, Zap
 } from "lucide-react";
+import brandIcon from "@/assets/dealer-doodle-icon.png";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -41,12 +42,12 @@ export default function AppSidebar() {
       )}
     >
       <div className="flex items-center gap-3 px-4 h-16 border-b border-sidebar-border">
-        <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center shrink-0">
-          <Car className="w-5 h-5 text-sidebar-primary-foreground" />
+        <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shrink-0 p-1">
+          <img src={brandIcon} alt="Dealer Doodle" className="w-full h-full object-contain" />
         </div>
         {!collapsed && (
           <span className="text-sidebar-accent-foreground font-semibold text-lg truncate">
-            AutoDealer
+            Dealer Doodle
           </span>
         )}
       </div>

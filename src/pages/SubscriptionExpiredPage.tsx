@@ -18,7 +18,7 @@ export default function SubscriptionExpiredPage() {
           </p>
         </div>
         <div className="space-y-3">
-          <Button className="w-full" onClick={() => window.open("mailto:sales@autodealer.com", "_blank")}>
+          <Button className="w-full" onClick={() => window.open("mailto:sales@dealerdoodle.com", "_blank")}>
             Contact Sales
           </Button>
           <Button variant="ghost" className="w-full" onClick={signOut}>

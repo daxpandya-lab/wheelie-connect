@@ -85,7 +85,7 @@ export default function SetupWizardBanner({ tenantId, missingPhone, missingRevie
           </div>
           <div className="flex-1 min-w-0">
             <h2 className="text-base sm:text-lg font-semibold text-foreground">
-              Welcome to AutoDealer! Your AI Bot is active.
+              Welcome to Dealer Doodle! Your AI Bot is active.
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Just <span className="font-medium text-foreground">2 quick details</span> needed to unlock {missingLabel || "lifecycle automations"}.
