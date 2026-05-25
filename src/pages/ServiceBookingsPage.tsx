@@ -407,6 +407,7 @@ export default function ServiceBookingsPage() {
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Service</th>
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Date</th>
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Source</th>
+                        <th className="text-left py-3 px-4 text-muted-foreground font-medium">Attachments</th>
                         {!isExecutive && <th className="text-left py-3 px-4 text-muted-foreground font-medium hidden md:table-cell">Assigned</th>}
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Status</th>
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium hidden md:table-cell">Approval</th>
