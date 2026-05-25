@@ -82,6 +82,58 @@ function SourceBadge({ source }: { source: string }) {
 }
 
 
+function classifyAttachment(att: MediaAttachment): "image" | "audio" | "video" | "file" {
+  if (att.kind) return att.kind;
+  const m = (att.mime || "").toLowerCase();
+  if (m.startsWith("image/")) return "image";
+  if (m.startsWith("audio/")) return "audio";
+  if (m.startsWith("video/")) return "video";
+  return "file";
+}
+
+function AttachmentsCell({ items, onImageClick }: { items: MediaAttachment[]; onImageClick: (url: string) => void }) {
+  if (!items.length) return <span className="text-xs text-muted-foreground">—</span>;
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap max-w-[260px]">
+      {items.map((att, i) => {
+        const kind = classifyAttachment(att);
+        if (kind === "image") {
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onImageClick(att.url)}
+              className="w-10 h-10 rounded-md overflow-hidden border border-border hover:ring-2 hover:ring-primary/40 transition"
+              title="Open image preview"
+            >
+              <img src={att.url} alt={`Attachment ${i + 1}`} loading="lazy" className="w-full h-full object-cover" />
+            </button>
+          );
+        }
+        if (kind === "audio") {
+          return (
+            <audio key={i} controls src={att.url} preload="none" className="h-8 max-w-[180px]" />
+          );
+        }
+        if (kind === "video") {
+          return (
+            <a key={i} href={att.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md border border-border bg-muted hover:bg-muted/70 text-foreground">
+              <Play className="w-3 h-3" /> Play Video
+            </a>
+          );
+        }
+        return (
+          <a key={i} href={att.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md border border-border bg-muted hover:bg-muted/70 text-foreground">
+            <Eye className="w-3 h-3" /> View File
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+
+
+
 export default function ServiceBookingsPage() {
   const { tenantId, roles, user } = useAuth();
   const isExecutive = roles.includes("staff") && !roles.includes("tenant_admin") && !roles.includes("super_admin");
