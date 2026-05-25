@@ -1482,6 +1482,65 @@ export default function PublicChatPage() {
       }
       return;
     }
+    if (answer === "__rc_history__" && returningCustomerRef.current) {
+      const rc = returningCustomerRef.current;
+      const phone = String(collectedData.phone_number || "").trim();
+      setMessages((prev) => [
+        ...prev,
+        { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? "View Previous Service History" },
+      ]);
+      (async () => {
+        let historyText = "";
+        if (dealer && phone) {
+          const { data: rows } = await supabase
+            .from("service_bookings")
+            .select("booking_date, vehicle_model, kms_driven, service_type, work_notes, executive_notes, issue_description, status")
+            .eq("tenant_id", dealer.id)
+            .eq("phone_number", phone)
+            .eq("status", "completed")
+            .order("booking_date", { ascending: false })
+            .limit(5);
+          if (rows && rows.length) {
+            const lines = rows.map((r, i) => {
+              const dateStr = r.booking_date
+                ? new Date(r.booking_date + "T00:00:00").toLocaleDateString(
+                    language === "hi" ? "hi-IN" : language === "ar" ? "ar-EG" : "en-IN",
+                    { day: "numeric", month: "short", year: "numeric" },
+                  )
+                : "—";
+              const advisor = r.work_notes || r.executive_notes || r.issue_description || "—";
+              return [
+                `🧾 Service #${i + 1} — ${dateStr}`,
+                `• Vehicle: ${r.vehicle_model || "—"}`,
+                `• KMs Driven: ${r.kms_driven ?? "—"}`,
+                `• Service Type: ${r.service_type || "—"}`,
+                `• Advisor Remarks: ${advisor}`,
+              ].join("\n");
+            });
+            historyText = `📚 Your Past Service History:\n\n${lines.join("\n\n")}`;
+          } else {
+            historyText = formatHistorySummary(rc);
+          }
+        } else {
+          historyText = formatHistorySummary(rc);
+        }
+        setMessages((prev) => [
+          ...prev,
+          { id: `bot-hist-${Date.now()}`, sender: "bot", text: historyText },
+          {
+            id: `bot-hist-cta-${Date.now()}`,
+            sender: "bot",
+            text: "Would you like to book a new appointment today?",
+            nodeId: currentNode.id,
+            options: [
+              { label: `🚗 Yes — Same vehicle: ${rc.vehicle_model}`, value: "__rc_same__" },
+              { label: "➕ Book for a different vehicle", value: "__rc_diff__" },
+            ],
+          },
+        ]);
+      })();
+      return;
+    }
 
 
 
@@ -1641,8 +1700,9 @@ export default function PublicChatPage() {
             text: greet,
             nodeId: currentNode.id,
             options: [
-              { label: `🚗 Book for same vehicle: ${rc.vehicle_model}${regPart}`, value: "__rc_same__" },
-              { label: "➕ Book for a different vehicle", value: "__rc_diff__" },
+              { label: `📅 New Service Booking — Same Vehicle (${rc.vehicle_model}${regPart})`, value: "__rc_same__" },
+              { label: "➕ New Booking — Different Vehicle", value: "__rc_diff__" },
+              { label: "🔍 View Previous Service History", value: "__rc_history__" },
             ],
           },
         ]);

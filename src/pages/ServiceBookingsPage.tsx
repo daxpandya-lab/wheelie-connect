@@ -82,6 +82,58 @@ function SourceBadge({ source }: { source: string }) {
 }
 
 
+function classifyAttachment(att: MediaAttachment): "image" | "audio" | "video" | "file" {
+  if (att.kind) return att.kind;
+  const m = (att.mime || "").toLowerCase();
+  if (m.startsWith("image/")) return "image";
+  if (m.startsWith("audio/")) return "audio";
+  if (m.startsWith("video/")) return "video";
+  return "file";
+}
+
+function AttachmentsCell({ items, onImageClick }: { items: MediaAttachment[]; onImageClick: (url: string) => void }) {
+  if (!items.length) return <span className="text-xs text-muted-foreground">—</span>;
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap max-w-[260px]">
+      {items.map((att, i) => {
+        const kind = classifyAttachment(att);
+        if (kind === "image") {
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onImageClick(att.url)}
+              className="w-10 h-10 rounded-md overflow-hidden border border-border hover:ring-2 hover:ring-primary/40 transition"
+              title="Open image preview"
+            >
+              <img src={att.url} alt={`Attachment ${i + 1}`} loading="lazy" className="w-full h-full object-cover" />
+            </button>
+          );
+        }
+        if (kind === "audio") {
+          return (
+            <audio key={i} controls src={att.url} preload="none" className="h-8 max-w-[180px]" />
+          );
+        }
+        if (kind === "video") {
+          return (
+            <a key={i} href={att.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md border border-border bg-muted hover:bg-muted/70 text-foreground">
+              <Play className="w-3 h-3" /> Play Video
+            </a>
+          );
+        }
+        return (
+          <a key={i} href={att.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md border border-border bg-muted hover:bg-muted/70 text-foreground">
+            <Eye className="w-3 h-3" /> View File
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+
+
+
 export default function ServiceBookingsPage() {
   const { tenantId, roles, user } = useAuth();
   const isExecutive = roles.includes("staff") && !roles.includes("tenant_admin") && !roles.includes("super_admin");
@@ -106,6 +158,7 @@ export default function ServiceBookingsPage() {
   const [saving, setSaving] = useState(false);
   const [estForm, setEstForm] = useState({ amount: "", notes: "", parts: "" });
   const [sendingEstimate, setSendingEstimate] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const fetchBookings = useCallback(async () => {
     if (!tenantId) return;
@@ -406,6 +459,7 @@ export default function ServiceBookingsPage() {
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Service</th>
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Date</th>
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Source</th>
+                        <th className="text-left py-3 px-4 text-muted-foreground font-medium">Attachments</th>
                         {!isExecutive && <th className="text-left py-3 px-4 text-muted-foreground font-medium hidden md:table-cell">Assigned</th>}
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Status</th>
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium hidden md:table-cell">Approval</th>
@@ -450,6 +504,12 @@ export default function ServiceBookingsPage() {
                             </td>
                             <td className="py-3 px-4">
                               <SourceBadge source={b.booking_source || "manual"} />
+                            </td>
+                            <td className="py-3 px-4">
+                              <AttachmentsCell
+                                items={Array.isArray(b.media_attachments) ? b.media_attachments : []}
+                                onImageClick={(url) => setLightboxUrl(url)}
+                              />
                             </td>
                             {!isExecutive && (
                               <td className="py-3 px-4 hidden md:table-cell">
@@ -689,6 +749,14 @@ export default function ServiceBookingsPage() {
         columns={columns}
         onSave={async (next) => savePrefs(next)}
       />
+
+      <Dialog open={!!lightboxUrl} onOpenChange={(o) => !o && setLightboxUrl(null)}>
+        <DialogContent className="max-w-4xl p-2 bg-background">
+          {lightboxUrl && (
+            <img src={lightboxUrl} alt="Attachment preview" className="w-full h-auto max-h-[85vh] object-contain rounded" />
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
