@@ -453,6 +453,12 @@ export default function ServiceBookingsPage() {
                             <td className="py-3 px-4">
                               <SourceBadge source={b.booking_source || "manual"} />
                             </td>
+                            <td className="py-3 px-4">
+                              <AttachmentsCell
+                                items={Array.isArray(b.media_attachments) ? b.media_attachments : []}
+                                onImageClick={(url) => setLightboxUrl(url)}
+                              />
+                            </td>
                             {!isExecutive && (
                               <td className="py-3 px-4 hidden md:table-cell">
                                 <Select value={b.assigned_to || ""} onValueChange={v => handleAssign(b.id, v)}>
