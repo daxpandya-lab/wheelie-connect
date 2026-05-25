@@ -749,6 +749,14 @@ export default function ServiceBookingsPage() {
         columns={columns}
         onSave={async (next) => savePrefs(next)}
       />
+
+      <Dialog open={!!lightboxUrl} onOpenChange={(o) => !o && setLightboxUrl(null)}>
+        <DialogContent className="max-w-4xl p-2 bg-background">
+          {lightboxUrl && (
+            <img src={lightboxUrl} alt="Attachment preview" className="w-full h-auto max-h-[85vh] object-contain rounded" />
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
