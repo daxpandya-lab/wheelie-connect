@@ -1700,8 +1700,9 @@ export default function PublicChatPage() {
             text: greet,
             nodeId: currentNode.id,
             options: [
-              { label: `🚗 Book for same vehicle: ${rc.vehicle_model}${regPart}`, value: "__rc_same__" },
-              { label: "➕ Book for a different vehicle", value: "__rc_diff__" },
+              { label: `📅 New Service Booking — Same Vehicle (${rc.vehicle_model}${regPart})`, value: "__rc_same__" },
+              { label: "➕ New Booking — Different Vehicle", value: "__rc_diff__" },
+              { label: "🔍 View Previous Service History", value: "__rc_history__" },
             ],
           },
         ]);
