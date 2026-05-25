@@ -106,6 +106,7 @@ export default function ServiceBookingsPage() {
   const [saving, setSaving] = useState(false);
   const [estForm, setEstForm] = useState({ amount: "", notes: "", parts: "" });
   const [sendingEstimate, setSendingEstimate] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const fetchBookings = useCallback(async () => {
     if (!tenantId) return;
