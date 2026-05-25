@@ -1096,6 +1096,48 @@ export type Database = {
         }
         Relationships: []
       }
+      service_booking_audit_logs: {
+        Row: {
+          actor_user_id: string | null
+          booking_id: string
+          created_at: string
+          event: string
+          flow_id: string | null
+          id: string
+          metadata: Json
+          new_status: string | null
+          previous_status: string | null
+          source: string | null
+          tenant_id: string
+        }
+        Insert: {
+          actor_user_id?: string | null
+          booking_id: string
+          created_at?: string
+          event: string
+          flow_id?: string | null
+          id?: string
+          metadata?: Json
+          new_status?: string | null
+          previous_status?: string | null
+          source?: string | null
+          tenant_id: string
+        }
+        Update: {
+          actor_user_id?: string | null
+          booking_id?: string
+          created_at?: string
+          event?: string
+          flow_id?: string | null
+          id?: string
+          metadata?: Json
+          new_status?: string | null
+          previous_status?: string | null
+          source?: string | null
+          tenant_id?: string
+        }
+        Relationships: []
+      }
       service_bookings: {
         Row: {
           approval_status: string | null
