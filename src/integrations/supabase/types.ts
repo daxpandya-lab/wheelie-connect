@@ -1019,6 +1019,36 @@ export type Database = {
           },
         ]
       }
+      parts_suggestion_library: {
+        Row: {
+          created_at: string
+          id: string
+          last_used_at: string
+          part_name: string
+          part_name_normalized: string | null
+          tenant_id: string
+          usage_count: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_used_at?: string
+          part_name: string
+          part_name_normalized?: string | null
+          tenant_id: string
+          usage_count?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_used_at?: string
+          part_name?: string
+          part_name_normalized?: string | null
+          tenant_id?: string
+          usage_count?: number
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -1147,6 +1177,7 @@ export type Database = {
           completed_at: string | null
           created_at: string
           csat_sent_at: string | null
+          customer_approval_status: string
           customer_id: string | null
           customer_name: string
           drop_required: boolean | null
@@ -1184,6 +1215,7 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           csat_sent_at?: string | null
+          customer_approval_status?: string
           customer_id?: string | null
           customer_name: string
           drop_required?: boolean | null
@@ -1221,6 +1253,7 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           csat_sent_at?: string | null
+          customer_approval_status?: string
           customer_id?: string | null
           customer_name?: string
           drop_required?: boolean | null
@@ -1828,6 +1861,7 @@ export type Database = {
           completed_at: string | null
           created_at: string
           csat_sent_at: string | null
+          customer_approval_status: string
           customer_id: string | null
           customer_name: string
           drop_required: boolean | null
