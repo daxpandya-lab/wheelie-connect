@@ -547,14 +547,9 @@ export default function ServiceBookingsPage() {
                               </span>
                             </td>
                             <td className="py-3 px-4 hidden md:table-cell">
-                              <Badge variant="outline" className={`text-xs ${
-                                b.approval_status === "approved" ? "bg-success/10 text-success border-success/20" :
-                                b.approval_status === "rejected" ? "bg-destructive/10 text-destructive border-destructive/20" :
-                                "bg-warning/10 text-warning border-warning/20"
-                              }`}>
-                                {b.approval_status || "pending"}
-                              </Badge>
+                              <CustomerApprovalBadge status={b.customer_approval_status} />
                             </td>
+
                             <td className="py-3 px-4">
                               <Button variant="ghost" size="sm" onClick={() => openJobDetail(b)}>
                                 <ClipboardList className="w-4 h-4 mr-1" /> Details
