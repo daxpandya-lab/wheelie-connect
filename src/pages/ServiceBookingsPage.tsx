@@ -23,6 +23,8 @@ import { useDynamicColumns } from "@/hooks/useDynamicColumns";
 import ColumnManagerDialog from "@/components/reports/ColumnManagerDialog";
 import DynamicReportTable from "@/components/reports/DynamicReportTable";
 import ExportMenu from "@/components/reports/ExportMenu";
+import PartsAutocomplete from "@/components/PartsAutocomplete";
+
 
 type MediaAttachment = {
   url: string;
