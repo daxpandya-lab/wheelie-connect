@@ -34,29 +34,54 @@ async function handleEstimateButton(
   whatsappConfig: Record<string, any>,
 ): Promise<boolean> {
   if (!interactiveId) return false;
-  const m = interactiveId.match(/^est_(approve|reject)_([0-9a-f-]{36})$/);
+  const m = interactiveId.match(/^est_(approve|reject|call)_([0-9a-f-]{36})$/);
   if (!m) return false;
-  const decision: "approved" | "rejected" = m[1] === "approve" ? "approved" : "rejected";
+  const action = m[1] as "approve" | "reject" | "call";
   const bookingId = m[2];
 
   const { data: booking } = await supabase
     .from("service_bookings")
-    .select("id, tenant_id, approval_status")
+    .select("id, tenant_id, approval_status, customer_approval_status, assigned_to")
     .eq("id", bookingId).maybeSingle();
   if (!booking || booking.tenant_id !== tenantId) return false;
 
-  if ((booking.approval_status || "pending") === "pending") {
-    await supabase.from("service_bookings")
-      .update({
-        approval_status: decision,
-        ...(decision === "approved" ? { status: "in_progress" } : {}),
-      })
-      .eq("id", bookingId);
+  const customerState = action === "approve" ? "approved" : action === "reject" ? "rejected" : "call_requested";
+  const approvalLegacy = action === "approve" ? "approved" : action === "reject" ? "rejected" : "pending";
+
+  if ((booking.customer_approval_status || "pending_approval") === "pending_approval") {
+    const patch: Record<string, unknown> = {
+      approval_status: approvalLegacy,
+      customer_approval_status: customerState,
+    };
+    if (action === "approve") patch.status = "in_progress";
+    await supabase.from("service_bookings").update(patch).eq("id", bookingId);
+
+    // Notify assigned advisor
+    if (booking.assigned_to) {
+      const title = action === "approve" ? "Estimate approved"
+        : action === "reject" ? "Estimate rejected"
+        : "Customer requested a call";
+      const message = action === "approve" ? "Customer approved the estimate on WhatsApp. Work can begin."
+        : action === "reject" ? "Customer rejected the estimate on WhatsApp."
+        : "Customer asked you to call them about the estimate.";
+      await supabase.from("notifications").insert({
+        tenant_id: tenantId,
+        user_id: booking.assigned_to,
+        title,
+        message,
+        type: action === "approve" ? "success" : action === "reject" ? "warning" : "info",
+        source: "service_booking",
+        source_id: bookingId,
+      });
+    }
   }
 
-  const reply = decision === "approved"
+  const reply = action === "approve"
     ? "✅ Estimate Approved. We have started the work! You will be notified once the vehicle is ready."
-    : "📞 Understood. Our service advisor will call you shortly to discuss the estimate.";
+    : action === "reject"
+    ? "❌ Estimate noted as rejected. Our advisor will follow up shortly."
+    : "📞 Got it — our service advisor will call you shortly.";
+
 
   const provider: "meta" | "evolution" = whatsappConfig.provider === "evolution" ? "evolution" : "meta";
   try {

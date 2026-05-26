@@ -72,6 +72,26 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: rpcErr.message }), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // Reset customer-side approval state when (re-)sending an estimate
+    await supabase
+      .from("service_bookings")
+      .update({ customer_approval_status: "pending_approval" })
+      .eq("id", bookingId);
+
+    // Seed parts suggestion library from comma/newline-separated parts string
+    if (parts && parts.trim()) {
+      const parsed = Array.from(new Set(
+        parts.split(/[,;\n]/).map((p) => p.trim()).filter((p) => p.length > 0 && p.length < 80),
+      ));
+      for (const part_name of parsed) {
+        await supabase.from("parts_suggestion_library").upsert(
+          { tenant_id: booking.tenant_id, part_name, last_used_at: new Date().toISOString() },
+          { onConflict: "tenant_id,part_name_normalized", ignoreDuplicates: false },
+        );
+      }
+    }
+
+
     const vehicle = booking.vehicle_model || "your vehicle";
     const formattedAmount = `₹${amount.toLocaleString("en-IN")}`;
     const text = [
@@ -98,11 +118,13 @@ Deno.serve(async (req) => {
         kind: "buttons",
         text,
         buttons: [
-          { id: `est_approve_${bookingId}`, title: "✅ Approve Work" },
-          { id: `est_reject_${bookingId}`, title: "📞 Reject / Call Me" },
+          { id: `est_approve_${bookingId}`, title: "✅ Approve" },
+          { id: `est_reject_${bookingId}`, title: "❌ Reject" },
+          { id: `est_call_${bookingId}`, title: "📞 Call Me" },
         ],
       },
     );
+
 
     return new Response(
       JSON.stringify({

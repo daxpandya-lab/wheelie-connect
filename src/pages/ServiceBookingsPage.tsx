@@ -23,6 +23,8 @@ import { useDynamicColumns } from "@/hooks/useDynamicColumns";
 import ColumnManagerDialog from "@/components/reports/ColumnManagerDialog";
 import DynamicReportTable from "@/components/reports/DynamicReportTable";
 import ExportMenu from "@/components/reports/ExportMenu";
+import PartsAutocomplete from "@/components/PartsAutocomplete";
+
 
 type MediaAttachment = {
   url: string;
@@ -39,11 +41,13 @@ type ServiceBooking = {
   drop_required: boolean | null; notes: string | null; total_amount: number | null;
   assigned_to: string | null; issue_description: string | null;
   estimated_cost: number | null; approval_status: string | null;
+  customer_approval_status: string | null;
   quotation_notes: string | null; work_notes: string | null;
   parts_required: string | null; created_at: string; booking_source: string;
   metadata: Record<string, unknown> | null;
   media_attachments: MediaAttachment[] | null;
 };
+
 
 const FIXED_COLS = [
   { key: "customer_name", label: "Customer" },
@@ -131,6 +135,20 @@ function AttachmentsCell({ items, onImageClick }: { items: MediaAttachment[]; on
     </div>
   );
 }
+
+
+function CustomerApprovalBadge({ status }: { status: string | null }) {
+  const s = status || "pending_approval";
+  const map: Record<string, { label: string; cls: string }> = {
+    pending_approval: { label: "⏳ Pending Approval", cls: "bg-warning/10 text-warning border-warning/20" },
+    approved: { label: "✅ Approved", cls: "bg-success/10 text-success border-success/20" },
+    rejected: { label: "❌ Rejected", cls: "bg-destructive/10 text-destructive border-destructive/20" },
+    call_requested: { label: "📞 Call Requested", cls: "bg-amber-500/10 text-amber-600 border-amber-500/30" },
+  };
+  const v = map[s] || map.pending_approval;
+  return <Badge variant="outline" className={`text-xs ${v.cls}`}>{v.label}</Badge>;
+}
+
 
 
 
@@ -529,14 +547,9 @@ export default function ServiceBookingsPage() {
                               </span>
                             </td>
                             <td className="py-3 px-4 hidden md:table-cell">
-                              <Badge variant="outline" className={`text-xs ${
-                                b.approval_status === "approved" ? "bg-success/10 text-success border-success/20" :
-                                b.approval_status === "rejected" ? "bg-destructive/10 text-destructive border-destructive/20" :
-                                "bg-warning/10 text-warning border-warning/20"
-                              }`}>
-                                {b.approval_status || "pending"}
-                              </Badge>
+                              <CustomerApprovalBadge status={b.customer_approval_status} />
                             </td>
+
                             <td className="py-3 px-4">
                               <Button variant="ghost" size="sm" onClick={() => openJobDetail(b)}>
                                 <ClipboardList className="w-4 h-4 mr-1" /> Details
@@ -628,25 +641,7 @@ export default function ServiceBookingsPage() {
                 </div>
               )}
 
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  Executive Notes
-                  {isExecutive && <Badge variant="outline" className="text-xs">You can edit</Badge>}
-                </Label>
-                {isExecutive ? (
-                  <Textarea
-                    value={jobForm.executive_notes}
-                    onChange={e => setJobForm(f => ({ ...f, executive_notes: e.target.value }))}
-                    placeholder="Add your observations, findings, work updates..."
-                    rows={4}
-                  />
-                ) : (
-                  <div className="rounded-lg border border-border p-3 bg-muted/30 min-h-[60px]">
-                    <p className="text-sm text-foreground whitespace-pre-wrap">{(selectedJob as any).executive_notes || "No notes from executive yet"}</p>
-                  </div>
-                )}
-              </div>
-
+              {/* Status (always editable by both roles) */}
               <div className="space-y-2">
                 <Label>Status</Label>
                 <Select value={jobForm.status} onValueChange={v => setJobForm(f => ({ ...f, status: v }))}>
@@ -657,66 +652,90 @@ export default function ServiceBookingsPage() {
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label>Work Notes</Label>
-                <Textarea value={jobForm.work_notes} onChange={e => setJobForm(f => ({ ...f, work_notes: e.target.value }))} placeholder="Work done, findings..." rows={3} />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Parts Required</Label>
-                <Textarea value={jobForm.parts_required} onChange={e => setJobForm(f => ({ ...f, parts_required: e.target.value }))} placeholder="List parts needed..." rows={2} />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Estimated Cost (₹)</Label>
-                <Input type="number" value={jobForm.estimated_cost} onChange={e => setJobForm(f => ({ ...f, estimated_cost: e.target.value }))} placeholder="0" />
-              </div>
-
-              {!isExecutive && (
+              {/* Executive-only: single Executive Notes editor */}
+              {isExecutive && (
                 <div className="space-y-2">
-                  <Label>Approval Status</Label>
-                  <Select value={jobForm.approval_status} onValueChange={v => setJobForm(f => ({ ...f, approval_status: v }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="approved">Approved</SelectItem>
-                      <SelectItem value="rejected">Rejected</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label className="flex items-center gap-2">
+                    Executive Notes
+                    <Badge variant="outline" className="text-xs">You can edit</Badge>
+                  </Label>
+                  <Textarea
+                    value={jobForm.executive_notes}
+                    onChange={e => setJobForm(f => ({ ...f, executive_notes: e.target.value }))}
+                    placeholder="Add your observations, findings, work updates..."
+                    rows={4}
+                  />
                 </div>
               )}
 
-              {!isExecutive && (
-                <div className="space-y-3 rounded-lg border border-primary/30 p-4 bg-primary/5">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm font-semibold text-foreground uppercase tracking-wide">Estimation</Label>
-                    <Badge variant="outline" className={`text-xs ${
-                      selectedJob.approval_status === "approved" ? "bg-success/10 text-success border-success/20" :
-                      selectedJob.approval_status === "rejected" ? "bg-destructive/10 text-destructive border-destructive/20" :
-                      "bg-warning/10 text-warning border-warning/20"
-                    }`}>
-                      {selectedJob.approval_status || "pending"}
-                    </Badge>
+              {/* Unified Estimation panel — admin/manager only.
+                  Locks once the customer has approved on WhatsApp. */}
+              {!isExecutive && (() => {
+                const cas = selectedJob.customer_approval_status || "pending_approval";
+                const locked = cas === "approved";
+                return (
+                  <div className="space-y-3 rounded-lg border border-primary/30 p-4 bg-primary/5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm font-semibold text-foreground uppercase tracking-wide">Estimation</Label>
+                      <CustomerApprovalBadge status={cas} />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {locked
+                        ? "Customer approved this estimate on WhatsApp. Inputs are locked."
+                        : "Send the customer an interactive estimate they can approve, reject, or request a call about."}
+                    </p>
+
+                    <div className="space-y-2">
+                      <Label className="text-xs">Executive Notes</Label>
+                      <Textarea
+                        value={jobForm.executive_notes}
+                        onChange={e => setJobForm(f => ({ ...f, executive_notes: e.target.value }))}
+                        placeholder="Internal observations, findings, work updates..."
+                        rows={3}
+                        disabled={locked}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-xs">Work Notes (sent to customer)</Label>
+                      <Textarea
+                        value={estForm.notes}
+                        onChange={e => { setEstForm(f => ({ ...f, notes: e.target.value })); setJobForm(f => ({ ...f, work_notes: e.target.value })); }}
+                        placeholder="Work to be done..."
+                        rows={2}
+                        disabled={locked}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-xs">Parts Required</Label>
+                      <PartsAutocomplete
+                        tenantId={tenantId}
+                        value={estForm.parts}
+                        onChange={(v) => { setEstForm(f => ({ ...f, parts: v })); setJobForm(f => ({ ...f, parts_required: v })); }}
+                        disabled={locked}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-xs">Estimated Cost (₹)</Label>
+                      <Input
+                        type="number"
+                        value={estForm.amount}
+                        onChange={e => { setEstForm(f => ({ ...f, amount: e.target.value })); setJobForm(f => ({ ...f, estimated_cost: e.target.value })); }}
+                        placeholder="0"
+                        disabled={locked}
+                      />
+                    </div>
+
+                    <Button onClick={sendEstimate} disabled={sendingEstimate || locked} className="w-full">
+                      {sendingEstimate ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+                      {locked ? "Estimate Approved — Locked" : "Send Estimate to Customer"}
+                    </Button>
                   </div>
-                  <p className="text-xs text-muted-foreground">Send the customer an interactive estimate they can approve or reject from WhatsApp or the web.</p>
-                  <div className="space-y-2">
-                    <Label className="text-xs">Amount (₹)</Label>
-                    <Input type="number" value={estForm.amount} onChange={e => setEstForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs">Notes</Label>
-                    <Textarea value={estForm.notes} onChange={e => setEstForm(f => ({ ...f, notes: e.target.value }))} placeholder="Work to be done..." rows={2} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs">Parts</Label>
-                    <Textarea value={estForm.parts} onChange={e => setEstForm(f => ({ ...f, parts: e.target.value }))} placeholder="Parts required..." rows={2} />
-                  </div>
-                  <Button onClick={sendEstimate} disabled={sendingEstimate} className="w-full">
-                    {sendingEstimate ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
-                    Send Estimate to Customer
-                  </Button>
-                </div>
-              )}
+                );
+              })()}
+
 
               {!isExecutive && selectedJob.approval_status === "approved" && selectedJob.status !== "ready_for_pickup" && selectedJob.status !== "completed" && (
                 <div className="space-y-3 rounded-lg border border-success/30 p-4 bg-success/5">
