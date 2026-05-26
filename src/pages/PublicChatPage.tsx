@@ -2305,7 +2305,9 @@ export default function PublicChatPage() {
                 : isSelectionNode
                 ? "Please choose an option above ☝️"
                 : isIssueNode
-                ? "Describe the issue, or attach media…"
+                ? (chatMedia.length > 0
+                    ? "Tap ➤ to send your attachments (or add a note)"
+                    : "Describe the issue, or attach media…")
                 : "Type your answer..."
             }
             className="flex-1"
