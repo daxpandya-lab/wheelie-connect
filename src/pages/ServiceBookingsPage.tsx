@@ -137,6 +137,20 @@ function AttachmentsCell({ items, onImageClick }: { items: MediaAttachment[]; on
 }
 
 
+function CustomerApprovalBadge({ status }: { status: string | null }) {
+  const s = status || "pending_approval";
+  const map: Record<string, { label: string; cls: string }> = {
+    pending_approval: { label: "⏳ Pending Approval", cls: "bg-warning/10 text-warning border-warning/20" },
+    approved: { label: "✅ Approved", cls: "bg-success/10 text-success border-success/20" },
+    rejected: { label: "❌ Rejected", cls: "bg-destructive/10 text-destructive border-destructive/20" },
+    call_requested: { label: "📞 Call Requested", cls: "bg-amber-500/10 text-amber-600 border-amber-500/30" },
+  };
+  const v = map[s] || map.pending_approval;
+  return <Badge variant="outline" className={`text-xs ${v.cls}`}>{v.label}</Badge>;
+}
+
+
+
 
 export default function ServiceBookingsPage() {
   const { tenantId, roles, user } = useAuth();
