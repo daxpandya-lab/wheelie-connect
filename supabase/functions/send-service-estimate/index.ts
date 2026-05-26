@@ -98,11 +98,13 @@ Deno.serve(async (req) => {
         kind: "buttons",
         text,
         buttons: [
-          { id: `est_approve_${bookingId}`, title: "✅ Approve Work" },
-          { id: `est_reject_${bookingId}`, title: "📞 Reject / Call Me" },
+          { id: `est_approve_${bookingId}`, title: "✅ Approve" },
+          { id: `est_reject_${bookingId}`, title: "❌ Reject" },
+          { id: `est_call_${bookingId}`, title: "📞 Call Me" },
         ],
       },
     );
+
 
     return new Response(
       JSON.stringify({
