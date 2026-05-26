@@ -39,11 +39,13 @@ type ServiceBooking = {
   drop_required: boolean | null; notes: string | null; total_amount: number | null;
   assigned_to: string | null; issue_description: string | null;
   estimated_cost: number | null; approval_status: string | null;
+  customer_approval_status: string | null;
   quotation_notes: string | null; work_notes: string | null;
   parts_required: string | null; created_at: string; booking_source: string;
   metadata: Record<string, unknown> | null;
   media_attachments: MediaAttachment[] | null;
 };
+
 
 const FIXED_COLS = [
   { key: "customer_name", label: "Customer" },
