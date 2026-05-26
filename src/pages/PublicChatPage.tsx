@@ -1418,8 +1418,17 @@ export default function PublicChatPage() {
     const lower = answer.trim().toLowerCase();
     const wantsHistory =
       /^\/?(history|past\s*service|service\s*history)$/.test(lower) ||
-      lower.includes("past service history") ||
-      lower.includes("view past service");
+      lower.includes("past service") ||
+      lower.includes("service history") ||
+      lower.includes("earlier history") ||
+      lower.includes("previous history") ||
+      lower.includes("previous service") ||
+      lower.includes("my history") ||
+      lower.includes("last time") ||
+      lower.includes("last service") ||
+      lower.includes("what did you do") ||
+      lower.includes("show my earlier") ||
+      lower.includes("show history");
     const wantsTrack =
       /^\/?(track|status)$/.test(lower) ||
       lower.includes("track my car") ||
@@ -1428,12 +1437,48 @@ export default function PublicChatPage() {
       const phone = String(collectedData.phone_number || "").trim();
       setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? answer }]);
       (async () => {
-        const rc = phone ? await fetchReturningCustomer(phone) : null;
-        const text = !rc
-          ? "I couldn't find any past bookings linked to your phone number. Please complete a booking first."
-          : wantsHistory
-          ? formatHistorySummary(rc)
-          : formatTrackingSummary(rc);
+        let text = "";
+        if (wantsHistory && dealer && phone) {
+          const { data: rows } = await supabase
+            .from("service_bookings")
+            .select("booking_date, vehicle_model, kms_driven, service_type, work_notes, executive_notes, issue_description")
+            .eq("tenant_id", dealer.id)
+            .eq("phone_number", phone)
+            .eq("status", "completed")
+            .order("booking_date", { ascending: false })
+            .limit(5);
+          if (rows && rows.length) {
+            const lines = rows.map((r, i) => {
+              const dateStr = r.booking_date
+                ? new Date(r.booking_date + "T00:00:00").toLocaleDateString(
+                    language === "hi" ? "hi-IN" : language === "ar" ? "ar-EG" : "en-IN",
+                    { day: "numeric", month: "short", year: "numeric" },
+                  )
+                : "—";
+              const advisor = r.work_notes || r.executive_notes || r.issue_description || "—";
+              return [
+                `🧾 Service #${i + 1} — ${dateStr}`,
+                `• Vehicle: ${r.vehicle_model || "—"}`,
+                `• KMs Driven: ${r.kms_driven ?? "—"}`,
+                `• Service Type: ${r.service_type || "—"}`,
+                `• Advisor Remarks: ${advisor}`,
+              ].join("\n");
+            });
+            text = `📚 Your Past Service History:\n\n${lines.join("\n\n")}`;
+          } else {
+            const rc = await fetchReturningCustomer(phone);
+            text = rc
+              ? formatHistorySummary(rc)
+              : "I couldn't find any past completed bookings linked to your phone number.";
+          }
+        } else {
+          const rc = phone ? await fetchReturningCustomer(phone) : null;
+          text = !rc
+            ? "I couldn't find any past bookings linked to your phone number. Please complete a booking first."
+            : wantsHistory
+            ? formatHistorySummary(rc)
+            : formatTrackingSummary(rc);
+        }
         setMessages((prev) => [
           ...prev,
           { id: `bot-intent-${Date.now()}`, sender: "bot", text },
