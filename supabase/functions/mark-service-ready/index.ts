@@ -111,7 +111,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: rpcErr.message }), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const text = `🚗 Your vehicle ${booking.vehicle_model} is ready! Total Amount: ₹${amount.toLocaleString("en-IN")}. You can pay at the counter.`;
+    const text = `🚗 Your vehicle ${booking.vehicle_model} is ready for pickup!\n💰 Total Amount: ₹${amount.toLocaleString("en-IN")}\n\n📄 Final invoice: ${invoiceUrl}\n\nPlease pay at the counter on collection. Thank you!`;
     const result = await dispatchNotification(
       supabase,
       {
