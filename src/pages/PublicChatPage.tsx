@@ -1288,15 +1288,31 @@ export default function PublicChatPage() {
     if (!startNode) return;
     setCurrentNodeId(startNode.id);
     pushBotMessage(startNode, {}, lang);
+    // White-label welcome — branded CTA chips replace any auto-advance from the greeting.
     if (startNode.type === "greeting" && startNode.nextNodeId) {
       setTimeout(() => {
-        const next = f.nodes.find((n) => n.id === startNode.nextNodeId);
-        if (next) {
-          setCurrentNodeId(next.id);
-          pushBotMessage(next, {}, lang);
-          persistSession({ current_node_id: next.id });
-        }
-      }, 700);
+        const dealerName = dealer?.name || "our workshop";
+        const intro: Record<string, string> = {
+          en: `👋 Welcome to ${dealerName} Workshop! How can we assist you today?`,
+          hi: `👋 ${dealerName} वर्कशॉप में आपका स्वागत है! आज हम आपकी कैसे मदद कर सकते हैं?`,
+          ar: `👋 أهلاً بك في ورشة ${dealerName}! كيف يمكننا مساعدتك اليوم؟`,
+        };
+        const bookLabel: Record<string, string> = { en: "📅 Book New Service", hi: "📅 नई सर्विस बुक करें", ar: "📅 احجز خدمة جديدة" };
+        const histLabel: Record<string, string> = { en: "🔍 View Past Service History", hi: "🔍 पिछली सर्विस हिस्ट्री देखें", ar: "🔍 عرض سجل الخدمة السابق" };
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `bot-intro-${Date.now()}`,
+            sender: "bot",
+            text: intro[lang] || intro.en,
+            nodeId: startNode.id,
+            options: [
+              { label: bookLabel[lang] || bookLabel.en, value: "__intent_book__" },
+              { label: histLabel[lang] || histLabel.en, value: "__intent_history__" },
+            ],
+          },
+        ]);
+      }, 500);
     }
   };
 
