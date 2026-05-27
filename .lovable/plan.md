@@ -1,72 +1,58 @@
 
+## Scope
 
-# Fix Login Reliability: Connection Retry and Error Handling
+Five connected features across DB schema, the public chatbot, the Service Booking dashboard, and the WhatsApp dispatch pipeline.
 
-## Problem
-The app gets stuck in an infinite refresh-token retry loop when the backend connection is temporarily unavailable. Every ~20 seconds, `supabase.auth.getSession()` or `onAuthStateChange` tries to refresh an expired/stale token, fails with "Failed to fetch", and retries forever -- producing a white screen or frozen login page.
+## 1. Storage + schema
 
-## Root Cause
-The browser has a stale session in localStorage with an expired refresh token. When the page loads, the Supabase client tries to refresh it, fails due to network issues, and the `isLoading` state never resolves properly, or the auth state keeps cycling.
+Migration:
+- Create public bucket `tenant_invoices` (10 MB cap, `application/pdf` only) with policies: tenant-scoped insert/update/delete via `is_user_tenant`, public read.
+- Add `service_bookings.invoice_url text` column (nullable).
 
-## Plan
+## 2. Tenant-branded welcome with two CTAs (chatbot)
 
-### 1. Add retry wrapper with network error detection (new file)
-**File: `src/lib/auth-retry.ts`**
+In `src/pages/PublicChatPage.tsx`:
+- Greeting line already uses `dealer.name` — keep it, reword to `Welcome to {dealer.name} Workshop! How can we assist you today?`.
+- Before the flow's first node fires, inject a synthetic "intro" step rendering two quick-reply chips: **📅 Book New Service** and **🔍 View Past Service History**.
+  - "Book New Service" → start normal flow (sets `current_node_id` to flow start).
+  - "View Past Service History" → ask for phone, then run the existing history-lookup branch (reuse the `wantsHistory` code path).
 
-Create a utility function `signInWithRetry` that:
-- Wraps `supabase.auth.signInWithPassword` 
-- On "Failed to fetch" / network errors, retries up to 3 times with 2-second delays
-- Shows a "Reconnecting..." toast on each retry
-- Returns the final result or a clear error message like "Unable to connect. Please check your internet and try again."
+## 3. Multi-vehicle selector
 
-### 2. Update AuthContext -- handle stale session gracefully
-**File: `src/contexts/AuthContext.tsx`**
+After the phone-entry node resolves a phone number (existing `fetchReturningCustomer` path):
+- Query `service_bookings` for the tenant + phone, select distinct `vehicle_model` + `metadata->>registration` (or `registration_number` if stored in metadata).
+- If ≥2 unique vehicles found, render selectable chips for each plus an **🚗 Add a New Vehicle** chip. Selection pre-fills `vehicle_model` / `registration_number` in `collected_data` and skips ahead to the issue step. "Add a New Vehicle" resumes the normal intake.
+- If only 0–1 vehicles found, behave as today.
 
-- Wrap the `getSession()` call in a try-catch
-- If `getSession()` throws a fetch error, call `supabase.auth.signOut()` to clear the stale localStorage session, set `isLoading = false`, and let the user land on the login page cleanly
-- Add a timeout: if `isLoading` stays true for more than 10 seconds, force it to false and clear the session (prevents permanent white screen)
+## 4. Manual invoice upload in Job Details modal
 
-### 3. Update LoginPage -- use retry logic and better UX
-**File: `src/pages/LoginPage.tsx`**
+In `src/pages/ServiceBookingsPage.tsx` Estimation panel:
+- Add labelled file input "Upload Final Invoice (PDF)" with accept=`application/pdf`.
+- On select, upload to `tenant_invoices/{tenant_id}/{booking_id}.pdf` (upsert), grab `getPublicUrl`, write `invoice_url` to the booking row, show a "View invoice" link + replace button.
 
-- Use the new `signInWithRetry` utility instead of direct `signInWithPassword`
-- The button is already disabled during `loading` state -- no change needed there
-- Add specific error handling: if the error contains "fetch" or "network", show "Connection failed. Please check your internet and try again." instead of the raw error
+## 5. Auto WhatsApp "Service Ready" dispatch with invoice link
 
-### 4. Clear stale tokens on login page mount
-**File: `src/pages/LoginPage.tsx`**
+Extend `supabase/functions/mark-service-ready/index.ts` (already triggers on `ready_for_pickup`):
+- Select `invoice_url` alongside the booking.
+- If present, append `\n\n📄 Final invoice: {invoice_url}` to the WhatsApp body before `dispatchNotification`.
+- No new trigger needed — UI already calls this function when status flips.
 
-- On mount, call `supabase.auth.getSession()` and if it returns an error (stale token), call `supabase.auth.signOut()` to clear localStorage -- this breaks the infinite retry loop when users land on the published login URL with a dead session
+## 6. Chatbot history download chip
 
-## Technical Details
+In the existing history reply branch in `PublicChatPage.tsx`:
+- When the most recent completed booking has `invoice_url`, append a quick-reply chip **📥 Download Invoice (PDF)** that opens the URL in a new tab (`window.open(url, "_blank", "noopener")`).
+- Add an additional intent match for `download bill` / `download invoice` that short-circuits to the invoice chip if available.
 
-**auth-retry.ts core logic:**
-```typescript
-export async function signInWithRetry(email: string, password: string, maxRetries = 3) {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (!error) return { data, error: null };
-    if (!isNetworkError(error) || attempt === maxRetries) return { data, error };
-    toast.info(`Reconnecting... (attempt ${attempt}/${maxRetries})`);
-    await new Promise(r => setTimeout(r, 2000));
-  }
-}
-```
+## Files touched
 
-**AuthContext getSession fix:**
-```typescript
-try {
-  const { data: { session }, error } = await supabase.auth.getSession();
-  if (error) { await supabase.auth.signOut(); }
-  // ... existing logic
-} catch {
-  await supabase.auth.signOut();
-  setIsLoading(false);
-}
-```
+- `supabase/migrations/<new>.sql` — bucket + column + policies.
+- `src/pages/PublicChatPage.tsx` — welcome chips, multi-vehicle selector, download chip, intent.
+- `src/pages/ServiceBookingsPage.tsx` — invoice upload UI.
+- `supabase/functions/mark-service-ready/index.ts` — invoice link in body.
+- `src/integrations/supabase/types.ts` — regenerated automatically post-migration.
 
-## Files Changed
-- **New:** `src/lib/auth-retry.ts`
-- **Edit:** `src/contexts/AuthContext.tsx`
-- **Edit:** `src/pages/LoginPage.tsx`
+## Out of scope / assumptions
 
+- No changes to the flow_templates JSON; intro chips and vehicle picker are rendered as in-component overlays on top of the existing flow so this works for every tenant immediately.
+- `registration_number` is read from `service_bookings.metadata->>'registration_number'` (existing convention).
+- Bucket is public-read so the WhatsApp link is openable without auth.
