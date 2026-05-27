@@ -756,6 +756,47 @@ export default function ServiceBookingsPage() {
                       />
                     </div>
 
+                    <div className="space-y-2 pt-2 border-t border-primary/20">
+                      <Label className="text-xs">Upload Final Invoice (PDF)</Label>
+                      {(selectedJob as any).invoice_url ? (
+                        <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-background p-2 text-xs">
+                          <a
+                            href={(selectedJob as any).invoice_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary underline truncate"
+                          >
+                            📄 View uploaded invoice
+                          </a>
+                          <label className="cursor-pointer text-muted-foreground hover:text-foreground whitespace-nowrap">
+                            {uploadingInvoice ? "Uploading…" : "Replace"}
+                            <input
+                              type="file"
+                              accept="application/pdf"
+                              className="hidden"
+                              disabled={uploadingInvoice}
+                              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleInvoiceUpload(f); e.currentTarget.value = ""; }}
+                            />
+                          </label>
+                        </div>
+                      ) : (
+                        <label className="flex items-center justify-center gap-2 rounded-md border border-dashed border-primary/40 bg-background/60 p-3 text-xs text-muted-foreground cursor-pointer hover:bg-primary/5">
+                          {uploadingInvoice ? <Loader2 className="w-4 h-4 animate-spin" /> : "📄"}
+                          <span>{uploadingInvoice ? "Uploading…" : "Click to upload final invoice PDF"}</span>
+                          <input
+                            type="file"
+                            accept="application/pdf"
+                            className="hidden"
+                            disabled={uploadingInvoice}
+                            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleInvoiceUpload(f); e.currentTarget.value = ""; }}
+                          />
+                        </label>
+                      )}
+                      <p className="text-[10px] text-muted-foreground">
+                        PDF up to 10 MB. Automatically attached to the WhatsApp "Service Ready" message.
+                      </p>
+                    </div>
+
                     <Button onClick={sendEstimate} disabled={sendingEstimate || locked} className="w-full">
                       {sendingEstimate ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
                       {locked ? "Estimate Approved — Locked" : "Send Estimate to Customer"}
