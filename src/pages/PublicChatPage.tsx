@@ -1775,6 +1775,82 @@ export default function PublicChatPage() {
     if (currentNode.dataField === "phone_number") {
       const phoneVal = String(newData.phone_number || canonical || "").trim();
       (async () => {
+        // ---- "View Past Service History" shortcut from the welcome chips ----
+        if (intentRef.current === "history" && dealer) {
+          intentRef.current = null;
+          const { data: rows } = await supabase
+            .from("service_bookings")
+            .select("booking_date, vehicle_model, kms_driven, service_type, work_notes, executive_notes, issue_description, invoice_url")
+            .eq("tenant_id", dealer.id)
+            .eq("phone_number", phoneVal)
+            .eq("status", "completed")
+            .order("booking_date", { ascending: false })
+            .limit(5);
+          const invoiceUrl = (rows ?? []).find((r) => r.invoice_url)?.invoice_url ?? null;
+          lastInvoiceUrlRef.current = invoiceUrl as string | null;
+          let text = "";
+          if (rows && rows.length) {
+            const lines = rows.map((r, i) => {
+              const dateStr = r.booking_date
+                ? new Date(r.booking_date + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+                : "—";
+              const advisor = r.work_notes || r.executive_notes || r.issue_description || "—";
+              return `🧾 Service #${i + 1} — ${dateStr}\n• Vehicle: ${r.vehicle_model || "—"}\n• KMs: ${r.kms_driven ?? "—"}\n• Service Type: ${r.service_type || "—"}\n• Advisor Remarks: ${advisor}`;
+            });
+            text = `📚 Your Past Service History:\n\n${lines.join("\n\n")}`;
+          } else {
+            text = "I couldn't find any past completed bookings linked to your phone number.";
+          }
+          const opts: { label: string; value: string }[] = [];
+          if (invoiceUrl) opts.push({ label: "📥 Download Invoice (PDF)", value: "__dl_invoice__" });
+          opts.push({ label: "📅 Book New Service", value: "__intent_book__" });
+          setMessages((prev) => [
+            ...prev,
+            { id: `bot-hist-${Date.now()}`, sender: "bot", text, nodeId: currentNode.id, options: opts },
+          ]);
+          return;
+        }
+
+        // ---- Multi-vehicle selector ----
+        if (dealer) {
+          const { data: vehRows } = await supabase
+            .from("service_bookings")
+            .select("vehicle_model, kms_driven, metadata, booking_date")
+            .eq("tenant_id", dealer.id)
+            .eq("phone_number", phoneVal)
+            .order("booking_date", { ascending: false })
+            .limit(20);
+          const seen = new Map<string, { vehicle_model: string; registration: string | null; last_kms: number | null }>();
+          for (const r of vehRows ?? []) {
+            const md = (r.metadata as Record<string, unknown> | null) || {};
+            const reg = (md.registration_number as string) || (md.vehicle_registration as string) || null;
+            const key = `${(r.vehicle_model || "").toLowerCase()}|${(reg || "").toLowerCase()}`;
+            if (!seen.has(key) && r.vehicle_model) {
+              seen.set(key, { vehicle_model: r.vehicle_model, registration: reg, last_kms: r.kms_driven ?? null });
+            }
+          }
+          if (seen.size > 1) {
+            const list = Array.from(seen.values()).slice(0, 5);
+            knownVehiclesRef.current = list;
+            const opts = list.map((v, i) => ({
+              label: `🚗 ${v.vehicle_model}${v.registration ? ` (${v.registration})` : ""}`,
+              value: `__veh_${i}__`,
+            }));
+            opts.push({ label: "🚗 Add a New Vehicle", value: "__veh_new__" });
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: `bot-veh-${Date.now()}`,
+                sender: "bot",
+                text: "We found multiple vehicles on this number. Which one needs attention today?",
+                nodeId: currentNode.id,
+                options: opts,
+              },
+            ]);
+            return;
+          }
+        }
+
         const rc = await fetchReturningCustomer(phoneVal);
         if (!rc) {
           setTimeout(() => advanceTo(nextNodeId!, newData), 500);
