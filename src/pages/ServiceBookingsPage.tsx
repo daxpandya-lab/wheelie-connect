@@ -295,6 +295,7 @@ export default function ServiceBookingsPage() {
 
   const [markingReady, setMarkingReady] = useState(false);
   const [readyAmount, setReadyAmount] = useState("");
+  const [uploadingInvoice, setUploadingInvoice] = useState(false);
   const markReady = async () => {
     if (!selectedJob) return;
     const amountNum = parseFloat(readyAmount);
@@ -314,6 +315,33 @@ export default function ServiceBookingsPage() {
     else toast.success("Marked ready (WhatsApp not configured)");
     fetchBookings();
     setDetailOpen(false);
+  };
+
+  const handleInvoiceUpload = async (file: File) => {
+    if (!selectedJob || !tenantId) return;
+    if (file.type !== "application/pdf") { toast.error("Please upload a PDF file"); return; }
+    if (file.size > 10 * 1024 * 1024) { toast.error("Invoice must be 10 MB or smaller"); return; }
+    setUploadingInvoice(true);
+    const path = `${tenantId}/${selectedJob.id}.pdf`;
+    const { error: upErr } = await supabase.storage
+      .from("tenant_invoices")
+      .upload(path, file, { contentType: "application/pdf", upsert: true });
+    if (upErr) {
+      setUploadingInvoice(false);
+      toast.error(`Upload failed: ${upErr.message}`);
+      return;
+    }
+    const { data: pub } = supabase.storage.from("tenant_invoices").getPublicUrl(path);
+    const url = `${pub.publicUrl}?v=${Date.now()}`;
+    const { error: updErr } = await supabase
+      .from("service_bookings")
+      .update({ invoice_url: url } as any)
+      .eq("id", selectedJob.id);
+    setUploadingInvoice(false);
+    if (updErr) { toast.error(updErr.message); return; }
+    toast.success("Invoice uploaded — will be sent with the Ready notification");
+    setSelectedJob({ ...selectedJob, invoice_url: url } as any);
+    fetchBookings();
   };
 
   const saveJobDetail = async () => {
@@ -728,6 +756,47 @@ export default function ServiceBookingsPage() {
                       />
                     </div>
 
+                    <div className="space-y-2 pt-2 border-t border-primary/20">
+                      <Label className="text-xs">Upload Final Invoice (PDF)</Label>
+                      {(selectedJob as any).invoice_url ? (
+                        <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-background p-2 text-xs">
+                          <a
+                            href={(selectedJob as any).invoice_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary underline truncate"
+                          >
+                            📄 View uploaded invoice
+                          </a>
+                          <label className="cursor-pointer text-muted-foreground hover:text-foreground whitespace-nowrap">
+                            {uploadingInvoice ? "Uploading…" : "Replace"}
+                            <input
+                              type="file"
+                              accept="application/pdf"
+                              className="hidden"
+                              disabled={uploadingInvoice}
+                              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleInvoiceUpload(f); e.currentTarget.value = ""; }}
+                            />
+                          </label>
+                        </div>
+                      ) : (
+                        <label className="flex items-center justify-center gap-2 rounded-md border border-dashed border-primary/40 bg-background/60 p-3 text-xs text-muted-foreground cursor-pointer hover:bg-primary/5">
+                          {uploadingInvoice ? <Loader2 className="w-4 h-4 animate-spin" /> : "📄"}
+                          <span>{uploadingInvoice ? "Uploading…" : "Click to upload final invoice PDF"}</span>
+                          <input
+                            type="file"
+                            accept="application/pdf"
+                            className="hidden"
+                            disabled={uploadingInvoice}
+                            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleInvoiceUpload(f); e.currentTarget.value = ""; }}
+                          />
+                        </label>
+                      )}
+                      <p className="text-[10px] text-muted-foreground">
+                        PDF up to 10 MB. Automatically attached to the WhatsApp "Service Ready" message.
+                      </p>
+                    </div>
+
                     <Button onClick={sendEstimate} disabled={sendingEstimate || locked} className="w-full">
                       {sendingEstimate ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
                       {locked ? "Estimate Approved — Locked" : "Send Estimate to Customer"}
@@ -740,7 +809,11 @@ export default function ServiceBookingsPage() {
               {!isExecutive && selectedJob.approval_status === "approved" && selectedJob.status !== "ready_for_pickup" && selectedJob.status !== "completed" && (
                 <div className="space-y-3 rounded-lg border border-success/30 p-4 bg-success/5">
                   <Label className="text-sm font-semibold text-foreground uppercase tracking-wide">Mark as Ready for Pickup</Label>
-                  <p className="text-xs text-muted-foreground">Sends the customer a WhatsApp message with the pro-forma invoice attached.</p>
+                  <p className="text-xs text-muted-foreground">
+                    {(selectedJob as any).invoice_url
+                      ? "Sends the customer a WhatsApp message with the uploaded final invoice attached."
+                      : "Sends the customer a WhatsApp message with an auto-generated pro-forma invoice attached."}
+                  </p>
                   <div className="space-y-2">
                     <Label className="text-xs">Final Bill Amount (₹)</Label>
                     <Input type="number" value={readyAmount} onChange={e => setReadyAmount(e.target.value)} placeholder="0" />

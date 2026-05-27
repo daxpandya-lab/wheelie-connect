@@ -1288,15 +1288,31 @@ export default function PublicChatPage() {
     if (!startNode) return;
     setCurrentNodeId(startNode.id);
     pushBotMessage(startNode, {}, lang);
+    // White-label welcome — branded CTA chips replace any auto-advance from the greeting.
     if (startNode.type === "greeting" && startNode.nextNodeId) {
       setTimeout(() => {
-        const next = f.nodes.find((n) => n.id === startNode.nextNodeId);
-        if (next) {
-          setCurrentNodeId(next.id);
-          pushBotMessage(next, {}, lang);
-          persistSession({ current_node_id: next.id });
-        }
-      }, 700);
+        const dealerName = dealer?.name || "our workshop";
+        const intro: Record<string, string> = {
+          en: `👋 Welcome to ${dealerName} Workshop! How can we assist you today?`,
+          hi: `👋 ${dealerName} वर्कशॉप में आपका स्वागत है! आज हम आपकी कैसे मदद कर सकते हैं?`,
+          ar: `👋 أهلاً بك في ورشة ${dealerName}! كيف يمكننا مساعدتك اليوم؟`,
+        };
+        const bookLabel: Record<string, string> = { en: "📅 Book New Service", hi: "📅 नई सर्विस बुक करें", ar: "📅 احجز خدمة جديدة" };
+        const histLabel: Record<string, string> = { en: "🔍 View Past Service History", hi: "🔍 पिछली सर्विस हिस्ट्री देखें", ar: "🔍 عرض سجل الخدمة السابق" };
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `bot-intro-${Date.now()}`,
+            sender: "bot",
+            text: intro[lang] || intro.en,
+            nodeId: startNode.id,
+            options: [
+              { label: bookLabel[lang] || bookLabel.en, value: "__intent_book__" },
+              { label: histLabel[lang] || histLabel.en, value: "__intent_history__" },
+            ],
+          },
+        ]);
+      }, 500);
     }
   };
 
@@ -1407,6 +1423,8 @@ export default function PublicChatPage() {
 
   // Cached returning-customer record so quick-reply chips can use it without re-querying.
   const returningCustomerRef = useRef<ReturningCustomer | null>(null);
+  const intentRef = useRef<"book" | "history" | null>(null);
+  const lastInvoiceUrlRef = useRef<string | null>(null);
 
   const processAnswer = (answer: string, displayLabel?: string) => {
     if (!flow || !currentNodeId || isComplete) return;
@@ -1416,6 +1434,41 @@ export default function PublicChatPage() {
     // ---------- Natural-language intents: history / tracking ----------
     // These are answered inline without disturbing the active flow node.
     const lower = answer.trim().toLowerCase();
+
+    // ---------- Upfront welcome CTA chips ----------
+    if (answer === "__intent_book__" || answer === "__intent_history__") {
+      intentRef.current = answer === "__intent_history__" ? "history" : "book";
+      setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? answer }]);
+      const startNode = flow.nodes.find((n) => n.id === flow.startNodeId);
+      const nextId = startNode?.nextNodeId;
+      if (nextId) setTimeout(() => advanceTo(nextId, collectedData), 300);
+      return;
+    }
+
+    // ---------- Download invoice chip ----------
+    if (answer === "__dl_invoice__") {
+      setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? "📥 Download Invoice (PDF)" }]);
+      const url = lastInvoiceUrlRef.current;
+      if (url) window.open(url, "_blank", "noopener,noreferrer");
+      else setMessages((prev) => [...prev, { id: `bot-noinv-${Date.now()}`, sender: "bot", text: "No invoice is available for your most recent booking yet." }]);
+      return;
+    }
+
+    // Detect "download bill / invoice" natural-language intent
+    if (/download\s+(bill|invoice|final\s+bill)/.test(lower) && lastInvoiceUrlRef.current) {
+      setMessages((prev) => [
+        ...prev,
+        { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? answer },
+        {
+          id: `bot-dl-${Date.now()}`,
+          sender: "bot",
+          text: "Here's your latest invoice — tap below to open it.",
+          nodeId: currentNodeId,
+          options: [{ label: "📥 Download Invoice (PDF)", value: "__dl_invoice__" }],
+        },
+      ]);
+      return;
+    }
     const wantsHistory =
       /^\/?(history|past\s*service|service\s*history)$/.test(lower) ||
       lower.includes("past service") ||
@@ -1722,6 +1775,82 @@ export default function PublicChatPage() {
     if (currentNode.dataField === "phone_number") {
       const phoneVal = String(newData.phone_number || canonical || "").trim();
       (async () => {
+        // ---- "View Past Service History" shortcut from the welcome chips ----
+        if (intentRef.current === "history" && dealer) {
+          intentRef.current = null;
+          const { data: rows } = await supabase
+            .from("service_bookings")
+            .select("booking_date, vehicle_model, kms_driven, service_type, work_notes, executive_notes, issue_description, invoice_url")
+            .eq("tenant_id", dealer.id)
+            .eq("phone_number", phoneVal)
+            .eq("status", "completed")
+            .order("booking_date", { ascending: false })
+            .limit(5);
+          const invoiceUrl = (rows ?? []).find((r) => r.invoice_url)?.invoice_url ?? null;
+          lastInvoiceUrlRef.current = invoiceUrl as string | null;
+          let text = "";
+          if (rows && rows.length) {
+            const lines = rows.map((r, i) => {
+              const dateStr = r.booking_date
+                ? new Date(r.booking_date + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+                : "—";
+              const advisor = r.work_notes || r.executive_notes || r.issue_description || "—";
+              return `🧾 Service #${i + 1} — ${dateStr}\n• Vehicle: ${r.vehicle_model || "—"}\n• KMs: ${r.kms_driven ?? "—"}\n• Service Type: ${r.service_type || "—"}\n• Advisor Remarks: ${advisor}`;
+            });
+            text = `📚 Your Past Service History:\n\n${lines.join("\n\n")}`;
+          } else {
+            text = "I couldn't find any past completed bookings linked to your phone number.";
+          }
+          const opts: { label: string; value: string }[] = [];
+          if (invoiceUrl) opts.push({ label: "📥 Download Invoice (PDF)", value: "__dl_invoice__" });
+          opts.push({ label: "📅 Book New Service", value: "__intent_book__" });
+          setMessages((prev) => [
+            ...prev,
+            { id: `bot-hist-${Date.now()}`, sender: "bot", text, nodeId: currentNode.id, options: opts },
+          ]);
+          return;
+        }
+
+        // ---- Multi-vehicle selector ----
+        if (dealer) {
+          const { data: vehRows } = await supabase
+            .from("service_bookings")
+            .select("vehicle_model, kms_driven, metadata, booking_date")
+            .eq("tenant_id", dealer.id)
+            .eq("phone_number", phoneVal)
+            .order("booking_date", { ascending: false })
+            .limit(20);
+          const seen = new Map<string, { vehicle_model: string; registration: string | null; last_kms: number | null }>();
+          for (const r of vehRows ?? []) {
+            const md = (r.metadata as Record<string, unknown> | null) || {};
+            const reg = (md.registration_number as string) || (md.vehicle_registration as string) || null;
+            const key = `${(r.vehicle_model || "").toLowerCase()}|${(reg || "").toLowerCase()}`;
+            if (!seen.has(key) && r.vehicle_model) {
+              seen.set(key, { vehicle_model: r.vehicle_model, registration: reg, last_kms: r.kms_driven ?? null });
+            }
+          }
+          if (seen.size > 1) {
+            const list = Array.from(seen.values()).slice(0, 5);
+            knownVehiclesRef.current = list;
+            const opts = list.map((v, i) => ({
+              label: `🚗 ${v.vehicle_model}${v.registration ? ` (${v.registration})` : ""}`,
+              value: `__veh_${i}__`,
+            }));
+            opts.push({ label: "🚗 Add a New Vehicle", value: "__veh_new__" });
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: `bot-veh-${Date.now()}`,
+                sender: "bot",
+                text: "We found multiple vehicles on this number. Which one needs attention today?",
+                nodeId: currentNode.id,
+                options: opts,
+              },
+            ]);
+            return;
+          }
+        }
+
         const rc = await fetchReturningCustomer(phoneVal);
         if (!rc) {
           setTimeout(() => advanceTo(nextNodeId!, newData), 500);

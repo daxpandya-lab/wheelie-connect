@@ -1186,6 +1186,7 @@ export type Database = {
           estimation_sent_at: string | null
           executive_notes: string | null
           id: string
+          invoice_url: string | null
           issue_description: string | null
           kms_driven: number | null
           media_attachments: Json
@@ -1224,6 +1225,7 @@ export type Database = {
           estimation_sent_at?: string | null
           executive_notes?: string | null
           id?: string
+          invoice_url?: string | null
           issue_description?: string | null
           kms_driven?: number | null
           media_attachments?: Json
@@ -1262,6 +1264,7 @@ export type Database = {
           estimation_sent_at?: string | null
           executive_notes?: string | null
           id?: string
+          invoice_url?: string | null
           issue_description?: string | null
           kms_driven?: number | null
           media_attachments?: Json
@@ -1870,6 +1873,7 @@ export type Database = {
           estimation_sent_at: string | null
           executive_notes: string | null
           id: string
+          invoice_url: string | null
           issue_description: string | null
           kms_driven: number | null
           media_attachments: Json

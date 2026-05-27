@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
 
     const { data: booking } = await supabase
       .from("service_bookings")
-      .select("id, tenant_id, customer_name, phone_number, vehicle_model, service_type, booking_date, estimate_amount, work_notes, parts_required, booking_source, status")
+      .select("id, tenant_id, customer_name, phone_number, vehicle_model, service_type, booking_date, estimate_amount, work_notes, parts_required, booking_source, status, invoice_url")
       .eq("id", bookingId).maybeSingle();
     if (!booking) return new Response(JSON.stringify({ error: "Not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
@@ -44,46 +44,57 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    const manualInvoiceUrl = typeof booking.invoice_url === "string" && booking.invoice_url.startsWith("http")
+      ? booking.invoice_url
+      : null;
+
+
     const { data: tenant } = await supabase.from("tenants").select("name, whatsapp_config").eq("id", booking.tenant_id).single();
 
-    // Build pro-forma invoice PDF
-    const pdf = await PDFDocument.create();
-    const page = pdf.addPage([595, 842]);
-    const font = await pdf.embedFont(StandardFonts.Helvetica);
-    const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-    let y = 800;
-    const draw = (t: string, opts: { x?: number; size?: number; b?: boolean } = {}) => {
-      page.drawText(t, { x: opts.x ?? 50, y, size: opts.size ?? 11, font: opts.b ? bold : font, color: rgb(0.1, 0.1, 0.15) });
-    };
-    draw(tenant?.name || "Service Center", { size: 18, b: true }); y -= 28;
-    draw("PRO-FORMA INVOICE", { size: 13, b: true }); y -= 24;
-    draw(`Booking ID: ${booking.id.slice(0, 8).toUpperCase()}`); y -= 16;
-    draw(`Date: ${new Date().toLocaleDateString("en-IN")}`); y -= 24;
-    draw("Customer", { b: true }); y -= 16;
-    draw(`Name: ${booking.customer_name}`); y -= 14;
-    draw(`Phone: ${booking.phone_number}`); y -= 14;
-    draw(`Vehicle: ${booking.vehicle_model}`); y -= 24;
-    draw("Service Details", { b: true }); y -= 16;
-    draw(`Service Type: ${booking.service_type || "-"}`); y -= 14;
-    if (booking.work_notes) { draw(`Work: ${String(booking.work_notes).slice(0, 80)}`); y -= 14; }
-    if (booking.parts_required) { draw(`Parts: ${String(booking.parts_required).slice(0, 80)}`); y -= 14; }
-    y -= 16;
-    page.drawLine({ start: { x: 50, y }, end: { x: 545, y }, thickness: 1, color: rgb(0.7, 0.7, 0.7) }); y -= 24;
-    draw("Total Amount", { b: true });
-    page.drawText(`Rs. ${amount.toLocaleString("en-IN")}`, { x: 450, y, size: 12, font: bold }); y -= 30;
-    draw("Payable at the service counter on pickup.", { size: 9 });
-    const pdfBytes = await pdf.save();
+    let invoiceUrl: string;
+    if (manualInvoiceUrl) {
+      // Executive has uploaded a final invoice — skip pro-forma generation, use it as-is.
+      invoiceUrl = manualInvoiceUrl;
+    } else {
+      // Build pro-forma invoice PDF
+      const pdf = await PDFDocument.create();
+      const page = pdf.addPage([595, 842]);
+      const font = await pdf.embedFont(StandardFonts.Helvetica);
+      const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+      let y = 800;
+      const draw = (t: string, opts: { x?: number; size?: number; b?: boolean } = {}) => {
+        page.drawText(t, { x: opts.x ?? 50, y, size: opts.size ?? 11, font: opts.b ? bold : font, color: rgb(0.1, 0.1, 0.15) });
+      };
+      draw(tenant?.name || "Service Center", { size: 18, b: true }); y -= 28;
+      draw("PRO-FORMA INVOICE", { size: 13, b: true }); y -= 24;
+      draw(`Booking ID: ${booking.id.slice(0, 8).toUpperCase()}`); y -= 16;
+      draw(`Date: ${new Date().toLocaleDateString("en-IN")}`); y -= 24;
+      draw("Customer", { b: true }); y -= 16;
+      draw(`Name: ${booking.customer_name}`); y -= 14;
+      draw(`Phone: ${booking.phone_number}`); y -= 14;
+      draw(`Vehicle: ${booking.vehicle_model}`); y -= 24;
+      draw("Service Details", { b: true }); y -= 16;
+      draw(`Service Type: ${booking.service_type || "-"}`); y -= 14;
+      if (booking.work_notes) { draw(`Work: ${String(booking.work_notes).slice(0, 80)}`); y -= 14; }
+      if (booking.parts_required) { draw(`Parts: ${String(booking.parts_required).slice(0, 80)}`); y -= 14; }
+      y -= 16;
+      page.drawLine({ start: { x: 50, y }, end: { x: 545, y }, thickness: 1, color: rgb(0.7, 0.7, 0.7) }); y -= 24;
+      draw("Total Amount", { b: true });
+      page.drawText(`Rs. ${amount.toLocaleString("en-IN")}`, { x: 450, y, size: 12, font: bold }); y -= 30;
+      draw("Payable at the service counter on pickup.", { size: 9 });
+      const pdfBytes = await pdf.save();
 
-    // Upload to storage
-    const path = `${booking.tenant_id}/${bookingId}-${Date.now()}.pdf`;
-    const { error: upErr } = await supabase.storage.from("service_invoices").upload(path, pdfBytes, {
-      contentType: "application/pdf", upsert: true,
-    });
-    if (upErr) {
-      return new Response(JSON.stringify({ error: `Upload failed: ${upErr.message}` }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const path = `${booking.tenant_id}/${bookingId}-${Date.now()}.pdf`;
+      const { error: upErr } = await supabase.storage.from("service_invoices").upload(path, pdfBytes, {
+        contentType: "application/pdf", upsert: true,
+      });
+      if (upErr) {
+        return new Response(JSON.stringify({ error: `Upload failed: ${upErr.message}` }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const { data: pub } = supabase.storage.from("service_invoices").getPublicUrl(path);
+      invoiceUrl = pub.publicUrl;
     }
-    const { data: pub } = supabase.storage.from("service_invoices").getPublicUrl(path);
-    const invoiceUrl = pub.publicUrl;
+
 
     // Atomic transition: lock the row, validate state, write fields.
     const { error: rpcErr } = await supabase.rpc("transition_service_booking_status", {
@@ -100,7 +111,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: rpcErr.message }), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const text = `🚗 Your vehicle ${booking.vehicle_model} is ready! Total Amount: ₹${amount.toLocaleString("en-IN")}. You can pay at the counter.`;
+    const text = `🚗 Your vehicle ${booking.vehicle_model} is ready for pickup!\n💰 Total Amount: ₹${amount.toLocaleString("en-IN")}\n\n📄 Final invoice: ${invoiceUrl}\n\nPlease pay at the counter on collection. Thank you!`;
     const result = await dispatchNotification(
       supabase,
       {
