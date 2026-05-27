@@ -295,6 +295,7 @@ export default function ServiceBookingsPage() {
 
   const [markingReady, setMarkingReady] = useState(false);
   const [readyAmount, setReadyAmount] = useState("");
+  const [uploadingInvoice, setUploadingInvoice] = useState(false);
   const markReady = async () => {
     if (!selectedJob) return;
     const amountNum = parseFloat(readyAmount);
@@ -314,6 +315,33 @@ export default function ServiceBookingsPage() {
     else toast.success("Marked ready (WhatsApp not configured)");
     fetchBookings();
     setDetailOpen(false);
+  };
+
+  const handleInvoiceUpload = async (file: File) => {
+    if (!selectedJob || !tenantId) return;
+    if (file.type !== "application/pdf") { toast.error("Please upload a PDF file"); return; }
+    if (file.size > 10 * 1024 * 1024) { toast.error("Invoice must be 10 MB or smaller"); return; }
+    setUploadingInvoice(true);
+    const path = `${tenantId}/${selectedJob.id}.pdf`;
+    const { error: upErr } = await supabase.storage
+      .from("tenant_invoices")
+      .upload(path, file, { contentType: "application/pdf", upsert: true });
+    if (upErr) {
+      setUploadingInvoice(false);
+      toast.error(`Upload failed: ${upErr.message}`);
+      return;
+    }
+    const { data: pub } = supabase.storage.from("tenant_invoices").getPublicUrl(path);
+    const url = `${pub.publicUrl}?v=${Date.now()}`;
+    const { error: updErr } = await supabase
+      .from("service_bookings")
+      .update({ invoice_url: url } as any)
+      .eq("id", selectedJob.id);
+    setUploadingInvoice(false);
+    if (updErr) { toast.error(updErr.message); return; }
+    toast.success("Invoice uploaded — will be sent with the Ready notification");
+    setSelectedJob({ ...selectedJob, invoice_url: url } as any);
+    fetchBookings();
   };
 
   const saveJobDetail = async () => {
