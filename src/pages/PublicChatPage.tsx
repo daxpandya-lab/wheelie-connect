@@ -1434,6 +1434,41 @@ export default function PublicChatPage() {
     // ---------- Natural-language intents: history / tracking ----------
     // These are answered inline without disturbing the active flow node.
     const lower = answer.trim().toLowerCase();
+
+    // ---------- Upfront welcome CTA chips ----------
+    if (answer === "__intent_book__" || answer === "__intent_history__") {
+      intentRef.current = answer === "__intent_history__" ? "history" : "book";
+      setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? answer }]);
+      const startNode = flow.nodes.find((n) => n.id === flow.startNodeId);
+      const nextId = startNode?.nextNodeId;
+      if (nextId) setTimeout(() => advanceTo(nextId, collectedData), 300);
+      return;
+    }
+
+    // ---------- Download invoice chip ----------
+    if (answer === "__dl_invoice__") {
+      setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? "📥 Download Invoice (PDF)" }]);
+      const url = lastInvoiceUrlRef.current;
+      if (url) window.open(url, "_blank", "noopener,noreferrer");
+      else setMessages((prev) => [...prev, { id: `bot-noinv-${Date.now()}`, sender: "bot", text: "No invoice is available for your most recent booking yet." }]);
+      return;
+    }
+
+    // Detect "download bill / invoice" natural-language intent
+    if (/download\s+(bill|invoice|final\s+bill)/.test(lower) && lastInvoiceUrlRef.current) {
+      setMessages((prev) => [
+        ...prev,
+        { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? answer },
+        {
+          id: `bot-dl-${Date.now()}`,
+          sender: "bot",
+          text: "Here's your latest invoice — tap below to open it.",
+          nodeId: currentNodeId,
+          options: [{ label: "📥 Download Invoice (PDF)", value: "__dl_invoice__" }],
+        },
+      ]);
+      return;
+    }
     const wantsHistory =
       /^\/?(history|past\s*service|service\s*history)$/.test(lower) ||
       lower.includes("past service") ||
