@@ -41,7 +41,7 @@ async function handleEstimateButton(
 
   const { data: booking } = await supabase
     .from("service_bookings")
-    .select("id, tenant_id, approval_status, customer_approval_status, assigned_to")
+    .select("id, tenant_id, approval_status, customer_approval_status, assigned_to, metadata")
     .eq("id", bookingId).maybeSingle();
   if (!booking || booking.tenant_id !== tenantId) return false;
 
@@ -49,12 +49,20 @@ async function handleEstimateButton(
   const approvalLegacy = action === "approve" ? "approved" : action === "reject" ? "rejected" : "pending";
 
   if ((booking.customer_approval_status || "pending_approval") === "pending_approval") {
+    const mergedMeta = {
+      ...(booking.metadata && typeof booking.metadata === "object" ? booking.metadata : {}),
+      approval_source: "whatsapp_webhook",
+      approval_action: action,
+      approval_responded_at: new Date().toISOString(),
+    };
     const patch: Record<string, unknown> = {
       approval_status: approvalLegacy,
       customer_approval_status: customerState,
+      metadata: mergedMeta,
     };
     if (action === "approve") patch.status = "in_progress";
     await supabase.from("service_bookings").update(patch).eq("id", bookingId);
+
 
     // Notify assigned advisor
     if (booking.assigned_to) {
