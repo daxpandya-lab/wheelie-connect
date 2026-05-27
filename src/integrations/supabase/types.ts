@@ -1898,6 +1898,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      upsert_part_suggestion: {
+        Args: { _part_name: string; _tenant_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role: "super_admin" | "tenant_admin" | "staff"
