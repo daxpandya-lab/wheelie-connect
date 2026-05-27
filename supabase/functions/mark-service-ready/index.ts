@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
 
     const { data: booking } = await supabase
       .from("service_bookings")
-      .select("id, tenant_id, customer_name, phone_number, vehicle_model, service_type, booking_date, estimate_amount, work_notes, parts_required, booking_source, status")
+      .select("id, tenant_id, customer_name, phone_number, vehicle_model, service_type, booking_date, estimate_amount, work_notes, parts_required, booking_source, status, invoice_url")
       .eq("id", bookingId).maybeSingle();
     if (!booking) return new Response(JSON.stringify({ error: "Not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
@@ -43,6 +43,11 @@ Deno.serve(async (req) => {
     if (!profile || profile.tenant_id !== booking.tenant_id) {
       return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+
+    const manualInvoiceUrl = typeof booking.invoice_url === "string" && booking.invoice_url.startsWith("http")
+      ? booking.invoice_url
+      : null;
+
 
     const { data: tenant } = await supabase.from("tenants").select("name, whatsapp_config").eq("id", booking.tenant_id).single();
 
