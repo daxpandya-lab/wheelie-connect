@@ -1423,6 +1423,8 @@ export default function PublicChatPage() {
 
   // Cached returning-customer record so quick-reply chips can use it without re-querying.
   const returningCustomerRef = useRef<ReturningCustomer | null>(null);
+  const intentRef = useRef<"book" | "history" | null>(null);
+  const lastInvoiceUrlRef = useRef<string | null>(null);
 
   const processAnswer = (answer: string, displayLabel?: string) => {
     if (!flow || !currentNodeId || isComplete) return;
