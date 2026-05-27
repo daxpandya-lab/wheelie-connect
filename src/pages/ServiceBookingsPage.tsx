@@ -809,7 +809,11 @@ export default function ServiceBookingsPage() {
               {!isExecutive && selectedJob.approval_status === "approved" && selectedJob.status !== "ready_for_pickup" && selectedJob.status !== "completed" && (
                 <div className="space-y-3 rounded-lg border border-success/30 p-4 bg-success/5">
                   <Label className="text-sm font-semibold text-foreground uppercase tracking-wide">Mark as Ready for Pickup</Label>
-                  <p className="text-xs text-muted-foreground">Sends the customer a WhatsApp message with the pro-forma invoice attached.</p>
+                  <p className="text-xs text-muted-foreground">
+                    {(selectedJob as any).invoice_url
+                      ? "Sends the customer a WhatsApp message with the uploaded final invoice attached."
+                      : "Sends the customer a WhatsApp message with an auto-generated pro-forma invoice attached."}
+                  </p>
                   <div className="space-y-2">
                     <Label className="text-xs">Final Bill Amount (₹)</Label>
                     <Input type="number" value={readyAmount} onChange={e => setReadyAmount(e.target.value)} placeholder="0" />
