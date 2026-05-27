@@ -78,18 +78,19 @@ Deno.serve(async (req) => {
       .update({ customer_approval_status: "pending_approval" })
       .eq("id", bookingId);
 
-    // Seed parts suggestion library from comma/newline-separated parts string
+    // Seed parts suggestion library; RPC increments usage_count and dedupes near-spellings.
     if (parts && parts.trim()) {
       const parsed = Array.from(new Set(
         parts.split(/[,;\n]/).map((p) => p.trim()).filter((p) => p.length > 0 && p.length < 80),
       ));
       for (const part_name of parsed) {
-        await supabase.from("parts_suggestion_library").upsert(
-          { tenant_id: booking.tenant_id, part_name, last_used_at: new Date().toISOString() },
-          { onConflict: "tenant_id,part_name_normalized", ignoreDuplicates: false },
-        );
+        await supabase.rpc("upsert_part_suggestion", {
+          _tenant_id: booking.tenant_id,
+          _part_name: part_name,
+        } as never);
       }
     }
+
 
 
     const vehicle = booking.vehicle_model || "your vehicle";
