@@ -1425,6 +1425,7 @@ export default function PublicChatPage() {
   const returningCustomerRef = useRef<ReturningCustomer | null>(null);
   const intentRef = useRef<"book" | "history" | null>(null);
   const lastInvoiceUrlRef = useRef<string | null>(null);
+  const knownVehiclesRef = useRef<{ vehicle_model: string; registration: string | null; last_kms: number | null }[]>([]);
 
   const processAnswer = (answer: string, displayLabel?: string) => {
     if (!flow || !currentNodeId || isComplete) return;
