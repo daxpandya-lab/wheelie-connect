@@ -151,6 +151,8 @@ export default function PublicChatPage() {
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
   const [chatMedia, setChatMedia] = useState<{ url: string; path: string; mime: string; kind: "image" | "video" | "audio"; name: string }[]>([]);
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadingFile, setUploadingFile] = useState<{ name: string; kind: "image" | "video" | "audio"; previewUrl?: string } | null>(null);
   const [mediaMenuOpen, setMediaMenuOpen] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
