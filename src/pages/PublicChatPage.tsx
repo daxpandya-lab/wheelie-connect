@@ -2500,7 +2500,7 @@ export default function PublicChatPage() {
           <Button
             size="icon"
             onClick={handleSend}
-            disabled={(!input.trim() && !(isIssueNode && chatMedia.length > 0)) || isComplete || isSelectionNode}
+            disabled={(!input.trim() && !(isIssueNode && chatMedia.length > 0)) || isComplete || isSelectionNode || uploadingMedia}
           >
             <Send className="w-4 h-4" />
           </Button>
