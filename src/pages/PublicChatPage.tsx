@@ -15,6 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Car, Send, Loader2, Bot, User as UserIcon, Languages, CalendarIcon, Paperclip, Camera, Video as VideoIcon, Mic, X as XIcon } from "lucide-react";
 import brandIcon from "@/assets/dealer-doodle-icon.png";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -150,6 +151,8 @@ export default function PublicChatPage() {
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
   const [chatMedia, setChatMedia] = useState<{ url: string; path: string; mime: string; kind: "image" | "video" | "audio"; name: string }[]>([]);
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadingFile, setUploadingFile] = useState<{ name: string; kind: "image" | "video" | "audio"; previewUrl?: string } | null>(null);
   const [mediaMenuOpen, setMediaMenuOpen] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -1961,6 +1964,16 @@ export default function PublicChatPage() {
     }
 
     setUploadingMedia(true);
+    setUploadProgress(2);
+    const previewUrl = kind === "image" ? URL.createObjectURL(file) : undefined;
+    setUploadingFile({ name: file.name, kind, previewUrl });
+
+    // Simulated progress — Supabase JS uses fetch which doesn't expose XHR upload
+    // events, so we animate toward 90% and jump to 100% on success.
+    const progressTimer = window.setInterval(() => {
+      setUploadProgress((p) => (p < 90 ? p + Math.max(1, Math.round((90 - p) / 10)) : p));
+    }, 250);
+
     const visitorToken = getVisitorToken(dealer.id);
     const ext = (file.name.split(".").pop() || "bin").toLowerCase();
     const path = `${dealer.id}/${visitorToken}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
@@ -1985,22 +1998,34 @@ export default function PublicChatPage() {
       }
     }
 
+    window.clearInterval(progressTimer);
+
     if (!success) {
       // Best-effort cleanup of any partial object
       supabase.storage.from("service-intake-media").remove([path]).catch(() => {});
       console.error("media upload failed after retries", lastErr);
       toast.error("Upload failed after multiple attempts. Please try again.");
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setUploadProgress(0);
+      setUploadingFile(null);
       setUploadingMedia(false);
       setMediaMenuOpen(false);
       return;
     }
 
+    setUploadProgress(100);
     const { data: pub } = supabase.storage.from("service-intake-media").getPublicUrl(path);
     setChatMedia((prev) => [...prev, { url: pub.publicUrl, path, mime: file.type, kind, name: file.name }]);
     toast.success(
       kind === "image" ? "Photo attached" : kind === "video" ? "Video attached" : "Voice note attached"
     );
-    setUploadingMedia(false);
+    // Brief delay so the user sees the bar hit 100%
+    window.setTimeout(() => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setUploadingFile(null);
+      setUploadProgress(0);
+      setUploadingMedia(false);
+    }, 350);
     setMediaMenuOpen(false);
   };
 
@@ -2288,7 +2313,7 @@ export default function PublicChatPage() {
       </div>
 
       <div className="border-t bg-background shrink-0">
-        {chatMedia.length > 0 && (
+        {(chatMedia.length > 0 || uploadingFile) && (
           <div className="px-3 pt-2 flex flex-wrap gap-2">
             {chatMedia.map((m, i) => (
               <div
@@ -2314,6 +2339,33 @@ export default function PublicChatPage() {
                 </button>
               </div>
             ))}
+            {uploadingFile && (
+              <div
+                className="flex items-center gap-2 pl-1.5 pr-2 py-1 rounded-md border border-primary/40 bg-primary/5 text-xs text-foreground w-full sm:w-[240px]"
+                title={uploadingFile.name}
+                aria-live="polite"
+              >
+                <div className="relative shrink-0">
+                  {uploadingFile.kind === "image" && uploadingFile.previewUrl ? (
+                    <img src={uploadingFile.previewUrl} alt="" className="w-7 h-7 object-cover rounded opacity-70" />
+                  ) : uploadingFile.kind === "video" ? (
+                    <VideoIcon className="w-4 h-4 text-primary" />
+                  ) : (
+                    <Mic className="w-4 h-4 text-primary" />
+                  )}
+                  <Loader2 className="w-3 h-3 animate-spin text-primary absolute -right-1 -bottom-1 bg-background rounded-full" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-muted-foreground">
+                      Uploading {uploadingFile.kind}…
+                    </span>
+                    <span className="tabular-nums text-[10px] text-muted-foreground">{Math.round(uploadProgress)}%</span>
+                  </div>
+                  <Progress value={uploadProgress} className="h-1 mt-1" />
+                </div>
+              </div>
+            )}
           </div>
         )}
         <div className="p-3 flex gap-2 items-center">
@@ -2441,14 +2493,14 @@ export default function PublicChatPage() {
                 : "Type your answer..."
             }
             className="flex-1"
-            disabled={isComplete || isSelectionNode}
+            disabled={isComplete || isSelectionNode || uploadingMedia}
           />
         )}
         {!isDateNode && (
           <Button
             size="icon"
             onClick={handleSend}
-            disabled={(!input.trim() && !(isIssueNode && chatMedia.length > 0)) || isComplete || isSelectionNode}
+            disabled={(!input.trim() && !(isIssueNode && chatMedia.length > 0)) || isComplete || isSelectionNode || uploadingMedia}
           >
             <Send className="w-4 h-4" />
           </Button>
