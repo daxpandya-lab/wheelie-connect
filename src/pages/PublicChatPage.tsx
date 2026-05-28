@@ -2404,6 +2404,43 @@ export default function PublicChatPage() {
                 </div>
               </div>
             )}
+            {failedUpload && !uploadingFile && (
+              <div
+                className="flex items-center gap-2 pl-1.5 pr-2 py-1 rounded-md border border-destructive/40 bg-destructive/5 text-xs text-foreground w-full sm:w-[260px]"
+                title={failedUpload.name}
+                role="alert"
+              >
+                <div className="shrink-0">
+                  {failedUpload.kind === "image" && failedUpload.previewUrl ? (
+                    <img src={failedUpload.previewUrl} alt="" className="w-7 h-7 object-cover rounded opacity-60" />
+                  ) : failedUpload.kind === "video" ? (
+                    <VideoIcon className="w-4 h-4 text-destructive" />
+                  ) : (
+                    <Mic className="w-4 h-4 text-destructive" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="truncate text-destructive font-medium">Upload failed</div>
+                  <div className="truncate text-[10px] text-muted-foreground">{failedUpload.name}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={retryFailedUpload}
+                  disabled={uploadingMedia}
+                  className="px-2 py-1 rounded text-[11px] font-medium bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                >
+                  Retry
+                </button>
+                <button
+                  type="button"
+                  onClick={dismissFailedUpload}
+                  className="text-muted-foreground hover:text-destructive"
+                  aria-label="Dismiss failed upload"
+                >
+                  <XIcon className="w-3 h-3" />
+                </button>
+              </div>
+            )}
           </div>
         )}
         <div className="p-3 flex gap-2 items-center">
