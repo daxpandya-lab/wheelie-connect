@@ -629,9 +629,15 @@ export default function ServiceBookingsPage() {
                       const kind = att.kind || (att.mime?.startsWith("image/") ? "image" : att.mime?.startsWith("audio/") ? "audio" : att.mime?.startsWith("video/") ? "video" : "file");
                       if (kind === "image") {
                         return (
-                          <a key={i} href={att.url} target="_blank" rel="noreferrer" className="inline-block">
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => setLightboxUrl(att.url)}
+                            className="inline-block focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-md"
+                            title="Click to enlarge"
+                          >
                             <img src={att.url} alt={`Attachment ${i + 1}`} loading="lazy" className="w-32 h-32 object-cover rounded-md border border-border hover:opacity-80 transition" />
-                          </a>
+                          </button>
                         );
                       }
                       if (kind === "audio") {
