@@ -1964,6 +1964,16 @@ export default function PublicChatPage() {
     }
 
     setUploadingMedia(true);
+    setUploadProgress(2);
+    const previewUrl = kind === "image" ? URL.createObjectURL(file) : undefined;
+    setUploadingFile({ name: file.name, kind, previewUrl });
+
+    // Simulated progress — Supabase JS uses fetch which doesn't expose XHR upload
+    // events, so we animate toward 90% and jump to 100% on success.
+    const progressTimer = window.setInterval(() => {
+      setUploadProgress((p) => (p < 90 ? p + Math.max(1, Math.round((90 - p) / 10)) : p));
+    }, 250);
+
     const visitorToken = getVisitorToken(dealer.id);
     const ext = (file.name.split(".").pop() || "bin").toLowerCase();
     const path = `${dealer.id}/${visitorToken}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
@@ -1988,22 +1998,34 @@ export default function PublicChatPage() {
       }
     }
 
+    window.clearInterval(progressTimer);
+
     if (!success) {
       // Best-effort cleanup of any partial object
       supabase.storage.from("service-intake-media").remove([path]).catch(() => {});
       console.error("media upload failed after retries", lastErr);
       toast.error("Upload failed after multiple attempts. Please try again.");
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setUploadProgress(0);
+      setUploadingFile(null);
       setUploadingMedia(false);
       setMediaMenuOpen(false);
       return;
     }
 
+    setUploadProgress(100);
     const { data: pub } = supabase.storage.from("service-intake-media").getPublicUrl(path);
     setChatMedia((prev) => [...prev, { url: pub.publicUrl, path, mime: file.type, kind, name: file.name }]);
     toast.success(
       kind === "image" ? "Photo attached" : kind === "video" ? "Video attached" : "Voice note attached"
     );
-    setUploadingMedia(false);
+    // Brief delay so the user sees the bar hit 100%
+    window.setTimeout(() => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setUploadingFile(null);
+      setUploadProgress(0);
+      setUploadingMedia(false);
+    }, 350);
     setMediaMenuOpen(false);
   };
 
