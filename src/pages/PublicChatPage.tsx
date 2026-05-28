@@ -2313,7 +2313,7 @@ export default function PublicChatPage() {
       </div>
 
       <div className="border-t bg-background shrink-0">
-        {chatMedia.length > 0 && (
+        {(chatMedia.length > 0 || uploadingFile) && (
           <div className="px-3 pt-2 flex flex-wrap gap-2">
             {chatMedia.map((m, i) => (
               <div
@@ -2339,6 +2339,33 @@ export default function PublicChatPage() {
                 </button>
               </div>
             ))}
+            {uploadingFile && (
+              <div
+                className="flex items-center gap-2 pl-1.5 pr-2 py-1 rounded-md border border-primary/40 bg-primary/5 text-xs text-foreground w-full sm:w-[240px]"
+                title={uploadingFile.name}
+                aria-live="polite"
+              >
+                <div className="relative shrink-0">
+                  {uploadingFile.kind === "image" && uploadingFile.previewUrl ? (
+                    <img src={uploadingFile.previewUrl} alt="" className="w-7 h-7 object-cover rounded opacity-70" />
+                  ) : uploadingFile.kind === "video" ? (
+                    <VideoIcon className="w-4 h-4 text-primary" />
+                  ) : (
+                    <Mic className="w-4 h-4 text-primary" />
+                  )}
+                  <Loader2 className="w-3 h-3 animate-spin text-primary absolute -right-1 -bottom-1 bg-background rounded-full" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-muted-foreground">
+                      Uploading {uploadingFile.kind}…
+                    </span>
+                    <span className="tabular-nums text-[10px] text-muted-foreground">{Math.round(uploadProgress)}%</span>
+                  </div>
+                  <Progress value={uploadProgress} className="h-1 mt-1" />
+                </div>
+              </div>
+            )}
           </div>
         )}
         <div className="p-3 flex gap-2 items-center">
