@@ -153,6 +153,7 @@ export default function PublicChatPage() {
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadingFile, setUploadingFile] = useState<{ name: string; kind: "image" | "video" | "audio"; previewUrl?: string } | null>(null);
+  const [failedUpload, setFailedUpload] = useState<{ file: File; kind: "image" | "video" | "audio"; previewUrl?: string; name: string } | null>(null);
   const [mediaMenuOpen, setMediaMenuOpen] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -1936,35 +1937,21 @@ export default function PublicChatPage() {
     audio: 5 * 1024 * 1024,
   } as const;
 
-  const handleMediaPick = async (
-    e: React.ChangeEvent<HTMLInputElement>,
+  const performMediaUpload = async (
+    file: File,
     kind: "image" | "video" | "audio"
   ) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file || !dealer) return;
-
-    const mimeOk =
-      (kind === "image" && /image\/(jpe?g|png)/i.test(file.type)) ||
-      (kind === "video" && file.type === "video/mp4") ||
-      (kind === "audio" && /audio\//i.test(file.type));
-    if (!mimeOk) {
-      toast.error(
-        kind === "image"
-          ? "Please upload a JPG or PNG photo."
-          : kind === "video"
-          ? "Please upload an MP4 video."
-          : "Please upload an MP3, M4A, or WAV audio file."
-      );
-      return;
-    }
-    if (file.size > MEDIA_LIMITS[kind]) {
-      toast.error("File too large! Please keep videos under 15MB and photos/audio under 5MB.");
-      return;
-    }
+    if (!dealer) return;
 
     setUploadingMedia(true);
     setUploadProgress(2);
+    // Clear any previous failed-upload chip while this attempt is running
+    setFailedUpload((prev) => {
+      if (prev?.previewUrl && prev.previewUrl !== undefined) {
+        // keep preview URL — it's reused if this attempt also fails
+      }
+      return prev;
+    });
     const previewUrl = kind === "image" ? URL.createObjectURL(file) : undefined;
     setUploadingFile({ name: file.name, kind, previewUrl });
 
@@ -2004,18 +1991,25 @@ export default function PublicChatPage() {
       // Best-effort cleanup of any partial object
       supabase.storage.from("service-intake-media").remove([path]).catch(() => {});
       console.error("media upload failed after retries", lastErr);
-      toast.error("Upload failed after multiple attempts. Please try again.");
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      toast.error("Upload failed. Tap retry to try again.");
       setUploadProgress(0);
       setUploadingFile(null);
       setUploadingMedia(false);
       setMediaMenuOpen(false);
+      // Stash the file so the user can retry from a chip; reuse previewUrl
+      setFailedUpload({ file, kind, previewUrl, name: file.name });
       return;
     }
 
     setUploadProgress(100);
     const { data: pub } = supabase.storage.from("service-intake-media").getPublicUrl(path);
+    // Persist into the same chatMedia array consumed by media_attachments at submit
     setChatMedia((prev) => [...prev, { url: pub.publicUrl, path, mime: file.type, kind, name: file.name }]);
+    // Clear any prior failed-upload chip for this file now that we've succeeded
+    setFailedUpload((prev) => {
+      if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+      return null;
+    });
     toast.success(
       kind === "image" ? "Photo attached" : kind === "video" ? "Video attached" : "Voice note attached"
     );
@@ -2028,6 +2022,50 @@ export default function PublicChatPage() {
     }, 350);
     setMediaMenuOpen(false);
   };
+
+  const handleMediaPick = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    kind: "image" | "video" | "audio"
+  ) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !dealer) return;
+
+    const mimeOk =
+      (kind === "image" && /image\/(jpe?g|png)/i.test(file.type)) ||
+      (kind === "video" && file.type === "video/mp4") ||
+      (kind === "audio" && /audio\//i.test(file.type));
+    if (!mimeOk) {
+      toast.error(
+        kind === "image"
+          ? "Please upload a JPG or PNG photo."
+          : kind === "video"
+          ? "Please upload an MP4 video."
+          : "Please upload an MP3, M4A, or WAV audio file."
+      );
+      return;
+    }
+    if (file.size > MEDIA_LIMITS[kind]) {
+      toast.error("File too large! Please keep videos under 15MB and photos/audio under 5MB.");
+      return;
+    }
+
+    await performMediaUpload(file, kind);
+  };
+
+  const retryFailedUpload = async () => {
+    if (!failedUpload || uploadingMedia) return;
+    const { file, kind } = failedUpload;
+    await performMediaUpload(file, kind);
+  };
+
+  const dismissFailedUpload = () => {
+    setFailedUpload((prev) => {
+      if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+      return null;
+    });
+  };
+
 
   const removeMedia = async (idx: number) => {
     let removed: { path: string } | undefined;
@@ -2313,7 +2351,7 @@ export default function PublicChatPage() {
       </div>
 
       <div className="border-t bg-background shrink-0">
-        {(chatMedia.length > 0 || uploadingFile) && (
+        {(chatMedia.length > 0 || uploadingFile || failedUpload) && (
           <div className="px-3 pt-2 flex flex-wrap gap-2">
             {chatMedia.map((m, i) => (
               <div
@@ -2364,6 +2402,43 @@ export default function PublicChatPage() {
                   </div>
                   <Progress value={uploadProgress} className="h-1 mt-1" />
                 </div>
+              </div>
+            )}
+            {failedUpload && !uploadingFile && (
+              <div
+                className="flex items-center gap-2 pl-1.5 pr-2 py-1 rounded-md border border-destructive/40 bg-destructive/5 text-xs text-foreground w-full sm:w-[260px]"
+                title={failedUpload.name}
+                role="alert"
+              >
+                <div className="shrink-0">
+                  {failedUpload.kind === "image" && failedUpload.previewUrl ? (
+                    <img src={failedUpload.previewUrl} alt="" className="w-7 h-7 object-cover rounded opacity-60" />
+                  ) : failedUpload.kind === "video" ? (
+                    <VideoIcon className="w-4 h-4 text-destructive" />
+                  ) : (
+                    <Mic className="w-4 h-4 text-destructive" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="truncate text-destructive font-medium">Upload failed</div>
+                  <div className="truncate text-[10px] text-muted-foreground">{failedUpload.name}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={retryFailedUpload}
+                  disabled={uploadingMedia}
+                  className="px-2 py-1 rounded text-[11px] font-medium bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                >
+                  Retry
+                </button>
+                <button
+                  type="button"
+                  onClick={dismissFailedUpload}
+                  className="text-muted-foreground hover:text-destructive"
+                  aria-label="Dismiss failed upload"
+                >
+                  <XIcon className="w-3 h-3" />
+                </button>
               </div>
             )}
           </div>
