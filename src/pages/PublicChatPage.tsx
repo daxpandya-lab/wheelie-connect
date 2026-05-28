@@ -2493,7 +2493,7 @@ export default function PublicChatPage() {
                 : "Type your answer..."
             }
             className="flex-1"
-            disabled={isComplete || isSelectionNode}
+            disabled={isComplete || isSelectionNode || uploadingMedia}
           />
         )}
         {!isDateNode && (
