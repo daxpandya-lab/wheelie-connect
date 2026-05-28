@@ -153,6 +153,7 @@ export default function PublicChatPage() {
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadingFile, setUploadingFile] = useState<{ name: string; kind: "image" | "video" | "audio"; previewUrl?: string } | null>(null);
+  const [failedUpload, setFailedUpload] = useState<{ file: File; kind: "image" | "video" | "audio"; previewUrl?: string; name: string } | null>(null);
   const [mediaMenuOpen, setMediaMenuOpen] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
