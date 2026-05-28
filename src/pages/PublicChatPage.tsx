@@ -15,6 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Car, Send, Loader2, Bot, User as UserIcon, Languages, CalendarIcon, Paperclip, Camera, Video as VideoIcon, Mic, X as XIcon } from "lucide-react";
 import brandIcon from "@/assets/dealer-doodle-icon.png";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
