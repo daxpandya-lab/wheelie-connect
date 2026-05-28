@@ -2351,7 +2351,7 @@ export default function PublicChatPage() {
       </div>
 
       <div className="border-t bg-background shrink-0">
-        {(chatMedia.length > 0 || uploadingFile) && (
+        {(chatMedia.length > 0 || uploadingFile || failedUpload) && (
           <div className="px-3 pt-2 flex flex-wrap gap-2">
             {chatMedia.map((m, i) => (
               <div
