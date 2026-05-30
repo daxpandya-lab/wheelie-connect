@@ -1921,7 +1921,12 @@ export default function PublicChatPage() {
       // Allow advancing the issue-description node when only media was attached
       const node = flow?.nodes.find((n) => n.id === currentNodeId);
       if (node?.dataField === "issue_description" && chatMedia.length > 0) {
-        processAnswer("(media attached)");
+        // Advance without polluting issue_description with placeholder text.
+        // Media URLs are persisted separately into media_attachments at submit time.
+        const label = chatMedia.length === 1
+          ? `📎 Shared 1 ${chatMedia[0].kind}`
+          : `📎 Shared ${chatMedia.length} attachments`;
+        processAnswer("", label);
         setInput("");
       }
       return;
