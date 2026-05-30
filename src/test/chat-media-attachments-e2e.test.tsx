@@ -66,7 +66,7 @@ function makeMockSupabase() {
         rows().push(withId);
         return {
           select: () => ({
-            single: async () => ({ data: withId, error: null }),
+            single: async (): Promise<{ data: any; error: null }> => ({ data: withId, error: null }),
           }),
         };
       },
