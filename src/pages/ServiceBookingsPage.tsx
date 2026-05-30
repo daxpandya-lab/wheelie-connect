@@ -116,7 +116,7 @@ function AttachmentsCell({ items, onImageClick }: { items: MediaAttachment[]; on
         }
         if (kind === "audio") {
           return (
-            <audio key={i} controls src={att.url} preload="none" className="h-8 max-w-[180px]" />
+            <audio key={i} controls src={att.url} preload="none" className="h-8 w-40" />
           );
         }
         if (kind === "video") {
