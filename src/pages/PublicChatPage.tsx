@@ -150,6 +150,10 @@ export default function PublicChatPage() {
 
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
   const [chatMedia, setChatMedia] = useState<{ url: string; path: string; mime: string; kind: "image" | "video" | "audio"; name: string }[]>([]);
+  // Ref mirror so closures (advanceTo / createBookingFromFlow captured in useCallback)
+  // always read the latest uploaded attachments at submit time.
+  const chatMediaRef = useRef<typeof chatMedia>([]);
+  useEffect(() => { chatMediaRef.current = chatMedia; }, [chatMedia]);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadingFile, setUploadingFile] = useState<{ name: string; kind: "image" | "video" | "audio"; previewUrl?: string } | null>(null);
