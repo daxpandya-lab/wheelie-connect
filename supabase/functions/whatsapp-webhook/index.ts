@@ -643,10 +643,9 @@ Deno.serve(async (req) => {
           if (media) {
             const publicUrl = await uploadMediaToBucket(supabase, tenantId, media.bytes, media.mime);
             if (publicUrl) {
-              evoAttachment = {
-                url: publicUrl, mime: media.mime, kind: classifyMime(media.mime),
-                received_at: new Date().toISOString(), source: "whatsapp_evolution",
-              };
+              evoAttachment = buildMediaAttachment({
+                url: publicUrl, mime: media.mime, source: "whatsapp_evolution",
+              });
               const bookingId = await attachMediaToActiveBooking(supabase, tenantId, customerPhone, evoAttachment);
               (evoAttachment as any).booking_id = bookingId;
             }
