@@ -825,10 +825,9 @@ Deno.serve(async (req) => {
                   if (fetched) {
                     const publicUrl = await uploadMediaToBucket(supabase, tenantId, fetched.bytes, fetched.mime);
                     if (publicUrl) {
-                      metaAttachment = {
-                        url: publicUrl, mime: fetched.mime, kind: classifyMime(fetched.mime),
-                        received_at: new Date().toISOString(), source: "whatsapp_meta",
-                      };
+                      metaAttachment = buildMediaAttachment({
+                        url: publicUrl, mime: fetched.mime, source: "whatsapp_meta",
+                      });
                       const bookingId = await attachMediaToActiveBooking(supabase, tenantId, customerPhone, metaAttachment);
                       (metaAttachment as any).booking_id = bookingId;
                     }
