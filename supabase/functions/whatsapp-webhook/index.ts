@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { buildMediaAttachment } from "../_shared/media-attachment.ts";
 
 // ============================================================
 // LANGUAGE DETECTION — script-based with keyword fallback
@@ -331,12 +332,8 @@ function extOf(mime: string, fallback = "bin"): string {
   return sub.split(";")[0];
 }
 
-function classifyMime(mime: string): "image" | "audio" | "video" | "file" {
-  if (mime?.startsWith("image/")) return "image";
-  if (mime?.startsWith("audio/")) return "audio";
-  if (mime?.startsWith("video/")) return "video";
-  return "file";
-}
+// classifyMime + buildMediaAttachment are imported from _shared/media-attachment.ts
+// so the persisted shape matches the web bot byte-for-byte.
 
 async function uploadMediaToBucket(
   supabase: any, tenantId: string, bytes: Uint8Array, mime: string,
@@ -646,10 +643,9 @@ Deno.serve(async (req) => {
           if (media) {
             const publicUrl = await uploadMediaToBucket(supabase, tenantId, media.bytes, media.mime);
             if (publicUrl) {
-              evoAttachment = {
-                url: publicUrl, mime: media.mime, kind: classifyMime(media.mime),
-                received_at: new Date().toISOString(), source: "whatsapp_evolution",
-              };
+              evoAttachment = buildMediaAttachment({
+                url: publicUrl, mime: media.mime, source: "whatsapp_evolution",
+              });
               const bookingId = await attachMediaToActiveBooking(supabase, tenantId, customerPhone, evoAttachment);
               (evoAttachment as any).booking_id = bookingId;
             }
@@ -829,10 +825,9 @@ Deno.serve(async (req) => {
                   if (fetched) {
                     const publicUrl = await uploadMediaToBucket(supabase, tenantId, fetched.bytes, fetched.mime);
                     if (publicUrl) {
-                      metaAttachment = {
-                        url: publicUrl, mime: fetched.mime, kind: classifyMime(fetched.mime),
-                        received_at: new Date().toISOString(), source: "whatsapp_meta",
-                      };
+                      metaAttachment = buildMediaAttachment({
+                        url: publicUrl, mime: fetched.mime, source: "whatsapp_meta",
+                      });
                       const bookingId = await attachMediaToActiveBooking(supabase, tenantId, customerPhone, metaAttachment);
                       (metaAttachment as any).booking_id = bookingId;
                     }
