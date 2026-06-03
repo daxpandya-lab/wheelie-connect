@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { buildMediaAttachment } from "../_shared/media-attachment.ts";
 
 // ============================================================
 // LANGUAGE DETECTION — script-based with keyword fallback
