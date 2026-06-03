@@ -993,7 +993,7 @@ export default function PublicChatPage() {
           booking_source: "Web Bot",
           status: INITIAL_STATUS,
           media_attachments: chatMediaRef.current.length
-            ? chatMediaRef.current.map((m) => ({ url: m.url, mime: m.mime, kind: m.kind, source: "web_chat", received_at: new Date().toISOString() }))
+            ? chatMediaRef.current.map((m) => buildMediaAttachment({ url: m.url, mime: m.mime, source: "web_chat", name: m.name }))
             : [],
           metadata: { ...data, ...addressMeta, source_session_id: sessionId },
         } as never);
