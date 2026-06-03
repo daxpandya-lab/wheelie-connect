@@ -332,12 +332,8 @@ function extOf(mime: string, fallback = "bin"): string {
   return sub.split(";")[0];
 }
 
-function classifyMime(mime: string): "image" | "audio" | "video" | "file" {
-  if (mime?.startsWith("image/")) return "image";
-  if (mime?.startsWith("audio/")) return "audio";
-  if (mime?.startsWith("video/")) return "video";
-  return "file";
-}
+// classifyMime + buildMediaAttachment are imported from _shared/media-attachment.ts
+// so the persisted shape matches the web bot byte-for-byte.
 
 async function uploadMediaToBucket(
   supabase: any, tenantId: string, bytes: Uint8Array, mime: string,
