@@ -1157,6 +1157,16 @@ export default function PublicChatPage() {
             { id: `bot-${Date.now()}-confirm`, sender: "bot", text: confirmationText, kind: "confirmation" },
           ]);
           setIsComplete(true);
+          // Attachments are now persisted on the booking row — clear the
+          // composer chips so they don't linger below "Conversation complete".
+          setChatMedia([]);
+          setFailedUpload((prev) => {
+            if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+            return null;
+          });
+          setUploadingFile(null);
+          setUploadProgress(0);
+          setUploadingMedia(false);
           persistSession({ current_node_id: node.id, collected_data: finalData, is_complete: true });
           // Clear cached session so a refresh starts fresh
           if (dealer && flowId) {
