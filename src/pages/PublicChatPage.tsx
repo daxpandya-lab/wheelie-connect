@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { FlowData, FlowNode, ChatbotCollectedData } from "@/types/chatbot-flow";
+import { buildMediaAttachment } from "@/lib/media-attachment";
 
 interface DealerInfo {
   id: string;
