@@ -1053,6 +1053,24 @@ export default function PublicChatPage() {
       if (!flow) return;
       const node = flow.nodes.find((n) => n.id === nodeId);
       if (!node) return;
+      // ---- Returning-customer auto-fill ----
+      // If we already know the answer to this question (e.g. customer_name or
+      // phone_number from a previous visit cached in collectedData), skip the
+      // prompt entirely and advance to the next node. Only applies to plain
+      // question nodes with a dataField + nextNodeId; api_check, condition,
+      // greeting, end, and multi-select flows are left untouched.
+      if (
+        node.type === "question" &&
+        node.dataField &&
+        node.nextNodeId &&
+        typeof data[node.dataField] === "string" &&
+        String(data[node.dataField]).trim() !== ""
+      ) {
+        setCurrentNodeId(node.id);
+        persistSession({ current_node_id: node.id, collected_data: data });
+        setTimeout(() => advanceTo(node.nextNodeId!, data), 0);
+        return;
+      }
       setCurrentNodeId(node.id);
       // For "end" nodes we postpone pushing the confirmation message until
       // the booking is successfully saved to the database. This guarantees:
