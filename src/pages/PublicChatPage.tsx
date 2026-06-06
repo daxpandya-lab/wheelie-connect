@@ -1238,11 +1238,23 @@ export default function PublicChatPage() {
     if (startNode.type === "greeting" && startNode.nextNodeId) {
       setTimeout(() => {
         const dealerName = dealer?.name || "our workshop";
-        const intro: Record<string, string> = {
-          en: `👋 Welcome to ${dealerName} Workshop! How can we assist you today?`,
-          hi: `👋 ${dealerName} वर्कशॉप में आपका स्वागत है! आज हम आपकी कैसे मदद कर सकते हैं?`,
-          ar: `👋 أهلاً بك في ورشة ${dealerName}! كيف يمكننا مساعدتك اليوم؟`,
-        };
+        // Returning visitor? Pull the name we cached from a prior conversation
+        // on this device so the bot can greet them personally.
+        const savedName = dealer
+          ? (localStorage.getItem(`${NAME_KEY_PREFIX}${dealer.id}`) || "").trim()
+          : "";
+        const firstName = savedName ? savedName.split(/\s+/)[0] : "";
+        const intro: Record<string, string> = firstName
+          ? {
+              en: `👋 Welcome back, ${firstName}! How can ${dealerName} Workshop help you today?`,
+              hi: `👋 वापसी पर स्वागत है, ${firstName}! आज ${dealerName} वर्कशॉप आपकी कैसे मदद कर सकता है?`,
+              ar: `👋 مرحباً بعودتك يا ${firstName}! كيف يمكن لورشة ${dealerName} مساعدتك اليوم؟`,
+            }
+          : {
+              en: `👋 Welcome to ${dealerName} Workshop! How can we assist you today?`,
+              hi: `👋 ${dealerName} वर्कशॉप में आपका स्वागत है! आज हम आपकी कैसे मदद कर सकते हैं?`,
+              ar: `👋 أهلاً بك في ورشة ${dealerName}! كيف يمكننا مساعدتك اليوم؟`,
+            };
         const bookLabel: Record<string, string> = { en: "📅 Book New Service", hi: "📅 नई सर्विस बुक करें", ar: "📅 احجز خدمة جديدة" };
         const histLabel: Record<string, string> = { en: "🔍 View Past Service History", hi: "🔍 पिछली सर्विस हिस्ट्री देखें", ar: "🔍 عرض سجل الخدمة السابق" };
         setMessages((prev) => [
