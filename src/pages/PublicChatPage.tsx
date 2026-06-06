@@ -42,6 +42,9 @@ interface ChatMessage {
 const VISITOR_KEY_PREFIX = "wheelie_chat_visitor_";
 const SESSION_KEY_PREFIX = "wheelie_chat_session_";
 const LANG_KEY_PREFIX = "wheelie_chat_lang_";
+// Persists the customer's name per tenant so future "Hi" greetings can address them by name.
+// Scoped per tenant so a single device used across dealers stays correctly attributed.
+const NAME_KEY_PREFIX = "wheelie_chat_name_";
 
 const LANGUAGE_LABELS: Record<string, string> = {
   en: "English",
