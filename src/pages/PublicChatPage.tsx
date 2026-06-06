@@ -255,6 +255,11 @@ export default function PublicChatPage() {
       const visitorToken = getVisitorToken(tenantData.id);
       const sessionStorageKey = `${SESSION_KEY_PREFIX}${tenantData.id}_${resolvedFlow.id}`;
       const langStorageKey = `${LANG_KEY_PREFIX}${tenantData.id}_${resolvedFlow.id}`;
+      let resolvedLang: string =
+        localStorage.getItem(langStorageKey) ||
+        detectBrowserLanguage(flowLangs);
+      if (!flowLangs.includes(resolvedLang)) resolvedLang = flowLangs[0];
+
       // Always start a fresh conversation when the chat opens.
       // Previous transcripts (including the "booking confirmed" bubble) must
       // NOT linger on reopen — the user explicitly asked for a clean welcome
@@ -279,7 +284,8 @@ export default function PublicChatPage() {
         });
       }
 
-      if (true) {
+      {
+
 
         setLanguage(resolvedLang);
         localStorage.setItem(langStorageKey, resolvedLang);
