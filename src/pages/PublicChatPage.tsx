@@ -332,18 +332,28 @@ export default function PublicChatPage() {
   // collected via the flow's name question or auto-filled from a returning-
   // customer lookup). Next time this device opens the chat, the welcome can
   // greet them by name.
+  // Persist the customer's name + phone per tenant the moment either is
+  // captured (whether collected via the flow or auto-filled from a returning-
+  // customer lookup). Next time this device opens the chat, the welcome can
+  // greet them by name and the booking flow can skip the name/phone prompts.
   useEffect(() => {
     if (!dealer) return;
     const name = String(
       collectedData.customer_name || collectedData.existing_customer_name || "",
     ).trim();
-    if (!name) return;
+    const phone = String(collectedData.phone_number || "").trim();
     try {
-      localStorage.setItem(`${NAME_KEY_PREFIX}${dealer.id}`, name);
+      if (name) localStorage.setItem(`${NAME_KEY_PREFIX}${dealer.id}`, name);
+      if (phone) localStorage.setItem(`${PHONE_KEY_PREFIX}${dealer.id}`, phone);
     } catch {
       // localStorage may be unavailable (private mode); silently ignore.
     }
-  }, [dealer, collectedData.customer_name, collectedData.existing_customer_name]);
+  }, [
+    dealer,
+    collectedData.customer_name,
+    collectedData.existing_customer_name,
+    collectedData.phone_number,
+  ]);
 
   // ---------- Load fully-booked dates within the booking window ----------
   const loadBookedDates = useCallback(async () => {
