@@ -255,114 +255,32 @@ export default function PublicChatPage() {
       const visitorToken = getVisitorToken(tenantData.id);
       const sessionStorageKey = `${SESSION_KEY_PREFIX}${tenantData.id}_${resolvedFlow.id}`;
       const langStorageKey = `${LANG_KEY_PREFIX}${tenantData.id}_${resolvedFlow.id}`;
+      // Always start a fresh conversation when the chat opens.
+      // Previous transcripts (including the "booking confirmed" bubble) must
+      // NOT linger on reopen — the user explicitly asked for a clean welcome
+      // every time. We still keep the persistent visitor_token + saved name
+      // so the greeting can address returning customers personally.
       const cached = localStorage.getItem(sessionStorageKey);
-      let resumed = false;
-      let resolvedLang: string =
-        localStorage.getItem(langStorageKey) ||
-        detectBrowserLanguage(flowLangs);
-      if (!flowLangs.includes(resolvedLang)) resolvedLang = flowLangs[0];
-
       if (cached) {
-        // Backend-aligned reset: only resume sessions that are NOT complete.
-        // Filtering by is_complete=false at the query level guarantees that
-        // any completed/archived session is treated as stale even if the
-        // frontend cleanup was skipped (e.g. different device, cleared cache).
-        const { data: existing, error: existingErr } = await supabase
+        // Best-effort: mark the abandoned session complete so dashboards
+        // don't keep it hanging as "in progress". Silent on failure.
+        await supabase
           .from("chat_sessions")
-          .select("id, current_node_id, collected_data, is_complete, language")
-          .eq("id", cached)
-          .eq("is_complete", false)
-          .maybeSingle();
-        if (existingErr) {
-          // On any DB error, fail safe: drop pointer and start fresh from greeting.
-          localStorage.removeItem(sessionStorageKey);
-          logSessionDebug({
-            tenantId: tenantData.id,
-            flowId: resolvedFlow.id,
-            sessionId: cached,
-            visitorToken,
-            event: "reset_db_error",
-            reason: existingErr.message,
-            details: { code: existingErr.code },
-          });
-        }
-        if (existing) {
-          const existingData = (existing.collected_data as ChatbotCollectedData) || {};
-          const storedLang = (existing as { language?: string }).language;
-          if (storedLang && flowLangs.includes(storedLang)) {
-            resolvedLang = storedLang;
-          }
-
-          if (existing.is_complete) {
-            // Previous session already finished — auto-start a fresh conversation
-            // instead of stranding the user on the "complete, refresh to start over" screen.
-            localStorage.removeItem(sessionStorageKey);
-            logSessionDebug({
-              tenantId: tenantData.id,
-              flowId: resolvedFlow.id,
-              sessionId: existing.id,
-              visitorToken,
-              event: "reset_completed",
-              reason: "Previous session was already marked complete",
-              nodeId: existing.current_node_id,
-            });
-          } else {
-            const node = existing.current_node_id
-              ? resolvedFlow.flow_data.nodes.find((n) => n.id === existing.current_node_id)
-              : null;
-            // Only resume on interactive question nodes; if the saved pointer
-            // is on a background api_check / condition node, restart from the
-            // greeting so users are never stuck on non-interactive logic nodes.
-            const isInteractive =
-              !!node && node.type !== "api_check" && node.type !== "condition";
-
-            if (isInteractive && node) {
-              setSessionId(existing.id);
-              setCollectedData(existingData);
-              setLanguage(resolvedLang);
-              localStorage.setItem(langStorageKey, resolvedLang);
-              setCurrentNodeId(node.id);
-              pushBotMessage(node, existingData, resolvedLang);
-              resumed = true;
-              logSessionDebug({
-                tenantId: tenantData.id,
-                flowId: resolvedFlow.id,
-                sessionId: existing.id,
-                visitorToken,
-                event: "resumed",
-                nodeId: node.id,
-                details: { nodeType: node.type, language: resolvedLang },
-              });
-            } else {
-              // Stale / stuck session — clear pointer; fall through to create new session
-              localStorage.removeItem(sessionStorageKey);
-              logSessionDebug({
-                tenantId: tenantData.id,
-                flowId: resolvedFlow.id,
-                sessionId: existing.id,
-                visitorToken,
-                event: "reset_background_node",
-                reason: "Saved pointer was on a non-interactive node",
-                nodeId: existing.current_node_id,
-                details: { nodeType: node?.type ?? "unknown" },
-              });
-            }
-          }
-        } else if (!existingErr) {
-          // Cached session id no longer exists in DB — clear it
-          localStorage.removeItem(sessionStorageKey);
-          logSessionDebug({
-            tenantId: tenantData.id,
-            flowId: resolvedFlow.id,
-            sessionId: cached,
-            visitorToken,
-            event: "reset_missing",
-            reason: "Cached session id not found (or already complete) in database",
-          });
-        }
+          .update({ is_complete: true } as never)
+          .eq("id", cached);
+        localStorage.removeItem(sessionStorageKey);
+        logSessionDebug({
+          tenantId: tenantData.id,
+          flowId: resolvedFlow.id,
+          sessionId: cached,
+          visitorToken,
+          event: "reset_fresh_open",
+          reason: "Always-fresh welcome on chat open",
+        });
       }
 
-      if (!resumed) {
+      if (true) {
+
         setLanguage(resolvedLang);
         localStorage.setItem(langStorageKey, resolvedLang);
 
