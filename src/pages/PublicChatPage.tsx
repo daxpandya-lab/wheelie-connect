@@ -1875,6 +1875,12 @@ export default function PublicChatPage() {
           setTimeout(() => advanceTo(nextNodeId!, newData), 500);
           return;
         }
+        // Merge the recognised name into collectedData so that any downstream
+        // node with dataField === "customer_name" is auto-skipped by advanceTo.
+        if (rc.name && !newData.customer_name) {
+          newData.customer_name = rc.name;
+          setCollectedData((prev) => ({ ...prev, customer_name: rc.name }));
+        }
         returningCustomerRef.current = rc;
         const predicted = predictCurrentKms(rc);
         const regPart = rc.registration ? ` (${rc.registration})` : "";
