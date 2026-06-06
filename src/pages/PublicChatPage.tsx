@@ -325,6 +325,23 @@ export default function PublicChatPage() {
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
+  // Persist the customer's name per tenant the moment it's captured (whether
+  // collected via the flow's name question or auto-filled from a returning-
+  // customer lookup). Next time this device opens the chat, the welcome can
+  // greet them by name.
+  useEffect(() => {
+    if (!dealer) return;
+    const name = String(
+      collectedData.customer_name || collectedData.existing_customer_name || "",
+    ).trim();
+    if (!name) return;
+    try {
+      localStorage.setItem(`${NAME_KEY_PREFIX}${dealer.id}`, name);
+    } catch {
+      // localStorage may be unavailable (private mode); silently ignore.
+    }
+  }, [dealer, collectedData.customer_name, collectedData.existing_customer_name]);
+
   // ---------- Load fully-booked dates within the booking window ----------
   const loadBookedDates = useCallback(async () => {
     if (!dealer || !dailyLimit || dailyLimit <= 0) {
