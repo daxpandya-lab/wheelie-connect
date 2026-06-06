@@ -45,6 +45,9 @@ const LANG_KEY_PREFIX = "wheelie_chat_lang_";
 // Persists the customer's name per tenant so future "Hi" greetings can address them by name.
 // Scoped per tenant so a single device used across dealers stays correctly attributed.
 const NAME_KEY_PREFIX = "wheelie_chat_name_";
+// Mirror for phone number — together with NAME_KEY this powers the
+// returning-customer auto-fill (no need to re-ask either field).
+const PHONE_KEY_PREFIX = "wheelie_chat_phone_";
 
 const LANGUAGE_LABELS: Record<string, string> = {
   en: "English",
@@ -329,18 +332,28 @@ export default function PublicChatPage() {
   // collected via the flow's name question or auto-filled from a returning-
   // customer lookup). Next time this device opens the chat, the welcome can
   // greet them by name.
+  // Persist the customer's name + phone per tenant the moment either is
+  // captured (whether collected via the flow or auto-filled from a returning-
+  // customer lookup). Next time this device opens the chat, the welcome can
+  // greet them by name and the booking flow can skip the name/phone prompts.
   useEffect(() => {
     if (!dealer) return;
     const name = String(
       collectedData.customer_name || collectedData.existing_customer_name || "",
     ).trim();
-    if (!name) return;
+    const phone = String(collectedData.phone_number || "").trim();
     try {
-      localStorage.setItem(`${NAME_KEY_PREFIX}${dealer.id}`, name);
+      if (name) localStorage.setItem(`${NAME_KEY_PREFIX}${dealer.id}`, name);
+      if (phone) localStorage.setItem(`${PHONE_KEY_PREFIX}${dealer.id}`, phone);
     } catch {
       // localStorage may be unavailable (private mode); silently ignore.
     }
-  }, [dealer, collectedData.customer_name, collectedData.existing_customer_name]);
+  }, [
+    dealer,
+    collectedData.customer_name,
+    collectedData.existing_customer_name,
+    collectedData.phone_number,
+  ]);
 
   // ---------- Load fully-booked dates within the booking window ----------
   const loadBookedDates = useCallback(async () => {
@@ -1040,6 +1053,24 @@ export default function PublicChatPage() {
       if (!flow) return;
       const node = flow.nodes.find((n) => n.id === nodeId);
       if (!node) return;
+      // ---- Returning-customer auto-fill ----
+      // If we already know the answer to this question (e.g. customer_name or
+      // phone_number from a previous visit cached in collectedData), skip the
+      // prompt entirely and advance to the next node. Only applies to plain
+      // question nodes with a dataField + nextNodeId; api_check, condition,
+      // greeting, end, and multi-select flows are left untouched.
+      if (
+        node.type === "question" &&
+        node.dataField &&
+        node.nextNodeId &&
+        typeof data[node.dataField] === "string" &&
+        String(data[node.dataField]).trim() !== ""
+      ) {
+        setCurrentNodeId(node.id);
+        persistSession({ current_node_id: node.id, collected_data: data });
+        setTimeout(() => advanceTo(node.nextNodeId!, data), 0);
+        return;
+      }
       setCurrentNodeId(node.id);
       // For "end" nodes we postpone pushing the confirmation message until
       // the booking is successfully saved to the database. This guarantees:
@@ -1415,9 +1446,21 @@ export default function PublicChatPage() {
     if (answer === "__intent_book__" || answer === "__intent_history__") {
       intentRef.current = answer === "__intent_history__" ? "history" : "book";
       setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? answer }]);
+      // Hydrate cached name + phone for returning visitors so the flow can
+      // skip those prompts via advanceTo's auto-skip path above.
+      let seed: ChatbotCollectedData = { ...collectedData };
+      if (dealer) {
+        try {
+          const cn = (localStorage.getItem(`${NAME_KEY_PREFIX}${dealer.id}`) || "").trim();
+          const cp = (localStorage.getItem(`${PHONE_KEY_PREFIX}${dealer.id}`) || "").trim();
+          if (cn && !seed.customer_name) seed.customer_name = cn;
+          if (cp && !seed.phone_number) seed.phone_number = cp;
+        } catch { /* private mode */ }
+      }
+      if (seed !== collectedData) setCollectedData(seed);
       const startNode = flow.nodes.find((n) => n.id === flow.startNodeId);
       const nextId = startNode?.nextNodeId;
-      if (nextId) setTimeout(() => advanceTo(nextId, collectedData), 300);
+      if (nextId) setTimeout(() => advanceTo(nextId, seed), 300);
       return;
     }
 
@@ -1831,6 +1874,12 @@ export default function PublicChatPage() {
         if (!rc) {
           setTimeout(() => advanceTo(nextNodeId!, newData), 500);
           return;
+        }
+        // Merge the recognised name into collectedData so that any downstream
+        // node with dataField === "customer_name" is auto-skipped by advanceTo.
+        if (rc.name && !newData.customer_name) {
+          newData.customer_name = rc.name;
+          setCollectedData((prev) => ({ ...prev, customer_name: rc.name }));
         }
         returningCustomerRef.current = rc;
         const predicted = predictCurrentKms(rc);
