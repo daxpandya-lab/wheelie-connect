@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.csat-followup]
 verify_jwt = false
+
+[functions.cleanup-orphan-chat-media]
+verify_jwt = false
