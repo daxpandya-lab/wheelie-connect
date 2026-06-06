@@ -1446,9 +1446,21 @@ export default function PublicChatPage() {
     if (answer === "__intent_book__" || answer === "__intent_history__") {
       intentRef.current = answer === "__intent_history__" ? "history" : "book";
       setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? answer }]);
+      // Hydrate cached name + phone for returning visitors so the flow can
+      // skip those prompts via advanceTo's auto-skip path above.
+      let seed: ChatbotCollectedData = { ...collectedData };
+      if (dealer) {
+        try {
+          const cn = (localStorage.getItem(`${NAME_KEY_PREFIX}${dealer.id}`) || "").trim();
+          const cp = (localStorage.getItem(`${PHONE_KEY_PREFIX}${dealer.id}`) || "").trim();
+          if (cn && !seed.customer_name) seed.customer_name = cn;
+          if (cp && !seed.phone_number) seed.phone_number = cp;
+        } catch { /* private mode */ }
+      }
+      if (seed !== collectedData) setCollectedData(seed);
       const startNode = flow.nodes.find((n) => n.id === flow.startNodeId);
       const nextId = startNode?.nextNodeId;
-      if (nextId) setTimeout(() => advanceTo(nextId, collectedData), 300);
+      if (nextId) setTimeout(() => advanceTo(nextId, seed), 300);
       return;
     }
 
