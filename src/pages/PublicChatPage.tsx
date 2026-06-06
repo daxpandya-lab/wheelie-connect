@@ -42,6 +42,9 @@ interface ChatMessage {
 const VISITOR_KEY_PREFIX = "wheelie_chat_visitor_";
 const SESSION_KEY_PREFIX = "wheelie_chat_session_";
 const LANG_KEY_PREFIX = "wheelie_chat_lang_";
+// Persists the customer's name per tenant so future "Hi" greetings can address them by name.
+// Scoped per tenant so a single device used across dealers stays correctly attributed.
+const NAME_KEY_PREFIX = "wheelie_chat_name_";
 
 const LANGUAGE_LABELS: Record<string, string> = {
   en: "English",
@@ -252,114 +255,38 @@ export default function PublicChatPage() {
       const visitorToken = getVisitorToken(tenantData.id);
       const sessionStorageKey = `${SESSION_KEY_PREFIX}${tenantData.id}_${resolvedFlow.id}`;
       const langStorageKey = `${LANG_KEY_PREFIX}${tenantData.id}_${resolvedFlow.id}`;
-      const cached = localStorage.getItem(sessionStorageKey);
-      let resumed = false;
       let resolvedLang: string =
         localStorage.getItem(langStorageKey) ||
         detectBrowserLanguage(flowLangs);
       if (!flowLangs.includes(resolvedLang)) resolvedLang = flowLangs[0];
 
+      // Always start a fresh conversation when the chat opens.
+      // Previous transcripts (including the "booking confirmed" bubble) must
+      // NOT linger on reopen — the user explicitly asked for a clean welcome
+      // every time. We still keep the persistent visitor_token + saved name
+      // so the greeting can address returning customers personally.
+      const cached = localStorage.getItem(sessionStorageKey);
       if (cached) {
-        // Backend-aligned reset: only resume sessions that are NOT complete.
-        // Filtering by is_complete=false at the query level guarantees that
-        // any completed/archived session is treated as stale even if the
-        // frontend cleanup was skipped (e.g. different device, cleared cache).
-        const { data: existing, error: existingErr } = await supabase
+        // Best-effort: mark the abandoned session complete so dashboards
+        // don't keep it hanging as "in progress". Silent on failure.
+        await supabase
           .from("chat_sessions")
-          .select("id, current_node_id, collected_data, is_complete, language")
-          .eq("id", cached)
-          .eq("is_complete", false)
-          .maybeSingle();
-        if (existingErr) {
-          // On any DB error, fail safe: drop pointer and start fresh from greeting.
-          localStorage.removeItem(sessionStorageKey);
-          logSessionDebug({
-            tenantId: tenantData.id,
-            flowId: resolvedFlow.id,
-            sessionId: cached,
-            visitorToken,
-            event: "reset_db_error",
-            reason: existingErr.message,
-            details: { code: existingErr.code },
-          });
-        }
-        if (existing) {
-          const existingData = (existing.collected_data as ChatbotCollectedData) || {};
-          const storedLang = (existing as { language?: string }).language;
-          if (storedLang && flowLangs.includes(storedLang)) {
-            resolvedLang = storedLang;
-          }
-
-          if (existing.is_complete) {
-            // Previous session already finished — auto-start a fresh conversation
-            // instead of stranding the user on the "complete, refresh to start over" screen.
-            localStorage.removeItem(sessionStorageKey);
-            logSessionDebug({
-              tenantId: tenantData.id,
-              flowId: resolvedFlow.id,
-              sessionId: existing.id,
-              visitorToken,
-              event: "reset_completed",
-              reason: "Previous session was already marked complete",
-              nodeId: existing.current_node_id,
-            });
-          } else {
-            const node = existing.current_node_id
-              ? resolvedFlow.flow_data.nodes.find((n) => n.id === existing.current_node_id)
-              : null;
-            // Only resume on interactive question nodes; if the saved pointer
-            // is on a background api_check / condition node, restart from the
-            // greeting so users are never stuck on non-interactive logic nodes.
-            const isInteractive =
-              !!node && node.type !== "api_check" && node.type !== "condition";
-
-            if (isInteractive && node) {
-              setSessionId(existing.id);
-              setCollectedData(existingData);
-              setLanguage(resolvedLang);
-              localStorage.setItem(langStorageKey, resolvedLang);
-              setCurrentNodeId(node.id);
-              pushBotMessage(node, existingData, resolvedLang);
-              resumed = true;
-              logSessionDebug({
-                tenantId: tenantData.id,
-                flowId: resolvedFlow.id,
-                sessionId: existing.id,
-                visitorToken,
-                event: "resumed",
-                nodeId: node.id,
-                details: { nodeType: node.type, language: resolvedLang },
-              });
-            } else {
-              // Stale / stuck session — clear pointer; fall through to create new session
-              localStorage.removeItem(sessionStorageKey);
-              logSessionDebug({
-                tenantId: tenantData.id,
-                flowId: resolvedFlow.id,
-                sessionId: existing.id,
-                visitorToken,
-                event: "reset_background_node",
-                reason: "Saved pointer was on a non-interactive node",
-                nodeId: existing.current_node_id,
-                details: { nodeType: node?.type ?? "unknown" },
-              });
-            }
-          }
-        } else if (!existingErr) {
-          // Cached session id no longer exists in DB — clear it
-          localStorage.removeItem(sessionStorageKey);
-          logSessionDebug({
-            tenantId: tenantData.id,
-            flowId: resolvedFlow.id,
-            sessionId: cached,
-            visitorToken,
-            event: "reset_missing",
-            reason: "Cached session id not found (or already complete) in database",
-          });
-        }
+          .update({ is_complete: true } as never)
+          .eq("id", cached);
+        localStorage.removeItem(sessionStorageKey);
+        logSessionDebug({
+          tenantId: tenantData.id,
+          flowId: resolvedFlow.id,
+          sessionId: cached,
+          visitorToken,
+          event: "reset_fresh_open",
+          reason: "Always-fresh welcome on chat open",
+        });
       }
 
-      if (!resumed) {
+      {
+
+
         setLanguage(resolvedLang);
         localStorage.setItem(langStorageKey, resolvedLang);
 
@@ -397,6 +324,23 @@ export default function PublicChatPage() {
   }, [tenantParam, flowIdParam]);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+
+  // Persist the customer's name per tenant the moment it's captured (whether
+  // collected via the flow's name question or auto-filled from a returning-
+  // customer lookup). Next time this device opens the chat, the welcome can
+  // greet them by name.
+  useEffect(() => {
+    if (!dealer) return;
+    const name = String(
+      collectedData.customer_name || collectedData.existing_customer_name || "",
+    ).trim();
+    if (!name) return;
+    try {
+      localStorage.setItem(`${NAME_KEY_PREFIX}${dealer.id}`, name);
+    } catch {
+      // localStorage may be unavailable (private mode); silently ignore.
+    }
+  }, [dealer, collectedData.customer_name, collectedData.existing_customer_name]);
 
   // ---------- Load fully-booked dates within the booking window ----------
   const loadBookedDates = useCallback(async () => {
@@ -1311,11 +1255,23 @@ export default function PublicChatPage() {
     if (startNode.type === "greeting" && startNode.nextNodeId) {
       setTimeout(() => {
         const dealerName = dealer?.name || "our workshop";
-        const intro: Record<string, string> = {
-          en: `👋 Welcome to ${dealerName} Workshop! How can we assist you today?`,
-          hi: `👋 ${dealerName} वर्कशॉप में आपका स्वागत है! आज हम आपकी कैसे मदद कर सकते हैं?`,
-          ar: `👋 أهلاً بك في ورشة ${dealerName}! كيف يمكننا مساعدتك اليوم؟`,
-        };
+        // Returning visitor? Pull the name we cached from a prior conversation
+        // on this device so the bot can greet them personally.
+        const savedName = dealer
+          ? (localStorage.getItem(`${NAME_KEY_PREFIX}${dealer.id}`) || "").trim()
+          : "";
+        const firstName = savedName ? savedName.split(/\s+/)[0] : "";
+        const intro: Record<string, string> = firstName
+          ? {
+              en: `👋 Welcome back, ${firstName}! How can ${dealerName} Workshop help you today?`,
+              hi: `👋 वापसी पर स्वागत है, ${firstName}! आज ${dealerName} वर्कशॉप आपकी कैसे मदद कर सकता है?`,
+              ar: `👋 مرحباً بعودتك يا ${firstName}! كيف يمكن لورشة ${dealerName} مساعدتك اليوم؟`,
+            }
+          : {
+              en: `👋 Welcome to ${dealerName} Workshop! How can we assist you today?`,
+              hi: `👋 ${dealerName} वर्कशॉप में आपका स्वागत है! आज हम आपकी कैसे मदद कर सकते हैं?`,
+              ar: `👋 أهلاً بك في ورشة ${dealerName}! كيف يمكننا مساعدتك اليوم؟`,
+            };
         const bookLabel: Record<string, string> = { en: "📅 Book New Service", hi: "📅 नई सर्विस बुक करें", ar: "📅 احجز خدمة جديدة" };
         const histLabel: Record<string, string> = { en: "🔍 View Past Service History", hi: "🔍 पिछली सर्विस हिस्ट्री देखें", ar: "🔍 عرض سجل الخدمة السابق" };
         setMessages((prev) => [
