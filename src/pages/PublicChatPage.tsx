@@ -45,6 +45,9 @@ const LANG_KEY_PREFIX = "wheelie_chat_lang_";
 // Persists the customer's name per tenant so future "Hi" greetings can address them by name.
 // Scoped per tenant so a single device used across dealers stays correctly attributed.
 const NAME_KEY_PREFIX = "wheelie_chat_name_";
+// Mirror for phone number — together with NAME_KEY this powers the
+// returning-customer auto-fill (no need to re-ask either field).
+const PHONE_KEY_PREFIX = "wheelie_chat_phone_";
 
 const LANGUAGE_LABELS: Record<string, string> = {
   en: "English",
