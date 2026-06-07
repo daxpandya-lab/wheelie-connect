@@ -99,6 +99,42 @@ export default function ReminderSettings() {
   const setVars = (id: string, patch: Partial<PreviewVars>) =>
     setPreviewVars((p) => ({ ...p, [id]: { ...getVars(id), ...patch } }));
 
+  // Debounced server-side render of any open preview so it always matches the dispatcher.
+  useEffect(() => {
+    const openIds = Object.keys(previewOpen).filter((id) => previewOpen[id]);
+    if (openIds.length === 0) return;
+    const handles = openIds.map((id) => {
+      const rule = rules.find((r) => r.id === id);
+      if (!rule) return null;
+      const t = setTimeout(async () => {
+        setPreviewResult((p) => ({ ...p, [id]: { ...(p[id] ?? { mode: "text", body: null }), loading: true } }));
+        const { data, error } = await supabase.functions.invoke("preview-reminder-message", {
+          body: {
+            message_body: rule.message_body,
+            template_name: rule.template_name,
+            variables: getVars(id),
+          },
+        });
+        if (error) {
+          setPreviewResult((p) => ({ ...p, [id]: { mode: "text", body: null, error: error.message, loading: false } }));
+        } else {
+          setPreviewResult((p) => ({
+            ...p,
+            [id]: {
+              mode: data?.mode ?? "text",
+              body: data?.rendered_body ?? null,
+              note: data?.note,
+              loading: false,
+            },
+          }));
+        }
+      }, 250);
+      return t;
+    });
+    return () => handles.forEach((h) => h && clearTimeout(h));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewOpen, previewVars, rules]);
+
   useEffect(() => {
     if (!tenantId) return;
     (async () => {
