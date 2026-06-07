@@ -42,12 +42,12 @@ interface ChatMessage {
 const VISITOR_KEY_PREFIX = "wheelie_chat_visitor_";
 const SESSION_KEY_PREFIX = "wheelie_chat_session_";
 const LANG_KEY_PREFIX = "wheelie_chat_lang_";
-// Persists the customer's name per tenant so future "Hi" greetings can address them by name.
-// Scoped per tenant so a single device used across dealers stays correctly attributed.
+// Persists the customer's first name per tenant so future "Hi" greetings can
+// address them by name. We intentionally do NOT cache the phone number on the
+// device — phone numbers are PII and the returning-customer lookup happens
+// server-side via the `lookup-returning-customer` edge function (which uses a
+// salted hash and is rate-limited).
 const NAME_KEY_PREFIX = "wheelie_chat_name_";
-// Mirror for phone number — together with NAME_KEY this powers the
-// returning-customer auto-fill (no need to re-ask either field).
-const PHONE_KEY_PREFIX = "wheelie_chat_phone_";
 
 const LANGUAGE_LABELS: Record<string, string> = {
   en: "English",
@@ -332,19 +332,17 @@ export default function PublicChatPage() {
   // collected via the flow's name question or auto-filled from a returning-
   // customer lookup). Next time this device opens the chat, the welcome can
   // greet them by name.
-  // Persist the customer's name + phone per tenant the moment either is
-  // captured (whether collected via the flow or auto-filled from a returning-
-  // customer lookup). Next time this device opens the chat, the welcome can
-  // greet them by name and the booking flow can skip the name/phone prompts.
+  // Persist ONLY the customer's first name per tenant so the next "Hi" can
+  // greet them personally. Phone numbers are deliberately NOT cached locally
+  // — they are PII and looked up server-side via the rate-limited edge fn.
   useEffect(() => {
     if (!dealer) return;
     const name = String(
       collectedData.customer_name || collectedData.existing_customer_name || "",
     ).trim();
-    const phone = String(collectedData.phone_number || "").trim();
+    if (!name) return;
     try {
-      if (name) localStorage.setItem(`${NAME_KEY_PREFIX}${dealer.id}`, name);
-      if (phone) localStorage.setItem(`${PHONE_KEY_PREFIX}${dealer.id}`, phone);
+      localStorage.setItem(`${NAME_KEY_PREFIX}${dealer.id}`, name);
     } catch {
       // localStorage may be unavailable (private mode); silently ignore.
     }
@@ -352,7 +350,6 @@ export default function PublicChatPage() {
     dealer,
     collectedData.customer_name,
     collectedData.existing_customer_name,
-    collectedData.phone_number,
   ]);
 
   // ---------- Load fully-booked dates within the booking window ----------
@@ -1341,35 +1338,39 @@ export default function PublicChatPage() {
       if (!dealer || !phone) return null;
       const digits = phone.replace(/\D+/g, "");
       if (digits.length < 8) return null;
-      const { data: row } = await supabase
-        .from("service_bookings")
-        .select("customer_name, vehicle_model, vehicle_id, kms_driven, booking_date, service_type, status, work_notes, executive_notes, issue_description")
-        .eq("tenant_id", dealer.id)
-        .eq("phone_number", phone)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (!row) return null;
-      let registration: string | null = null;
-      if (row.vehicle_id) {
-        const { data: veh } = await supabase
-          .from("vehicles")
-          .select("license_plate")
-          .eq("tenant_id", dealer.id)
-          .eq("id", row.vehicle_id)
-          .maybeSingle();
-        registration = veh?.license_plate ?? null;
+      // Privacy: the lookup runs server-side. The edge function hashes the
+      // phone with a tenant-scoped salt, validates tenant status, and rate-
+      // limits the caller. The browser never queries service_bookings
+      // directly (anon RLS would block it anyway).
+      try {
+        const { data, error } = await supabase.functions.invoke(
+          "lookup-returning-customer",
+          { body: { tenant_id: dealer.id, phone: digits } },
+        );
+        if (error || !data || !data.found || !data.customer) return null;
+        const c = data.customer as {
+          name?: string;
+          vehicle_model?: string;
+          registration?: string | null;
+          last_kms?: number | null;
+          last_date?: string;
+          service_type?: string | null;
+          status?: string;
+          notes?: string | null;
+        };
+        return {
+          name: c.name || "",
+          vehicle_model: c.vehicle_model || "",
+          registration: c.registration ?? null,
+          last_kms: c.last_kms ?? null,
+          last_date: c.last_date || "",
+          service_type: c.service_type ?? null,
+          status: c.status || "pending",
+          notes: c.notes ?? null,
+        };
+      } catch {
+        return null;
       }
-      return {
-        name: row.customer_name || "",
-        vehicle_model: row.vehicle_model || "",
-        registration,
-        last_kms: row.kms_driven ?? null,
-        last_date: row.booking_date || "",
-        service_type: row.service_type || null,
-        status: row.status || "pending",
-        notes: row.work_notes || row.executive_notes || row.issue_description || null,
-      };
     },
     [dealer],
   );
@@ -1446,15 +1447,13 @@ export default function PublicChatPage() {
     if (answer === "__intent_book__" || answer === "__intent_history__") {
       intentRef.current = answer === "__intent_history__" ? "history" : "book";
       setMessages((prev) => [...prev, { id: `user-${Date.now()}`, sender: "user", text: displayLabel ?? answer }]);
-      // Hydrate cached name + phone for returning visitors so the flow can
-      // skip those prompts via advanceTo's auto-skip path above.
+      // Hydrate cached first name only (phone is never cached locally — it's
+      // looked up server-side by the next phone prompt for privacy).
       let seed: ChatbotCollectedData = { ...collectedData };
       if (dealer) {
         try {
           const cn = (localStorage.getItem(`${NAME_KEY_PREFIX}${dealer.id}`) || "").trim();
-          const cp = (localStorage.getItem(`${PHONE_KEY_PREFIX}${dealer.id}`) || "").trim();
           if (cn && !seed.customer_name) seed.customer_name = cn;
-          if (cp && !seed.phone_number) seed.phone_number = cp;
         } catch { /* private mode */ }
       }
       if (seed !== collectedData) setCollectedData(seed);
