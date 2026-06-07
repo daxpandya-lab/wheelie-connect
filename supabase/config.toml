@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.cleanup-orphan-chat-media]
 verify_jwt = false
+
+[functions.lookup-returning-customer]
+verify_jwt = false
