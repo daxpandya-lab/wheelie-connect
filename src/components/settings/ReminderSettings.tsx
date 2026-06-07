@@ -440,6 +440,63 @@ export default function ReminderSettings() {
                     </div>
                   </div>
 
+                  <div className="space-y-2 pt-2 border-t border-border/40">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPreviewOpen((p) => ({ ...p, [rule.id]: !p[rule.id] }))
+                      }
+                      className="flex items-center gap-1.5 text-xs text-primary hover:underline"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      {previewOpen[rule.id] ? "Hide preview" : "Preview message"}
+                    </button>
+                    {previewOpen[rule.id] && (
+                      <div className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-[10px] uppercase text-muted-foreground">Customer name</Label>
+                            <Input
+                              value={getVars(rule.id).customer_name}
+                              onChange={(e) => setVars(rule.id, { customer_name: e.target.value })}
+                              className="h-8 text-xs"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] uppercase text-muted-foreground">Vehicle model</Label>
+                            <Input
+                              value={getVars(rule.id).vehicle_model}
+                              onChange={(e) => setVars(rule.id, { vehicle_model: e.target.value })}
+                              className="h-8 text-xs"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] uppercase text-muted-foreground">Booking date</Label>
+                            <Input
+                              type="date"
+                              value={getVars(rule.id).booking_date}
+                              onChange={(e) => setVars(rule.id, { booking_date: e.target.value })}
+                              className="h-8 text-xs"
+                            />
+                          </div>
+                        </div>
+                        <div className="rounded-md bg-[#dcf8c6] dark:bg-emerald-900/30 text-foreground p-3 shadow-sm max-w-md whitespace-pre-wrap text-sm leading-relaxed">
+                          {rule.template_name && !rule.message_body?.trim() ? (
+                            <span className="text-xs text-muted-foreground italic">
+                              Uses WhatsApp template <code>{rule.template_name}</code> — preview unavailable for templates.
+                            </span>
+                          ) : rule.message_body?.trim() ? (
+                            renderTemplate(rule.message_body, getVars(rule.id) as unknown as Record<string, string>)
+                          ) : (
+                            <span className="text-xs text-muted-foreground italic">
+                              Add a message body to see the preview.
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="flex items-center justify-between pt-2 border-t border-border/40">
                     <Button
                       variant="ghost"
