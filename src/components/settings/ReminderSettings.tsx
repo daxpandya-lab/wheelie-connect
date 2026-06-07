@@ -91,10 +91,49 @@ export default function ReminderSettings() {
   const [savingPredictive, setSavingPredictive] = useState(false);
   const [previewOpen, setPreviewOpen] = useState<Record<string, boolean>>({});
   const [previewVars, setPreviewVars] = useState<Record<string, PreviewVars>>({});
+  const [previewResult, setPreviewResult] = useState<
+    Record<string, { mode: "text" | "template"; body: string | null; note?: string; error?: string; loading?: boolean }>
+  >({});
 
   const getVars = (id: string): PreviewVars => previewVars[id] ?? DEFAULT_PREVIEW;
   const setVars = (id: string, patch: Partial<PreviewVars>) =>
     setPreviewVars((p) => ({ ...p, [id]: { ...getVars(id), ...patch } }));
+
+  // Debounced server-side render of any open preview so it always matches the dispatcher.
+  useEffect(() => {
+    const openIds = Object.keys(previewOpen).filter((id) => previewOpen[id]);
+    if (openIds.length === 0) return;
+    const handles = openIds.map((id) => {
+      const rule = rules.find((r) => r.id === id);
+      if (!rule) return null;
+      const t = setTimeout(async () => {
+        setPreviewResult((p) => ({ ...p, [id]: { ...(p[id] ?? { mode: "text", body: null }), loading: true } }));
+        const { data, error } = await supabase.functions.invoke("preview-reminder-message", {
+          body: {
+            message_body: rule.message_body,
+            template_name: rule.template_name,
+            variables: getVars(id),
+          },
+        });
+        if (error) {
+          setPreviewResult((p) => ({ ...p, [id]: { mode: "text", body: null, error: error.message, loading: false } }));
+        } else {
+          setPreviewResult((p) => ({
+            ...p,
+            [id]: {
+              mode: data?.mode ?? "text",
+              body: data?.rendered_body ?? null,
+              note: data?.note,
+              loading: false,
+            },
+          }));
+        }
+      }, 250);
+      return t;
+    });
+    return () => handles.forEach((h) => h && clearTimeout(h));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewOpen, previewVars, rules]);
 
   useEffect(() => {
     if (!tenantId) return;
@@ -480,18 +519,24 @@ export default function ReminderSettings() {
                             />
                           </div>
                         </div>
-                        <div className="rounded-md bg-[#dcf8c6] dark:bg-emerald-900/30 text-foreground p-3 shadow-sm max-w-md whitespace-pre-wrap text-sm leading-relaxed">
-                          {rule.template_name && !rule.message_body?.trim() ? (
-                            <span className="text-xs text-muted-foreground italic">
-                              Uses WhatsApp template <code>{rule.template_name}</code> — preview unavailable for templates.
-                            </span>
-                          ) : rule.message_body?.trim() ? (
-                            renderTemplate(rule.message_body, getVars(rule.id) as unknown as Record<string, string>)
-                          ) : (
-                            <span className="text-xs text-muted-foreground italic">
-                              Add a message body to see the preview.
-                            </span>
-                          )}
+                        <div className="rounded-md bg-[#dcf8c6] dark:bg-emerald-900/30 text-foreground p-3 shadow-sm max-w-md whitespace-pre-wrap text-sm leading-relaxed min-h-[3rem]">
+                          {(() => {
+                            const r = previewResult[rule.id];
+                            if (!r || r.loading) {
+                              return <span className="text-xs text-muted-foreground italic">Rendering…</span>;
+                            }
+                            if (r.error) {
+                              return <span className="text-xs text-destructive">{r.error}</span>;
+                            }
+                            if (r.mode === "template") {
+                              return (
+                                <span className="text-xs text-muted-foreground italic">
+                                  {r.note ?? `Uses WhatsApp template ${rule.template_name}.`}
+                                </span>
+                              );
+                            }
+                            return r.body || <span className="text-xs text-muted-foreground italic">Add a message body to see the preview.</span>;
+                          })()}
                         </div>
                       </div>
                     )}
