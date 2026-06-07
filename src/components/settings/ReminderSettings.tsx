@@ -14,7 +14,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, BellRing } from "lucide-react";
+import { Plus, Trash2, BellRing, Eye } from "lucide-react";
+
+function renderTemplate(body: string, vars: Record<string, string>) {
+  return body.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => vars[k] ?? "");
+}
+
+interface PreviewVars {
+  customer_name: string;
+  vehicle_model: string;
+  booking_date: string;
+}
+
+const DEFAULT_PREVIEW: PreviewVars = {
+  customer_name: "Rahul Sharma",
+  vehicle_model: "Honda City",
+  booking_date: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
+};
 
 interface Rule {
   id: string;
