@@ -1827,6 +1827,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      hash_phone: {
+        Args: { _phone: string; _tenant_id: string }
+        Returns: string
+      }
       is_executive_user: { Args: never; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }
       is_tenant_active: { Args: never; Returns: boolean }
