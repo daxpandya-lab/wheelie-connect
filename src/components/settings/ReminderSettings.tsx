@@ -519,18 +519,24 @@ export default function ReminderSettings() {
                             />
                           </div>
                         </div>
-                        <div className="rounded-md bg-[#dcf8c6] dark:bg-emerald-900/30 text-foreground p-3 shadow-sm max-w-md whitespace-pre-wrap text-sm leading-relaxed">
-                          {rule.template_name && !rule.message_body?.trim() ? (
-                            <span className="text-xs text-muted-foreground italic">
-                              Uses WhatsApp template <code>{rule.template_name}</code> — preview unavailable for templates.
-                            </span>
-                          ) : rule.message_body?.trim() ? (
-                            renderTemplate(rule.message_body, getVars(rule.id) as unknown as Record<string, string>)
-                          ) : (
-                            <span className="text-xs text-muted-foreground italic">
-                              Add a message body to see the preview.
-                            </span>
-                          )}
+                        <div className="rounded-md bg-[#dcf8c6] dark:bg-emerald-900/30 text-foreground p-3 shadow-sm max-w-md whitespace-pre-wrap text-sm leading-relaxed min-h-[3rem]">
+                          {(() => {
+                            const r = previewResult[rule.id];
+                            if (!r || r.loading) {
+                              return <span className="text-xs text-muted-foreground italic">Rendering…</span>;
+                            }
+                            if (r.error) {
+                              return <span className="text-xs text-destructive">{r.error}</span>;
+                            }
+                            if (r.mode === "template") {
+                              return (
+                                <span className="text-xs text-muted-foreground italic">
+                                  {r.note ?? `Uses WhatsApp template ${rule.template_name}.`}
+                                </span>
+                              );
+                            }
+                            return r.body || <span className="text-xs text-muted-foreground italic">Add a message body to see the preview.</span>;
+                          })()}
                         </div>
                       </div>
                     )}
