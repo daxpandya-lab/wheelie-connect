@@ -49,7 +49,7 @@ export default function LoginPage() {
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center space-y-2">
-          <img src={brandLogo} alt="Dealer Doodle" className="h-14 mx-auto object-contain" />
+          <img src={brandLogo} alt="Dealer Doodle" className="h-28 mx-auto object-contain" />
           <p className="text-muted-foreground text-sm">Sign in to your account</p>
         </div>
 
