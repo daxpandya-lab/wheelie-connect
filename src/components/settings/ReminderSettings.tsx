@@ -89,6 +89,12 @@ export default function ReminderSettings() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [predictive, setPredictive] = useState<PredictiveCfg>({ enabled: true, interval_months: 6 });
   const [savingPredictive, setSavingPredictive] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState<Record<string, boolean>>({});
+  const [previewVars, setPreviewVars] = useState<Record<string, PreviewVars>>({});
+
+  const getVars = (id: string): PreviewVars => previewVars[id] ?? DEFAULT_PREVIEW;
+  const setVars = (id: string, patch: Partial<PreviewVars>) =>
+    setPreviewVars((p) => ({ ...p, [id]: { ...getVars(id), ...patch } }));
 
   useEffect(() => {
     if (!tenantId) return;
