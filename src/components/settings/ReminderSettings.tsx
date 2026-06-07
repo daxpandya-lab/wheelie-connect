@@ -91,6 +91,9 @@ export default function ReminderSettings() {
   const [savingPredictive, setSavingPredictive] = useState(false);
   const [previewOpen, setPreviewOpen] = useState<Record<string, boolean>>({});
   const [previewVars, setPreviewVars] = useState<Record<string, PreviewVars>>({});
+  const [previewResult, setPreviewResult] = useState<
+    Record<string, { mode: "text" | "template"; body: string | null; note?: string; error?: string; loading?: boolean }>
+  >({});
 
   const getVars = (id: string): PreviewVars => previewVars[id] ?? DEFAULT_PREVIEW;
   const setVars = (id: string, patch: Partial<PreviewVars>) =>
