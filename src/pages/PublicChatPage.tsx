@@ -337,6 +337,9 @@ export default function PublicChatPage() {
   // — they are PII and looked up server-side via the rate-limited edge fn.
   useEffect(() => {
     if (!dealer) return;
+    // Cleanup: older builds cached the raw phone under wheelie_chat_phone_*.
+    // Remove any lingering copy from this device.
+    try { localStorage.removeItem(`wheelie_chat_phone_${dealer.id}`); } catch { /* ignore */ }
     const name = String(
       collectedData.customer_name || collectedData.existing_customer_name || "",
     ).trim();
