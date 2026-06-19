@@ -48,6 +48,19 @@ export default function SuperAdminPage() {
   const [saving, setSaving] = useState(false);
   const [credentials, setCredentials] = useState<Record<string, { email: string | null; password: string | null }>>({});
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
+  const [metrics, setMetrics] = useState<{
+    totals: { active_tenants: number; all_tenants: number; active_revenue: number; wa_connected: number; wa_total: number; storage_bytes: number };
+    whatsapp_by_tenant: Record<string, { status: "connected" | "idle" | "timeout"; last_webhook_at: string | null }>;
+    storage_by_tenant: Record<string, number>;
+  } | null>(null);
+
+  const fetchMetrics = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke("super-admin-metrics", { body: {} });
+      if (error) throw error;
+      setMetrics(data);
+    } catch { /* non-fatal */ }
+  }, []);
 
   const fetchTenants = useCallback(async () => {
     const { data } = await supabase.from("tenants").select("*").order("created_at", { ascending: false });
