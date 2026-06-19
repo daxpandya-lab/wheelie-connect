@@ -331,11 +331,21 @@ export default function SuperAdminPage() {
                         </div>
                       </TableCell>
                       <TableCell>
+                        <div className="flex items-center gap-2" title={wa?.last_webhook_at ? `Last webhook: ${new Date(wa.last_webhook_at).toLocaleString()}` : "No recent activity"}>
+                          <span className={`inline-block w-2.5 h-2.5 rounded-full ${waColor}`} />
+                          <span className="text-xs text-muted-foreground">{waLabel}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-xs">{formatBytes(storageBytes)}</TableCell>
+                      <TableCell>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColor(t.status)}`}>{t.status}</span>
                       </TableCell>
                       <TableCell className="text-sm">{t.subscription_end_date ? new Date(t.subscription_end_date).toLocaleDateString() : "—"}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="icon" title="Impersonate (read-only workspace)" onClick={() => impersonate(t)}>
+                            <UserCog className="w-4 h-4 text-primary" />
+                          </Button>
                           <Button variant="ghost" size="icon" title="Edit" onClick={() => openEdit(t)}><Pencil className="w-4 h-4" /></Button>
                           <Button variant="ghost" size="icon" title="Reset Password" onClick={() => { setResetTarget(t); setNewPassword(""); setResetOpen(true); }}><KeyRound className="w-4 h-4" /></Button>
                           <Button variant="ghost" size="icon" title={t.status === "active" ? "Suspend" : "Activate"} onClick={() => handleToggleStatus(t)}>
