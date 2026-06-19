@@ -221,6 +221,42 @@ export default function SuperAdminPage() {
     <>
       <TopBar title="Super Admin — Dealer Management" />
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        {/* SaaS overview KPIs */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <KpiCard
+            title="Total Registered Workshops"
+            value={metrics ? String(metrics.totals.active_tenants) : "—"}
+            change={metrics ? `${metrics.totals.all_tenants} total on platform` : "Loading…"}
+            changeType="neutral"
+            icon={Store}
+            delay={0}
+          />
+          <KpiCard
+            title="Active Subscription Revenue"
+            value={metrics ? formatMoney(metrics.totals.active_revenue) : "—"}
+            change={metrics ? "Estimated MRR from active tiers" : "Loading…"}
+            changeType="positive"
+            icon={IndianRupee}
+            delay={60}
+          />
+          <KpiCard
+            title="Global WhatsApp Instances"
+            value={metrics ? `${metrics.totals.wa_connected}/${metrics.totals.wa_total}` : "—"}
+            change={metrics ? "Connected sessions across all dealers" : "Loading…"}
+            changeType={metrics && metrics.totals.wa_total > 0 && metrics.totals.wa_connected === metrics.totals.wa_total ? "positive" : "neutral"}
+            icon={MessageCircle}
+            delay={120}
+          />
+          <KpiCard
+            title="Total Cloud Storage Used"
+            value={metrics ? formatBytes(metrics.totals.storage_bytes) : "—"}
+            change="Across service & invoice buckets"
+            changeType="neutral"
+            icon={HardDrive}
+            delay={180}
+          />
+        </div>
+
         <div className="flex justify-between items-center">
           <p className="text-muted-foreground">{tenants.length} dealer(s) registered</p>
           <Button onClick={() => { setForm(emptyForm); setCreateOpen(true); }}>
