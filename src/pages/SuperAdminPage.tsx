@@ -176,7 +176,14 @@ export default function SuperAdminPage() {
     const newStatus: TenantStatus = tenant.status === "active" ? "suspended" : "active";
     const { error } = await supabase.from("tenants").update({ status: newStatus }).eq("id", tenant.id);
     if (error) toast.error(error.message);
-    else { toast.success(`Dealer ${newStatus === "active" ? "activated" : "suspended"}`); fetchTenants(); }
+    else {
+      toast.success(
+        newStatus === "active"
+          ? `Dealer activated`
+          : `Dealer suspended — workspace access blocked until renewed`
+      );
+      fetchTenants();
+    }
   };
 
   const handleDelete = async (tenant: Tenant) => {
