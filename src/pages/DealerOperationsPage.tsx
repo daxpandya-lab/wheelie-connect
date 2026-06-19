@@ -14,8 +14,9 @@ interface TenantLite { id: string; name: string; }
 
 export default function DealerOperationsPage() {
   const { isSuperAdmin } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tenants, setTenants] = useState<TenantLite[]>([]);
-  const [tenantId, setTenantId] = useState<string>("");
+  const [tenantId, setTenantId] = useState<string>(searchParams.get("tenant") || "");
   const [loadingTenants, setLoadingTenants] = useState(true);
 
   const [bookings, setBookings] = useState<any[]>([]);
@@ -33,6 +34,19 @@ export default function DealerOperationsPage() {
       setLoadingTenants(false);
     })();
   }, []);
+
+  // Sync ?tenant= query param ↔ selection (for one-click impersonation)
+  useEffect(() => {
+    const q = searchParams.get("tenant") || "";
+    if (q && q !== tenantId) setTenantId(q);
+  }, [searchParams]);
+
+  const handleSelectTenant = (id: string) => {
+    setTenantId(id);
+    const next = new URLSearchParams(searchParams);
+    if (id) next.set("tenant", id); else next.delete("tenant");
+    setSearchParams(next, { replace: true });
+  };
 
   const loadOps = useCallback(async (tid: string) => {
     if (!tid) return;
