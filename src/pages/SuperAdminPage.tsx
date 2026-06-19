@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import TopBar from "@/components/TopBar";
@@ -10,7 +11,8 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Loader2, Pencil, KeyRound, Ban, CheckCircle, Trash2, Eye, EyeOff } from "lucide-react";
+import { Plus, Loader2, Pencil, KeyRound, Ban, CheckCircle, Trash2, Eye, EyeOff, Store, IndianRupee, MessageCircle, HardDrive, UserCog } from "lucide-react";
+import KpiCard from "@/components/KpiCard";
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 
