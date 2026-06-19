@@ -86,7 +86,20 @@ export default function SuperAdminPage() {
     } catch { /* ignore */ }
   }, []);
 
-  useEffect(() => { fetchTenants(); fetchCredentials(); }, [fetchTenants, fetchCredentials]);
+  useEffect(() => { fetchTenants(); fetchCredentials(); fetchMetrics(); }, [fetchTenants, fetchCredentials, fetchMetrics]);
+
+  const formatBytes = (bytes: number) => {
+    if (!bytes) return "0 B";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+    return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+  };
+  const formatMoney = (n: number) => `$${n.toLocaleString()}`;
+
+  const impersonate = (t: Tenant) => {
+    toast.info(`Loading ${t.name}'s workspace in read-only view`);
+    navigate(`/dealer-operations?tenant=${t.id}`);
+  };
 
   const callEdgeFn = async (action: string, body: Record<string, unknown>) => {
     const { data: { session } } = await supabase.auth.getSession();
