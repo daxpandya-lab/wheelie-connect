@@ -7,7 +7,7 @@ import { Loader2 } from "lucide-react";
 export default function SubscriptionGate() {
   const { tenantId, isSuperAdmin } = useAuth();
   const [checking, setChecking] = useState(true);
-  const [expired, setExpired] = useState(false);
+  const [blocked, setBlocked] = useState<null | "expired" | "suspended">(null);
 
   useEffect(() => {
     if (isSuperAdmin || !tenantId) {
@@ -15,13 +15,17 @@ export default function SubscriptionGate() {
       return;
     }
 
-    supabase.from("tenants").select("subscription_end_date").eq("id", tenantId).single()
+    supabase
+      .from("tenants")
+      .select("subscription_end_date,status")
+      .eq("id", tenantId)
+      .single()
       .then(({ data }) => {
-        if (data?.subscription_end_date) {
+        if (data?.status === "suspended" || data?.status === "cancelled") {
+          setBlocked("suspended");
+        } else if (data?.subscription_end_date) {
           const endDate = new Date(data.subscription_end_date);
-          if (endDate < new Date()) {
-            setExpired(true);
-          }
+          if (endDate < new Date()) setBlocked("expired");
         }
         setChecking(false);
       });
@@ -35,8 +39,8 @@ export default function SubscriptionGate() {
     );
   }
 
-  if (expired) {
-    return <Navigate to="/subscription-expired" replace />;
+  if (blocked) {
+    return <Navigate to={`/subscription-expired?reason=${blocked}`} replace />;
   }
 
   return <Outlet />;

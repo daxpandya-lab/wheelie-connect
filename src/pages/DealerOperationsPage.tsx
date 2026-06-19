@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import TopBar from "@/components/TopBar";
@@ -6,15 +7,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Wrench, TestTube2, FileText, Package, ClipboardList } from "lucide-react";
+import { Loader2, Wrench, TestTube2, FileText, Package, ClipboardList, Eye } from "lucide-react";
 import { Label } from "@/components/ui/label";
 
 interface TenantLite { id: string; name: string; }
 
 export default function DealerOperationsPage() {
   const { isSuperAdmin } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tenants, setTenants] = useState<TenantLite[]>([]);
-  const [tenantId, setTenantId] = useState<string>("");
+  const [tenantId, setTenantId] = useState<string>(searchParams.get("tenant") || "");
   const [loadingTenants, setLoadingTenants] = useState(true);
 
   const [bookings, setBookings] = useState<any[]>([]);
@@ -32,6 +34,19 @@ export default function DealerOperationsPage() {
       setLoadingTenants(false);
     })();
   }, []);
+
+  // Sync ?tenant= query param ↔ selection (for one-click impersonation)
+  useEffect(() => {
+    const q = searchParams.get("tenant") || "";
+    if (q && q !== tenantId) setTenantId(q);
+  }, [searchParams]);
+
+  const handleSelectTenant = (id: string) => {
+    setTenantId(id);
+    const next = new URLSearchParams(searchParams);
+    if (id) next.set("tenant", id); else next.delete("tenant");
+    setSearchParams(next, { replace: true });
+  };
 
   const loadOps = useCallback(async (tid: string) => {
     if (!tid) return;
@@ -60,7 +75,7 @@ export default function DealerOperationsPage() {
         <div className="rounded-xl border bg-card p-4 flex flex-col sm:flex-row sm:items-end gap-4">
           <div className="flex-1 max-w-md space-y-2">
             <Label>Select dealer / tenant</Label>
-            <Select value={tenantId} onValueChange={setTenantId} disabled={loadingTenants}>
+            <Select value={tenantId} onValueChange={handleSelectTenant} disabled={loadingTenants}>
               <SelectTrigger>
                 <SelectValue placeholder={loadingTenants ? "Loading dealers…" : "Choose a dealer to inspect"} />
               </SelectTrigger>
@@ -72,8 +87,13 @@ export default function DealerOperationsPage() {
             </Select>
           </div>
           {selected && (
-            <div className="text-sm text-muted-foreground">
-              Viewing live operations for <span className="font-medium text-foreground">{selected.name}</span>
+            <div className="flex items-center gap-2 text-sm">
+              <Badge variant="outline" className="gap-1">
+                <Eye className="w-3 h-3" /> Impersonating
+              </Badge>
+              <span className="text-muted-foreground">
+                Read-only view of <span className="font-medium text-foreground">{selected.name}</span> — no credentials touched.
+              </span>
             </div>
           )}
         </div>

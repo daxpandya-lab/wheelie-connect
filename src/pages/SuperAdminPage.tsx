@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import TopBar from "@/components/TopBar";
@@ -10,7 +11,8 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Loader2, Pencil, KeyRound, Ban, CheckCircle, Trash2, Eye, EyeOff } from "lucide-react";
+import { Plus, Loader2, Pencil, KeyRound, Ban, CheckCircle, Trash2, Eye, EyeOff, Store, IndianRupee, MessageCircle, HardDrive, UserCog } from "lucide-react";
+import KpiCard from "@/components/KpiCard";
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -33,6 +35,7 @@ const emptyForm = {
 
 export default function SuperAdminPage() {
   const { isSuperAdmin } = useAuth();
+  const navigate = useNavigate();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
@@ -45,6 +48,19 @@ export default function SuperAdminPage() {
   const [saving, setSaving] = useState(false);
   const [credentials, setCredentials] = useState<Record<string, { email: string | null; password: string | null }>>({});
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
+  const [metrics, setMetrics] = useState<{
+    totals: { active_tenants: number; all_tenants: number; active_revenue: number; wa_connected: number; wa_total: number; storage_bytes: number };
+    whatsapp_by_tenant: Record<string, { status: "connected" | "idle" | "timeout"; last_webhook_at: string | null }>;
+    storage_by_tenant: Record<string, number>;
+  } | null>(null);
+
+  const fetchMetrics = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke("super-admin-metrics", { body: {} });
+      if (error) throw error;
+      setMetrics(data);
+    } catch { /* non-fatal */ }
+  }, []);
 
   const fetchTenants = useCallback(async () => {
     const { data } = await supabase.from("tenants").select("*").order("created_at", { ascending: false });
@@ -70,7 +86,20 @@ export default function SuperAdminPage() {
     } catch { /* ignore */ }
   }, []);
 
-  useEffect(() => { fetchTenants(); fetchCredentials(); }, [fetchTenants, fetchCredentials]);
+  useEffect(() => { fetchTenants(); fetchCredentials(); fetchMetrics(); }, [fetchTenants, fetchCredentials, fetchMetrics]);
+
+  const formatBytes = (bytes: number) => {
+    if (!bytes) return "0 B";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+    return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+  };
+  const formatMoney = (n: number) => `$${n.toLocaleString()}`;
+
+  const impersonate = (t: Tenant) => {
+    toast.info(`Loading ${t.name}'s workspace in read-only view`);
+    navigate(`/dealer-operations?tenant=${t.id}`);
+  };
 
   const callEdgeFn = async (action: string, body: Record<string, unknown>) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -147,7 +176,15 @@ export default function SuperAdminPage() {
     const newStatus: TenantStatus = tenant.status === "active" ? "suspended" : "active";
     const { error } = await supabase.from("tenants").update({ status: newStatus }).eq("id", tenant.id);
     if (error) toast.error(error.message);
-    else { toast.success(`Dealer ${newStatus === "active" ? "activated" : "suspended"}`); fetchTenants(); }
+    else {
+      toast.success(
+        newStatus === "active"
+          ? `Dealer activated`
+          : `Dealer suspended — workspace access blocked until renewed`
+      );
+      fetchTenants();
+      fetchMetrics();
+    }
   };
 
   const handleDelete = async (tenant: Tenant) => {
@@ -185,6 +222,42 @@ export default function SuperAdminPage() {
     <>
       <TopBar title="Super Admin — Dealer Management" />
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        {/* SaaS overview KPIs */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <KpiCard
+            title="Total Registered Workshops"
+            value={metrics ? String(metrics.totals.active_tenants) : "—"}
+            change={metrics ? `${metrics.totals.all_tenants} total on platform` : "Loading…"}
+            changeType="neutral"
+            icon={Store}
+            delay={0}
+          />
+          <KpiCard
+            title="Active Subscription Revenue"
+            value={metrics ? formatMoney(metrics.totals.active_revenue) : "—"}
+            change={metrics ? "Estimated MRR from active tiers" : "Loading…"}
+            changeType="positive"
+            icon={IndianRupee}
+            delay={60}
+          />
+          <KpiCard
+            title="Global WhatsApp Instances"
+            value={metrics ? `${metrics.totals.wa_connected}/${metrics.totals.wa_total}` : "—"}
+            change={metrics ? "Connected sessions across all dealers" : "Loading…"}
+            changeType={metrics && metrics.totals.wa_total > 0 && metrics.totals.wa_connected === metrics.totals.wa_total ? "positive" : "neutral"}
+            icon={MessageCircle}
+            delay={120}
+          />
+          <KpiCard
+            title="Total Cloud Storage Used"
+            value={metrics ? formatBytes(metrics.totals.storage_bytes) : "—"}
+            change="Across service & invoice buckets"
+            changeType="neutral"
+            icon={HardDrive}
+            delay={180}
+          />
+        </div>
+
         <div className="flex justify-between items-center">
           <p className="text-muted-foreground">{tenants.length} dealer(s) registered</p>
           <Button onClick={() => { setForm(emptyForm); setCreateOpen(true); }}>
@@ -205,6 +278,8 @@ export default function SuperAdminPage() {
                   <TableHead>Login Email</TableHead>
                   <TableHead>Login Password</TableHead>
                   <TableHead>Modules</TableHead>
+                  <TableHead>WhatsApp</TableHead>
+                  <TableHead>Storage</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>End Date</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -213,12 +288,22 @@ export default function SuperAdminPage() {
               <TableBody>
                 {tenants.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={11} className="text-center text-muted-foreground py-8">
                       No dealers found. Click "Add Dealer" to create one.
                     </TableCell>
                   </TableRow>
                 ) : tenants.map((t) => {
                   const cred = credentials[t.id];
+                  const wa = metrics?.whatsapp_by_tenant[t.id];
+                  const storageBytes = metrics?.storage_by_tenant[t.id] ?? 0;
+                  const waColor =
+                    wa?.status === "connected" ? "bg-success"
+                    : wa?.status === "timeout" ? "bg-destructive"
+                    : "bg-muted-foreground/40";
+                  const waLabel =
+                    wa?.status === "connected" ? "Connected"
+                    : wa?.status === "timeout" ? "Timeout"
+                    : "Idle";
                   return (
                     <TableRow key={t.id}>
                       <TableCell className="font-medium">{t.name}</TableCell>
@@ -247,11 +332,21 @@ export default function SuperAdminPage() {
                         </div>
                       </TableCell>
                       <TableCell>
+                        <div className="flex items-center gap-2" title={wa?.last_webhook_at ? `Last webhook: ${new Date(wa.last_webhook_at).toLocaleString()}` : "No recent activity"}>
+                          <span className={`inline-block w-2.5 h-2.5 rounded-full ${waColor}`} />
+                          <span className="text-xs text-muted-foreground">{waLabel}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-xs">{formatBytes(storageBytes)}</TableCell>
+                      <TableCell>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColor(t.status)}`}>{t.status}</span>
                       </TableCell>
                       <TableCell className="text-sm">{t.subscription_end_date ? new Date(t.subscription_end_date).toLocaleDateString() : "—"}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="icon" title="Impersonate (read-only workspace)" onClick={() => impersonate(t)}>
+                            <UserCog className="w-4 h-4 text-primary" />
+                          </Button>
                           <Button variant="ghost" size="icon" title="Edit" onClick={() => openEdit(t)}><Pencil className="w-4 h-4" /></Button>
                           <Button variant="ghost" size="icon" title="Reset Password" onClick={() => { setResetTarget(t); setNewPassword(""); setResetOpen(true); }}><KeyRound className="w-4 h-4" /></Button>
                           <Button variant="ghost" size="icon" title={t.status === "active" ? "Suspend" : "Activate"} onClick={() => handleToggleStatus(t)}>
