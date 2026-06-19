@@ -18,6 +18,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import AnalyticsPage from "@/pages/AnalyticsPage";
 import SettingsPage from "@/pages/SettingsPage";
 import SuperAdminPage from "@/pages/SuperAdminPage";
+import DealerOperationsPage from "@/pages/DealerOperationsPage";
 import UserManagementPage from "@/pages/UserManagementPage";
 import FlowBuilderPage from "@/pages/FlowBuilderPage";
 import AutomationsPage from "@/pages/AutomationsPage";
@@ -101,6 +102,11 @@ const App = () => (
                   <Route path="/super-admin" element={
                     <ProtectedRoute requiredRoles={["super_admin"]}>
                       <SuperAdminPage />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/dealer-operations" element={
+                    <ProtectedRoute requiredRoles={["super_admin"]}>
+                      <DealerOperationsPage />
                     </ProtectedRoute>
                   } />
                 </Route>
