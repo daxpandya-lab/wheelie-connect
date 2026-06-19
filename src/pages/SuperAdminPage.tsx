@@ -35,6 +35,7 @@ const emptyForm = {
 
 export default function SuperAdminPage() {
   const { isSuperAdmin } = useAuth();
+  const navigate = useNavigate();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
