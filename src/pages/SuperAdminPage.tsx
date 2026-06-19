@@ -277,6 +277,8 @@ export default function SuperAdminPage() {
                   <TableHead>Login Email</TableHead>
                   <TableHead>Login Password</TableHead>
                   <TableHead>Modules</TableHead>
+                  <TableHead>WhatsApp</TableHead>
+                  <TableHead>Storage</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>End Date</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -285,12 +287,22 @@ export default function SuperAdminPage() {
               <TableBody>
                 {tenants.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={11} className="text-center text-muted-foreground py-8">
                       No dealers found. Click "Add Dealer" to create one.
                     </TableCell>
                   </TableRow>
                 ) : tenants.map((t) => {
                   const cred = credentials[t.id];
+                  const wa = metrics?.whatsapp_by_tenant[t.id];
+                  const storageBytes = metrics?.storage_by_tenant[t.id] ?? 0;
+                  const waColor =
+                    wa?.status === "connected" ? "bg-success"
+                    : wa?.status === "timeout" ? "bg-destructive"
+                    : "bg-muted-foreground/40";
+                  const waLabel =
+                    wa?.status === "connected" ? "Connected"
+                    : wa?.status === "timeout" ? "Timeout"
+                    : "Idle";
                   return (
                     <TableRow key={t.id}>
                       <TableCell className="font-medium">{t.name}</TableCell>
