@@ -183,6 +183,7 @@ export default function SuperAdminPage() {
           : `Dealer suspended — workspace access blocked until renewed`
       );
       fetchTenants();
+      fetchMetrics();
     }
   };
 
