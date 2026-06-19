@@ -75,7 +75,7 @@ export default function DealerOperationsPage() {
         <div className="rounded-xl border bg-card p-4 flex flex-col sm:flex-row sm:items-end gap-4">
           <div className="flex-1 max-w-md space-y-2">
             <Label>Select dealer / tenant</Label>
-            <Select value={tenantId} onValueChange={setTenantId} disabled={loadingTenants}>
+            <Select value={tenantId} onValueChange={handleSelectTenant} disabled={loadingTenants}>
               <SelectTrigger>
                 <SelectValue placeholder={loadingTenants ? "Loading dealers…" : "Choose a dealer to inspect"} />
               </SelectTrigger>
@@ -87,8 +87,13 @@ export default function DealerOperationsPage() {
             </Select>
           </div>
           {selected && (
-            <div className="text-sm text-muted-foreground">
-              Viewing live operations for <span className="font-medium text-foreground">{selected.name}</span>
+            <div className="flex items-center gap-2 text-sm">
+              <Badge variant="outline" className="gap-1">
+                <Eye className="w-3 h-3" /> Impersonating
+              </Badge>
+              <span className="text-muted-foreground">
+                Read-only view of <span className="font-medium text-foreground">{selected.name}</span> — no credentials touched.
+              </span>
             </div>
           )}
         </div>
