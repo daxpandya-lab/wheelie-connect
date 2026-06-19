@@ -3,7 +3,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Users, MessageSquare,
   BarChart3, Megaphone, Settings, ChevronLeft, ChevronRight,
-  Wrench, TestTube2, UserPlus, Shield, UsersRound, LogOut, Bot, Zap
+  Wrench, TestTube2, UserPlus, Shield, UsersRound, LogOut, Bot, Zap, Briefcase
 } from "lucide-react";
 import brandIcon from "@/assets/dealer-doodle-icon.png";
 import { cn } from "@/lib/utils";
@@ -16,23 +16,32 @@ export default function AppSidebar() {
 
   const isAdminOrAbove = isTenantAdmin || isSuperAdmin;
 
-  const navItems = [
-    { to: "/", icon: LayoutDashboard, label: "Dashboard" },
-    { to: "/customers", icon: Users, label: "Customers" },
-    { to: "/leads", icon: UserPlus, label: "Leads" },
-    ...(serviceBookingEnabled ? [{ to: "/service-bookings", icon: Wrench, label: "Service Bookings" }] : []),
-    ...(testDriveEnabled ? [{ to: "/test-drives", icon: TestTube2, label: "Test Drives" }] : []),
-    ...(isExecutive ? [] : [{ to: "/conversations", icon: MessageSquare, label: "Conversations" }]),
-    ...(isAdminOrAbove ? [
-      { to: "/campaigns", icon: Megaphone, label: "Campaigns" },
-      { to: "/analytics", icon: BarChart3, label: "Analytics" },
-      { to: "/flow-builder", icon: Bot, label: "Flow Builder" },
-      { to: "/automations", icon: Zap, label: "Automations" },
-    ] : []),
-    ...(isAdminOrAbove ? [{ to: "/team", icon: UsersRound, label: "Team" }] : []),
-    ...(isSuperAdmin ? [{ to: "/super-admin", icon: Shield, label: "Super Admin" }] : []),
-    { to: "/settings", icon: Settings, label: "Settings" },
-  ];
+  // Super Admin (Dealer Doodle Owner) gets a focused control panel:
+  // Client Management, Dealer Operations Workspace, Team, Master Configuration.
+  // Deep operational features are consolidated under the Workspace tab.
+  const navItems = isSuperAdmin
+    ? [
+        { to: "/super-admin", icon: Shield, label: "Client Management" },
+        { to: "/dealer-operations", icon: Briefcase, label: "Dealer Operations Workspace" },
+        { to: "/team", icon: UsersRound, label: "Team" },
+        { to: "/settings", icon: Settings, label: "Master Configuration" },
+      ]
+    : [
+        { to: "/", icon: LayoutDashboard, label: "Dashboard" },
+        { to: "/customers", icon: Users, label: "Customers" },
+        { to: "/leads", icon: UserPlus, label: "Leads" },
+        ...(serviceBookingEnabled ? [{ to: "/service-bookings", icon: Wrench, label: "Service Bookings" }] : []),
+        ...(testDriveEnabled ? [{ to: "/test-drives", icon: TestTube2, label: "Test Drives" }] : []),
+        ...(isExecutive ? [] : [{ to: "/conversations", icon: MessageSquare, label: "Conversations" }]),
+        ...(isAdminOrAbove ? [
+          { to: "/campaigns", icon: Megaphone, label: "Campaigns" },
+          { to: "/analytics", icon: BarChart3, label: "Analytics" },
+          { to: "/flow-builder", icon: Bot, label: "Flow Builder" },
+          { to: "/automations", icon: Zap, label: "Automations" },
+        ] : []),
+        ...(isAdminOrAbove ? [{ to: "/team", icon: UsersRound, label: "Team" }] : []),
+        { to: "/settings", icon: Settings, label: "Settings" },
+      ];
 
   return (
     <aside
