@@ -415,14 +415,15 @@ export default function SuperAdminPage() {
                 ) : tenants.map((t) => {
                   const cred = credentials[t.id];
                   const wa = metrics?.whatsapp_by_tenant[t.id];
+                  const waStatus = computeWaStatus(wa?.last_webhook_at, wa?.status);
                   const storageBytes = metrics?.storage_by_tenant[t.id] ?? 0;
                   const waColor =
-                    wa?.status === "connected" ? "bg-success"
-                    : wa?.status === "timeout" ? "bg-destructive"
+                    waStatus === "connected" ? "bg-success"
+                    : waStatus === "timeout" ? "bg-destructive"
                     : "bg-muted-foreground/40";
                   const waLabel =
-                    wa?.status === "connected" ? "Connected"
-                    : wa?.status === "timeout" ? "Timeout"
+                    waStatus === "connected" ? "Connected"
+                    : waStatus === "timeout" ? `Silent >${staleHours}h`
                     : "Idle";
                   return (
                     <TableRow key={t.id}>
