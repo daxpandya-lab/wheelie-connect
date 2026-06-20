@@ -259,6 +259,38 @@ async function dispatchEvolution(
 }
 
 /**
+ * Write a tracking row to outbound_communication_logs for telemetry.
+ * Non-blocking: failures are logged but never bubble up to the caller.
+ */
+export async function logOutbound(
+  supabase: SupabaseClient,
+  row: {
+    tenantId: string;
+    customerPhone?: string | null;
+    automationType: string;
+    channel?: string | null;
+    status?: string;
+    errorMessage?: string | null;
+    payload?: Record<string, unknown>;
+  },
+): Promise<void> {
+  try {
+    const { error } = await supabase.from("outbound_communication_logs").insert({
+      tenant_id: row.tenantId,
+      customer_phone: row.customerPhone ?? null,
+      automation_type: row.automationType,
+      channel: row.channel ?? null,
+      status: row.status ?? "sent",
+      error_message: row.errorMessage ?? null,
+      payload: row.payload ?? null,
+    } as never);
+    if (error) console.warn("[notify] logOutbound failed", error.message);
+  } catch (e) {
+    console.warn("[notify] logOutbound exception", String(e).slice(0, 200));
+  }
+}
+
+/**
  * Substitute {{var}} placeholders in a string using the provided variables.
  */
 export function renderVariables(
