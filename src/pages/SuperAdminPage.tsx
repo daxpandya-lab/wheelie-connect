@@ -55,6 +55,17 @@ export default function SuperAdminPage() {
     storage_by_tenant: Record<string, number>;
   } | null>(null);
 
+  // Configurable WhatsApp health alert threshold (hours of webhook silence => RED)
+  const ALERT_KEY = "superadmin.wa.alertHours";
+  const [staleHours, setStaleHours] = useState<number>(() => {
+    const v = Number(localStorage.getItem(ALERT_KEY));
+    return Number.isFinite(v) && v > 0 ? v : 24;
+  });
+  const [thresholdDraft, setThresholdDraft] = useState<string>(String(staleHours));
+  const [alertedRedIds, setAlertedRedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => { localStorage.setItem(ALERT_KEY, String(staleHours)); }, [staleHours]);
+
   const fetchMetrics = useCallback(async () => {
     try {
       const { data, error } = await supabase.functions.invoke("super-admin-metrics", { body: {} });
@@ -62,6 +73,12 @@ export default function SuperAdminPage() {
       setMetrics(data);
     } catch { /* non-fatal */ }
   }, []);
+
+  // Live polling so alerts fire when dealers go red
+  useEffect(() => {
+    const id = setInterval(fetchMetrics, 60_000);
+    return () => clearInterval(id);
+  }, [fetchMetrics]);
 
   const fetchTenants = useCallback(async () => {
     const { data } = await supabase.from("tenants").select("*").order("created_at", { ascending: false });
