@@ -236,10 +236,112 @@ export default function SuperAdminPage() {
 
   if (!isSuperAdmin) return <div className="p-6 text-muted-foreground">Access denied</div>;
 
+  // Derive WhatsApp status per tenant against the configurable threshold.
+  const computeWaStatus = (lastWebhookAt: string | null | undefined, serverStatus?: string) => {
+    if (!lastWebhookAt) return serverStatus === "connected" ? "idle" : (serverStatus as any) || "idle";
+    const ageMs = Date.now() - new Date(lastWebhookAt).getTime();
+    if (ageMs > staleHours * 3600_000) return "timeout";
+    return "connected";
+  };
+
+  // Build red-list and fire toasts when new dealers cross the threshold.
+  const redDealers = useMemo(() => {
+    if (!metrics) return [] as { id: string; name: string; last: string | null }[];
+    return tenants
+      .filter((t) => t.status === "active")
+      .map((t) => {
+        const wa = metrics.whatsapp_by_tenant[t.id];
+        const status = computeWaStatus(wa?.last_webhook_at, wa?.status);
+        return { tenant: t, status, last: wa?.last_webhook_at ?? null };
+      })
+      .filter((x) => x.status === "timeout")
+      .map((x) => ({ id: x.tenant.id, name: x.tenant.name, last: x.last }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metrics, tenants, staleHours]);
+
+  useEffect(() => {
+    if (!redDealers.length) return;
+    const fresh = redDealers.filter((d) => !alertedRedIds.has(d.id));
+    if (!fresh.length) return;
+    fresh.forEach((d) =>
+      toast.error(`WhatsApp silent > ${staleHours}h: ${d.name}`, {
+        description: d.last ? `Last webhook ${new Date(d.last).toLocaleString()}` : "No webhook ever received",
+        action: { label: "Inspect", onClick: () => navigate(`/dealer-operations?tenant=${d.id}`) },
+      })
+    );
+    setAlertedRedIds((prev) => {
+      const next = new Set(prev);
+      fresh.forEach((d) => next.add(d.id));
+      return next;
+    });
+  }, [redDealers, alertedRedIds, staleHours, navigate]);
+
   return (
     <>
       <TopBar title="Super Admin — Dealer Management" />
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        {/* Threshold control + red banner */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <BellRing className="w-4 h-4" />
+                Alert threshold: {staleHours}h
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-72 space-y-3">
+              <div className="space-y-1">
+                <Label className="text-sm">Mark WhatsApp RED after silence of</Label>
+                <p className="text-xs text-muted-foreground">
+                  Dealers whose last webhook is older than this will trigger toast alerts and appear in the banner.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  min={1}
+                  max={720}
+                  value={thresholdDraft}
+                  onChange={(e) => setThresholdDraft(e.target.value)}
+                />
+                <span className="self-center text-sm text-muted-foreground">hours</span>
+              </div>
+              <Button
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                  const n = Math.max(1, Math.min(720, Number(thresholdDraft) || 24));
+                  setStaleHours(n);
+                  setThresholdDraft(String(n));
+                  setAlertedRedIds(new Set()); // re-evaluate alerts under new rule
+                  toast.success(`Threshold set to ${n}h`);
+                }}
+              >
+                Save threshold
+              </Button>
+            </PopoverContent>
+          </Popover>
+          {redDealers.length > 0 && (
+            <div className="flex-1 flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 text-destructive px-3 py-2">
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+              <div className="text-xs leading-relaxed">
+                <strong>{redDealers.length}</strong> dealer{redDealers.length > 1 ? "s" : ""} silent &gt; {staleHours}h:{" "}
+                {redDealers.slice(0, 4).map((d, i) => (
+                  <button
+                    key={d.id}
+                    onClick={() => navigate(`/dealer-operations?tenant=${d.id}`)}
+                    className="underline underline-offset-2 hover:opacity-80"
+                  >
+                    {d.name}{i < Math.min(redDealers.length, 4) - 1 ? ", " : ""}
+                  </button>
+                ))}
+                {redDealers.length > 4 && <span> +{redDealers.length - 4} more</span>}
+              </div>
+            </div>
+          )}
+        </div>
+
+
         {/* SaaS overview KPIs */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard
