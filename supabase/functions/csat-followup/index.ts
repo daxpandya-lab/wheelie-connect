@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { dispatchNotification } from "../_shared/notify.ts";
+import { dispatchNotification, logOutbound } from "../_shared/notify.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -78,9 +78,25 @@ Deno.serve(async (req) => {
         if (result.status === "sent") {
           await supabase.from("service_bookings")
             .update({ csat_sent_at: new Date().toISOString() }).eq("id", b.id);
+          await logOutbound(supabase, {
+            tenantId: b.tenant_id,
+            customerPhone: b.phone_number,
+            automationType: "post_service_feedback",
+            channel: result.channel,
+            status: "sent",
+            payload: { booking_id: b.id, delay_hours: delayH },
+          });
           totalSent++;
         } else if (result.status === "failed") {
           console.warn("csat dispatch failed", b.id, result.error);
+          await logOutbound(supabase, {
+            tenantId: b.tenant_id,
+            customerPhone: b.phone_number,
+            automationType: "post_service_feedback",
+            channel: result.channel,
+            status: "failed",
+            errorMessage: result.error,
+          });
         }
       }
     }

@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { dispatchNotification } from "../_shared/notify.ts";
+import { dispatchNotification, logOutbound } from "../_shared/notify.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -22,7 +22,7 @@ Deno.serve(async (req) => {
     // Pull active tenants and group their predictive-reminder settings.
     const { data: tenants, error: tErr } = await supabase
       .from("tenants")
-      .select("id, settings")
+      .select("id, slug, settings")
       .eq("status", "active");
     if (tErr) {
       return new Response(JSON.stringify({ error: tErr.message }), {
@@ -39,6 +39,9 @@ Deno.serve(async (req) => {
     let totalProcessed = 0;
     const windowDays = 7;
 
+    const publicOrigin = (Deno.env.get("PUBLIC_APP_URL")
+      || "https://wheelie-connect.lovable.app").replace(/\/+$/, "");
+
     for (const t of tenants) {
       const cfg = ((t.settings as Record<string, any> | null)?.predictive_service_reminder ?? {}) as {
         enabled?: boolean;
@@ -48,6 +51,7 @@ Deno.serve(async (req) => {
       const enabled = cfg.enabled !== false;
       const months = Math.max(1, Math.min(36, Number(cfg.interval_months ?? 6) || 6));
       if (!enabled) continue;
+      const chatbotUrl = `${publicOrigin}/chat/${(t as any).slug || t.id}`;
 
       const now = Date.now();
       const intervalMs = Math.round(months * 30.4375 * 24 * 3600 * 1000);
@@ -75,7 +79,7 @@ Deno.serve(async (req) => {
           b.vehicle_model || "your vehicle",
         );
         const firstName = (b.customer_name || "there").split(" ")[0];
-        const text = `Hi ${firstName}, it has been ${months} months since your last service for ${vehicleNo}. Would you like to schedule your next preventive maintenance visit?`;
+        const text = `Hi ${firstName}, it has been ${months} months since your last service for ${vehicleNo} (${b.vehicle_model || "your vehicle"}). Book your next visit here: ${chatbotUrl}`;
 
         const result = await dispatchNotification(
           supabase,
@@ -93,9 +97,25 @@ Deno.serve(async (req) => {
             .from("service_bookings")
             .update({ predictive_reminder_sent_at: new Date().toISOString() })
             .eq("id", b.id);
+          await logOutbound(supabase, {
+            tenantId: b.tenant_id,
+            customerPhone: b.phone_number,
+            automationType: "predictive_service_reminder",
+            channel: result.channel,
+            status: "sent",
+            payload: { booking_id: b.id, months, chatbot_url: chatbotUrl },
+          });
           totalSent++;
         } else if (result.status === "failed") {
           console.warn("[predictive] dispatch failed", b.id, result.error);
+          await logOutbound(supabase, {
+            tenantId: b.tenant_id,
+            customerPhone: b.phone_number,
+            automationType: "predictive_service_reminder",
+            channel: result.channel,
+            status: "failed",
+            errorMessage: result.error,
+          });
         }
       }
     }
