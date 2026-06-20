@@ -1019,6 +1019,50 @@ export type Database = {
           },
         ]
       }
+      outbound_communication_logs: {
+        Row: {
+          automation_type: string
+          channel: string | null
+          created_at: string
+          customer_phone: string | null
+          error_message: string | null
+          id: string
+          payload: Json | null
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          automation_type: string
+          channel?: string | null
+          created_at?: string
+          customer_phone?: string | null
+          error_message?: string | null
+          id?: string
+          payload?: Json | null
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          automation_type?: string
+          channel?: string | null
+          created_at?: string
+          customer_phone?: string | null
+          error_message?: string | null
+          id?: string
+          payload?: Json | null
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outbound_communication_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       parts_suggestion_library: {
         Row: {
           created_at: string
