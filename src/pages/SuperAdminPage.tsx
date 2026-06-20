@@ -11,7 +11,8 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Loader2, Pencil, KeyRound, Ban, CheckCircle, Trash2, Eye, EyeOff, Store, IndianRupee, MessageCircle, HardDrive, UserCog } from "lucide-react";
+import { Plus, Loader2, Pencil, KeyRound, Ban, CheckCircle, Trash2, Eye, EyeOff, Store, IndianRupee, MessageCircle, HardDrive, UserCog, AlertTriangle, BellRing } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import KpiCard from "@/components/KpiCard";
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
@@ -54,6 +55,17 @@ export default function SuperAdminPage() {
     storage_by_tenant: Record<string, number>;
   } | null>(null);
 
+  // Configurable WhatsApp health alert threshold (hours of webhook silence => RED)
+  const ALERT_KEY = "superadmin.wa.alertHours";
+  const [staleHours, setStaleHours] = useState<number>(() => {
+    const v = Number(localStorage.getItem(ALERT_KEY));
+    return Number.isFinite(v) && v > 0 ? v : 24;
+  });
+  const [thresholdDraft, setThresholdDraft] = useState<string>(String(staleHours));
+  const [alertedRedIds, setAlertedRedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => { localStorage.setItem(ALERT_KEY, String(staleHours)); }, [staleHours]);
+
   const fetchMetrics = useCallback(async () => {
     try {
       const { data, error } = await supabase.functions.invoke("super-admin-metrics", { body: {} });
@@ -61,6 +73,12 @@ export default function SuperAdminPage() {
       setMetrics(data);
     } catch { /* non-fatal */ }
   }, []);
+
+  // Live polling so alerts fire when dealers go red
+  useEffect(() => {
+    const id = setInterval(fetchMetrics, 60_000);
+    return () => clearInterval(id);
+  }, [fetchMetrics]);
 
   const fetchTenants = useCallback(async () => {
     const { data } = await supabase.from("tenants").select("*").order("created_at", { ascending: false });
@@ -218,10 +236,112 @@ export default function SuperAdminPage() {
 
   if (!isSuperAdmin) return <div className="p-6 text-muted-foreground">Access denied</div>;
 
+  // Derive WhatsApp status per tenant against the configurable threshold.
+  const computeWaStatus = (lastWebhookAt: string | null | undefined, serverStatus?: string) => {
+    if (!lastWebhookAt) return serverStatus === "connected" ? "idle" : (serverStatus as any) || "idle";
+    const ageMs = Date.now() - new Date(lastWebhookAt).getTime();
+    if (ageMs > staleHours * 3600_000) return "timeout";
+    return "connected";
+  };
+
+  // Build red-list and fire toasts when new dealers cross the threshold.
+  const redDealers = useMemo(() => {
+    if (!metrics) return [] as { id: string; name: string; last: string | null }[];
+    return tenants
+      .filter((t) => t.status === "active")
+      .map((t) => {
+        const wa = metrics.whatsapp_by_tenant[t.id];
+        const status = computeWaStatus(wa?.last_webhook_at, wa?.status);
+        return { tenant: t, status, last: wa?.last_webhook_at ?? null };
+      })
+      .filter((x) => x.status === "timeout")
+      .map((x) => ({ id: x.tenant.id, name: x.tenant.name, last: x.last }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metrics, tenants, staleHours]);
+
+  useEffect(() => {
+    if (!redDealers.length) return;
+    const fresh = redDealers.filter((d) => !alertedRedIds.has(d.id));
+    if (!fresh.length) return;
+    fresh.forEach((d) =>
+      toast.error(`WhatsApp silent > ${staleHours}h: ${d.name}`, {
+        description: d.last ? `Last webhook ${new Date(d.last).toLocaleString()}` : "No webhook ever received",
+        action: { label: "Inspect", onClick: () => navigate(`/dealer-operations?tenant=${d.id}`) },
+      })
+    );
+    setAlertedRedIds((prev) => {
+      const next = new Set(prev);
+      fresh.forEach((d) => next.add(d.id));
+      return next;
+    });
+  }, [redDealers, alertedRedIds, staleHours, navigate]);
+
   return (
     <>
       <TopBar title="Super Admin — Dealer Management" />
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        {/* Threshold control + red banner */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <BellRing className="w-4 h-4" />
+                Alert threshold: {staleHours}h
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-72 space-y-3">
+              <div className="space-y-1">
+                <Label className="text-sm">Mark WhatsApp RED after silence of</Label>
+                <p className="text-xs text-muted-foreground">
+                  Dealers whose last webhook is older than this will trigger toast alerts and appear in the banner.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  min={1}
+                  max={720}
+                  value={thresholdDraft}
+                  onChange={(e) => setThresholdDraft(e.target.value)}
+                />
+                <span className="self-center text-sm text-muted-foreground">hours</span>
+              </div>
+              <Button
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                  const n = Math.max(1, Math.min(720, Number(thresholdDraft) || 24));
+                  setStaleHours(n);
+                  setThresholdDraft(String(n));
+                  setAlertedRedIds(new Set()); // re-evaluate alerts under new rule
+                  toast.success(`Threshold set to ${n}h`);
+                }}
+              >
+                Save threshold
+              </Button>
+            </PopoverContent>
+          </Popover>
+          {redDealers.length > 0 && (
+            <div className="flex-1 flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 text-destructive px-3 py-2">
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+              <div className="text-xs leading-relaxed">
+                <strong>{redDealers.length}</strong> dealer{redDealers.length > 1 ? "s" : ""} silent &gt; {staleHours}h:{" "}
+                {redDealers.slice(0, 4).map((d, i) => (
+                  <button
+                    key={d.id}
+                    onClick={() => navigate(`/dealer-operations?tenant=${d.id}`)}
+                    className="underline underline-offset-2 hover:opacity-80"
+                  >
+                    {d.name}{i < Math.min(redDealers.length, 4) - 1 ? ", " : ""}
+                  </button>
+                ))}
+                {redDealers.length > 4 && <span> +{redDealers.length - 4} more</span>}
+              </div>
+            </div>
+          )}
+        </div>
+
+
         {/* SaaS overview KPIs */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard
@@ -295,14 +415,15 @@ export default function SuperAdminPage() {
                 ) : tenants.map((t) => {
                   const cred = credentials[t.id];
                   const wa = metrics?.whatsapp_by_tenant[t.id];
+                  const waStatus = computeWaStatus(wa?.last_webhook_at, wa?.status);
                   const storageBytes = metrics?.storage_by_tenant[t.id] ?? 0;
                   const waColor =
-                    wa?.status === "connected" ? "bg-success"
-                    : wa?.status === "timeout" ? "bg-destructive"
+                    waStatus === "connected" ? "bg-success"
+                    : waStatus === "timeout" ? "bg-destructive"
                     : "bg-muted-foreground/40";
                   const waLabel =
-                    wa?.status === "connected" ? "Connected"
-                    : wa?.status === "timeout" ? "Timeout"
+                    waStatus === "connected" ? "Connected"
+                    : waStatus === "timeout" ? `Silent >${staleHours}h`
                     : "Idle";
                   return (
                     <TableRow key={t.id}>
