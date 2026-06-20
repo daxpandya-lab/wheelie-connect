@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { dispatchNotification } from "../_shared/notify.ts";
+import { dispatchNotification, logOutbound } from "../_shared/notify.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

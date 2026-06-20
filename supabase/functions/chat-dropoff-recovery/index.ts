@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { dispatchNotification } from "../_shared/notify.ts";
+import { dispatchNotification, logOutbound } from "../_shared/notify.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -82,9 +82,25 @@ Deno.serve(async (req) => {
           await supabase.from("chat_sessions").update({
             collected_data: { ...data, _dropoff_recovery_sent_at: new Date().toISOString() },
           } as any).eq("id", s.id);
+          await logOutbound(supabase, {
+            tenantId: s.tenant_id,
+            customerPhone: phone,
+            automationType: "chat_drop_off_recovery",
+            channel: result.channel,
+            status: "sent",
+            payload: { session_id: s.id, timeout_minutes: timeoutMin },
+          });
           totalSent++;
         } else if (result.status === "failed") {
           console.warn("[dropoff] dispatch failed", s.id, result.error);
+          await logOutbound(supabase, {
+            tenantId: s.tenant_id,
+            customerPhone: phone,
+            automationType: "chat_drop_off_recovery",
+            channel: result.channel,
+            status: "failed",
+            errorMessage: result.error,
+          });
         }
       }
     }
