@@ -190,7 +190,14 @@ export default function PublicChatPage() {
 
       if (tenantErr || !tenantData) { setError("Dealer not found"); setLoading(false); return; }
       if (tenantData.status !== "active") { setError("This dealer is currently unavailable"); setLoading(false); return; }
-      setDealer({ id: tenantData.id, name: tenantData.name });
+      const _tSettingsEarly = (tenantData.settings as Record<string, unknown>) || {};
+      const _workshopName = typeof _tSettingsEarly.workshop_name === "string" && _tSettingsEarly.workshop_name.trim()
+        ? (_tSettingsEarly.workshop_name as string).trim()
+        : tenantData.name;
+      const _welcomeScript = typeof _tSettingsEarly.chatbot_welcome_script === "string" && _tSettingsEarly.chatbot_welcome_script.trim()
+        ? (_tSettingsEarly.chatbot_welcome_script as string).trim()
+        : null;
+      setDealer({ id: tenantData.id, name: _workshopName, welcomeScript: _welcomeScript });
 
       // Load per-dealer chatbot fuzzy-matching settings
       const tSettings = (tenantData.settings as Record<string, unknown>) || {};
