@@ -25,6 +25,7 @@ import { buildMediaAttachment } from "@/lib/media-attachment";
 interface DealerInfo {
   id: string;
   name: string;
+  welcomeScript?: string | null;
 }
 
 interface ChatMessage {
