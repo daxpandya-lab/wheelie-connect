@@ -384,6 +384,24 @@ export default function SettingsPage() {
     </Button>
   );
 
+  if (activeSection === "profile") {
+    return (
+      <>
+        <TopBar title="Business Profile & Branding" />
+        <div className="flex-1 overflow-y-auto p-6"><div className="max-w-2xl">{renderBack()}<ProfileBrandingSettings /></div></div>
+      </>
+    );
+  }
+
+  if (activeSection === "marketing") {
+    return (
+      <>
+        <TopBar title="Marketing Integrations" />
+        <div className="flex-1 overflow-y-auto p-6"><div className="max-w-2xl">{renderBack()}<MarketingSettings /></div></div>
+      </>
+    );
+  }
+
   if (activeSection === "whatsapp") {
     return (
       <>
