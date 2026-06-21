@@ -343,12 +343,14 @@ function MarketingSettings() {
   const handleSave = async () => {
     if (!tenantId) return;
     setSaving(true);
-    const { data: tenant } = await supabase.from("tenants").select("settings").eq("id", tenantId).single();
-    const current = (tenant?.settings as Record<string, unknown>) || {};
-    const next = { ...current, google_review_url: reviewUrl.trim() || null };
-    const { error } = await supabase.from("tenants").update({ settings: next } as never).eq("id", tenantId);
-    if (error) toast.error(error.message);
-    else toast.success("Marketing integrations saved");
+    const { data, error } = await supabase.functions.invoke("update-tenant-branding", {
+      body: { google_review_url: reviewUrl.trim() || null },
+    });
+    if (error || (data && (data as { error?: string }).error)) {
+      toast.error(error?.message || (data as { error?: string })?.error || "Save failed");
+    } else {
+      toast.success("Marketing integrations saved");
+    }
     setSaving(false);
   };
 
