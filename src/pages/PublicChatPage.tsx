@@ -1300,7 +1300,14 @@ export default function PublicChatPage() {
           ? (localStorage.getItem(`${NAME_KEY_PREFIX}${dealer.id}`) || "").trim()
           : "";
         const firstName = savedName ? savedName.split(/\s+/)[0] : "";
-        const intro: Record<string, string> = firstName
+        const customScript = (dealer?.welcomeScript || "").trim();
+        const renderCustom = (n: string) =>
+          customScript
+            .replace(/\[Workshop Name\]/gi, dealerName)
+            .replace(/\{name\}/gi, n);
+        const intro: Record<string, string> = customScript
+          ? { en: renderCustom(firstName), hi: renderCustom(firstName), ar: renderCustom(firstName) }
+          : firstName
           ? {
               en: `👋 Welcome back, ${firstName}! How can ${dealerName} Workshop help you today?`,
               hi: `👋 वापसी पर स्वागत है, ${firstName}! आज ${dealerName} वर्कशॉप आपकी कैसे मदद कर सकता है?`,
