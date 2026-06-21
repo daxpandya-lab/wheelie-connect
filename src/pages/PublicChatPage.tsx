@@ -25,6 +25,7 @@ import { buildMediaAttachment } from "@/lib/media-attachment";
 interface DealerInfo {
   id: string;
   name: string;
+  welcomeScript?: string | null;
 }
 
 interface ChatMessage {
@@ -189,7 +190,14 @@ export default function PublicChatPage() {
 
       if (tenantErr || !tenantData) { setError("Dealer not found"); setLoading(false); return; }
       if (tenantData.status !== "active") { setError("This dealer is currently unavailable"); setLoading(false); return; }
-      setDealer({ id: tenantData.id, name: tenantData.name });
+      const _tSettingsEarly = (tenantData.settings as Record<string, unknown>) || {};
+      const _workshopName = typeof _tSettingsEarly.workshop_name === "string" && _tSettingsEarly.workshop_name.trim()
+        ? (_tSettingsEarly.workshop_name as string).trim()
+        : tenantData.name;
+      const _welcomeScript = typeof _tSettingsEarly.chatbot_welcome_script === "string" && _tSettingsEarly.chatbot_welcome_script.trim()
+        ? (_tSettingsEarly.chatbot_welcome_script as string).trim()
+        : null;
+      setDealer({ id: tenantData.id, name: _workshopName, welcomeScript: _welcomeScript });
 
       // Load per-dealer chatbot fuzzy-matching settings
       const tSettings = (tenantData.settings as Record<string, unknown>) || {};
@@ -1292,7 +1300,14 @@ export default function PublicChatPage() {
           ? (localStorage.getItem(`${NAME_KEY_PREFIX}${dealer.id}`) || "").trim()
           : "";
         const firstName = savedName ? savedName.split(/\s+/)[0] : "";
-        const intro: Record<string, string> = firstName
+        const customScript = (dealer?.welcomeScript || "").trim();
+        const renderCustom = (n: string) =>
+          customScript
+            .replace(/\[Workshop Name\]/gi, dealerName)
+            .replace(/\{name\}/gi, n);
+        const intro: Record<string, string> = customScript
+          ? { en: renderCustom(firstName), hi: renderCustom(firstName), ar: renderCustom(firstName) }
+          : firstName
           ? {
               en: `👋 Welcome back, ${firstName}! How can ${dealerName} Workshop help you today?`,
               hi: `👋 वापसी पर स्वागत है, ${firstName}! आज ${dealerName} वर्कशॉप आपकी कैसे मदद कर सकता है?`,
