@@ -2,18 +2,21 @@ import { useState, useEffect } from "react";
 import TopBar from "@/components/TopBar";
 import WhatsAppConfig from "@/components/whatsapp/WhatsAppConfig";
 import ReminderSettings from "@/components/settings/ReminderSettings";
-import { Building2, Globe, Palette, Bell, Shield, CreditCard, ChevronLeft, Car, Bot, BellRing } from "lucide-react";
+import { Building2, Globe, Palette, Bell, Shield, CreditCard, ChevronLeft, Car, Bot, BellRing, Megaphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
+import { Textarea } from "@/components/ui/textarea";
 import { Calendar } from "@/components/ui/calendar";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 const sections = [
+  { id: "profile", icon: Building2, title: "Business Profile & Branding", desc: "Workshop name, contact, address & chatbot welcome script" },
+  { id: "marketing", icon: Megaphone, title: "Marketing Integrations", desc: "Google review link for post-service feedback" },
   { id: "whatsapp", icon: Globe, title: "WhatsApp Configuration", desc: "Connect your WhatsApp Business API" },
   { id: "reminders", icon: BellRing, title: "Booking Reminders", desc: "Automated WhatsApp follow-ups for service & test drives" },
   { id: "capacity", icon: Car, title: "Service Capacity", desc: "Set daily vehicle booking limits" },
