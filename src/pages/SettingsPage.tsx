@@ -241,6 +241,140 @@ function ChatbotSettings() {
   );
 }
 
+
+function ProfileBrandingSettings() {
+  const { tenantId } = useAuth();
+  const [workshopName, setWorkshopName] = useState("");
+  const [supportPhone, setSupportPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [welcomeScript, setWelcomeScript] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    supabase.from("tenants").select("name, settings").eq("id", tenantId).single()
+      .then(({ data }) => {
+        const s = (data?.settings as Record<string, unknown>) || {};
+        setWorkshopName(typeof s.workshop_name === "string" ? s.workshop_name : (data?.name ?? ""));
+        setSupportPhone(typeof s.support_phone === "string" ? s.support_phone : "");
+        setAddress(typeof s.business_address === "string" ? s.business_address : "");
+        setWelcomeScript(typeof s.chatbot_welcome_script === "string" ? s.chatbot_welcome_script : "");
+        setLoading(false);
+      });
+  }, [tenantId]);
+
+  const handleSave = async () => {
+    if (!tenantId) return;
+    setSaving(true);
+    const { data: tenant } = await supabase.from("tenants").select("settings").eq("id", tenantId).single();
+    const current = (tenant?.settings as Record<string, unknown>) || {};
+    const next = {
+      ...current,
+      workshop_name: workshopName.trim() || null,
+      support_phone: supportPhone.trim() || null,
+      business_address: address.trim() || null,
+      chatbot_welcome_script: welcomeScript.trim() || null,
+    };
+    const { error } = await supabase.from("tenants").update({ settings: next } as never).eq("id", tenantId);
+    if (error) toast.error(error.message);
+    else toast.success("Profile & branding saved");
+    setSaving(false);
+  };
+
+  if (loading) return <p className="text-muted-foreground text-sm">Loading...</p>;
+
+  return (
+    <div className="space-y-6">
+      <div className="glass-card rounded-xl p-6 space-y-5">
+        <div>
+          <h3 className="text-base font-semibold text-foreground">Business Profile & Branding</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            These details power your chatbot greeting and customer-facing messages.
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label>Workshop Trading Name</Label>
+          <Input value={workshopName} onChange={(e) => setWorkshopName(e.target.value)} placeholder="e.g. Smith Auto Care" />
+        </div>
+        <div className="space-y-2">
+          <Label>Support Contact Phone</Label>
+          <Input value={supportPhone} onChange={(e) => setSupportPhone(e.target.value)} placeholder="+91 98765 43210" />
+        </div>
+        <div className="space-y-2">
+          <Label>Workshop Business Address</Label>
+          <Textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Street, City, State, Pincode" rows={2} />
+        </div>
+        <div className="space-y-2">
+          <Label>Custom Chatbot Welcome Script</Label>
+          <Textarea
+            value={welcomeScript}
+            onChange={(e) => setWelcomeScript(e.target.value)}
+            placeholder="e.g., Welcome to [Workshop Name]! How can we help you today?"
+            rows={3}
+          />
+          <p className="text-xs text-muted-foreground">Shown as the first message in every new chatbot session.</p>
+        </div>
+        <Button onClick={handleSave} disabled={saving} className="bg-primary text-primary-foreground">
+          {saving ? "Saving..." : "Save Configuration"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function MarketingSettings() {
+  const { tenantId } = useAuth();
+  const [reviewUrl, setReviewUrl] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    supabase.from("tenants").select("settings").eq("id", tenantId).single()
+      .then(({ data }) => {
+        const s = (data?.settings as Record<string, unknown>) || {};
+        if (typeof s.google_review_url === "string") setReviewUrl(s.google_review_url);
+        setLoading(false);
+      });
+  }, [tenantId]);
+
+  const handleSave = async () => {
+    if (!tenantId) return;
+    setSaving(true);
+    const { data: tenant } = await supabase.from("tenants").select("settings").eq("id", tenantId).single();
+    const current = (tenant?.settings as Record<string, unknown>) || {};
+    const next = { ...current, google_review_url: reviewUrl.trim() || null };
+    const { error } = await supabase.from("tenants").update({ settings: next } as never).eq("id", tenantId);
+    if (error) toast.error(error.message);
+    else toast.success("Marketing integrations saved");
+    setSaving(false);
+  };
+
+  if (loading) return <p className="text-muted-foreground text-sm">Loading...</p>;
+
+  return (
+    <div className="space-y-6">
+      <div className="glass-card rounded-xl p-6 space-y-5">
+        <div>
+          <h3 className="text-base font-semibold text-foreground">Marketing Integrations</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            Customers who rate your service 4 or 5 stars will be automatically routed to this link.
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label>Google Business Review URL</Label>
+          <Input value={reviewUrl} onChange={(e) => setReviewUrl(e.target.value)} placeholder="https://g.page/r/..." />
+          <p className="text-xs text-muted-foreground">Used by the post-service feedback automation.</p>
+        </div>
+        <Button onClick={handleSave} disabled={saving} className="bg-primary text-primary-foreground">
+          {saving ? "Saving..." : "Save Configuration"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const [activeSection, setActiveSection] = useState<string | null>(null);
 
