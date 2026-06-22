@@ -1050,8 +1050,8 @@ Deno.serve(async (req) => {
                 conversationMetadata = (newConvo!.metadata as Record<string, unknown>) || {};
               }
 
-              // Intercept CSAT and estimate button replies before any flow logic.
-              if (interactiveId && /^(csat_[1-5]|est_(approve|reject))_[0-9a-f-]{36}$/.test(interactiveId)) {
+              // Intercept CSAT, estimate, and pre-appointment check-in button replies before any flow logic.
+              if (interactiveId && /^(csat_[1-5]|est_(approve|reject|call)|chk_(comments|photos|cancel|confirm_cancel|keep))_[0-9a-f-]{36}$/.test(interactiveId)) {
                 const { data: tenantRow2 } = await supabase
                   .from("tenants").select("name, whatsapp_config, settings").eq("id", tenantId).maybeSingle();
                 const wa2 = (tenantRow2?.whatsapp_config as Record<string, any>) || {};
@@ -1062,15 +1062,19 @@ Deno.serve(async (req) => {
                 const estHandled = csatHandled ? false : await handleEstimateButton(
                   supabase, tenantId, customerPhone, interactiveId, wa2,
                 );
-                if (csatHandled || estHandled) {
+                const chkHandled = (csatHandled || estHandled) ? false : await handleCheckinButton(
+                  supabase, tenantId, customerPhone, interactiveId, wa2, settings2,
+                );
+                if (csatHandled || estHandled || chkHandled) {
                   await supabase.from("chatbot_messages").insert({
                     tenant_id: tenantId, conversation_id: conversationId, sender_type: "customer",
                     content: messageText, message_type: "text",
-                    metadata: { wa_message_id: msg.id, interactive_id: interactiveId, kind: csatHandled ? "csat_reply" : "estimate_reply" },
+                    metadata: { wa_message_id: msg.id, interactive_id: interactiveId, kind: csatHandled ? "csat_reply" : estHandled ? "estimate_reply" : "checkin_reply" },
                   });
                   continue;
                 }
               }
+
 
               // Handle inbound media (image/audio/video/document) for Meta Cloud API
               let metaAttachment: Record<string, unknown> | null = null;
