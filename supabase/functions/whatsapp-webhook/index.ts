@@ -215,6 +215,246 @@ async function handleCsatButton(
   return true;
 }
 
+// ============================================================
+// PRE-APPOINTMENT CHECK-IN handlers
+// Button IDs:
+//   chk_comments_<id>         -> ask customer to type comments
+//   chk_photos_<id>           -> ask customer to upload photos
+//   chk_cancel_<id>           -> initiate cancel flow (with <4h late-protection)
+//   chk_confirm_cancel_<id>   -> finalize cancellation
+//   chk_keep_<id>             -> abort cancellation
+// Follow-up state machine via service_bookings.checkin_state:
+//   "awaiting_comments" | "awaiting_photos" | "awaiting_cancel_confirm"
+// ============================================================
+const CHECKIN_BUTTON_RE = /^chk_(comments|photos|cancel|confirm_cancel|keep)_([0-9a-f-]{36})$/;
+
+async function sendWaText(
+  whatsappConfig: Record<string, any>,
+  to: string,
+  text: string,
+): Promise<void> {
+  const provider: "meta" | "evolution" =
+    whatsappConfig.provider === "evolution" ? "evolution" : "meta";
+  try {
+    if (provider === "evolution") {
+      const url = whatsappConfig.evolution?.instance_url;
+      const inst = whatsappConfig.evolution?.instance_name;
+      const key = whatsappConfig.evolution?.api_key;
+      if (!url || !inst || !key) return;
+      await fetch(`${url}/message/sendText/${encodeURIComponent(inst)}`, {
+        method: "POST",
+        headers: { apikey: key, "Content-Type": "application/json" },
+        body: JSON.stringify({ number: to, text }),
+      });
+    } else {
+      const token = whatsappConfig.meta?.access_token || whatsappConfig.access_token;
+      const pnid = whatsappConfig.meta?.phone_number_id;
+      if (!token || !pnid) return;
+      await fetch(`https://graph.facebook.com/v21.0/${pnid}/messages`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messaging_product: "whatsapp", to, type: "text", text: { body: text },
+        }),
+      });
+    }
+  } catch (e) { console.error("[checkin] send text failed", e); }
+}
+
+async function sendWaButtons(
+  whatsappConfig: Record<string, any>,
+  to: string,
+  text: string,
+  buttons: { id: string; title: string }[],
+): Promise<void> {
+  const provider: "meta" | "evolution" =
+    whatsappConfig.provider === "evolution" ? "evolution" : "meta";
+  try {
+    if (provider === "evolution") {
+      const url = whatsappConfig.evolution?.instance_url;
+      const inst = whatsappConfig.evolution?.instance_name;
+      const key = whatsappConfig.evolution?.api_key;
+      if (!url || !inst || !key) return;
+      await fetch(`${url}/message/sendButtons/${encodeURIComponent(inst)}`, {
+        method: "POST",
+        headers: { apikey: key, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          number: to, title: " ", description: text, footer: " ",
+          buttons: buttons.map((b) => ({ type: "reply", displayText: b.title, id: b.id })),
+        }),
+      });
+    } else {
+      const token = whatsappConfig.meta?.access_token || whatsappConfig.access_token;
+      const pnid = whatsappConfig.meta?.phone_number_id;
+      if (!token || !pnid) return;
+      await fetch(`https://graph.facebook.com/v21.0/${pnid}/messages`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messaging_product: "whatsapp", to, type: "interactive",
+          interactive: {
+            type: "button",
+            body: { text },
+            action: {
+              buttons: buttons.slice(0, 3).map((b) => ({
+                type: "reply", reply: { id: b.id, title: b.title.slice(0, 20) },
+              })),
+            },
+          },
+        }),
+      });
+    }
+  } catch (e) { console.error("[checkin] send buttons failed", e); }
+}
+
+async function handleCheckinButton(
+  supabase: any,
+  tenantId: string,
+  recipientPhone: string,
+  interactiveId: string | null,
+  whatsappConfig: Record<string, any>,
+  tenantSettings: Record<string, any>,
+): Promise<boolean> {
+  if (!interactiveId) return false;
+  const m = interactiveId.match(CHECKIN_BUTTON_RE);
+  if (!m) return false;
+  const action = m[1] as "comments" | "photos" | "cancel" | "confirm_cancel" | "keep";
+  const bookingId = m[2];
+
+  const { data: booking } = await supabase
+    .from("service_bookings")
+    .select("id, tenant_id, customer_name, vehicle_model, phone_number, booking_date, preferred_time, status, assigned_to, checkin_state")
+    .eq("id", bookingId).maybeSingle();
+  if (!booking || booking.tenant_id !== tenantId) return false;
+
+  const firstName = (booking.customer_name || "there").split(" ")[0];
+
+  if (action === "comments") {
+    await supabase.from("service_bookings")
+      .update({ checkin_state: "awaiting_comments" }).eq("id", bookingId);
+    await sendWaText(whatsappConfig, recipientPhone,
+      `Sure ${firstName} 📝 — please type any comments, concerns, or symptoms you'd like our technician to know about. Your next message will be attached to your booking.`);
+    return true;
+  }
+
+  if (action === "photos") {
+    await supabase.from("service_bookings")
+      .update({ checkin_state: "awaiting_photos" }).eq("id", bookingId);
+    await sendWaText(whatsappConfig, recipientPhone,
+      `Great 📸 — please upload photos of any dents, scratches, or dashboard warning lights. You can send as many images as you like.`);
+    return true;
+  }
+
+  if (action === "cancel") {
+    // <4h late protection
+    const apptDate: string = booking.booking_date;
+    const time: string = booking.preferred_time || "09:00";
+    const apptTs = Date.parse(`${apptDate}T${time.length === 5 ? time + ":00" : time}Z`);
+    const hoursAway = (apptTs - Date.now()) / 3600000;
+    if (Number.isFinite(hoursAway) && hoursAway < 4) {
+      const supportPhone = String(tenantSettings?.support_phone || tenantSettings?.manager_phone || "the workshop").trim();
+      await sendWaText(whatsappConfig, recipientPhone,
+        `Since your appointment is less than 4 hours away, our diagnostic bay is already prepared. Please call the workshop directly at ${supportPhone} to reschedule.`);
+      return true;
+    }
+    await supabase.from("service_bookings")
+      .update({ checkin_state: "awaiting_cancel_confirm" }).eq("id", bookingId);
+    await sendWaButtons(whatsappConfig, recipientPhone,
+      `⚠️ Are you absolutely sure you want to cancel your service appointment for tomorrow? Canceling will release your diagnostic bay slot.`,
+      [
+        { id: `chk_confirm_cancel_${bookingId}`, title: "Yes, Cancel It" },
+        { id: `chk_keep_${bookingId}`,            title: "No, Keep Booking" },
+      ],
+    );
+    return true;
+  }
+
+  if (action === "confirm_cancel") {
+    if (booking.status === "cancelled") {
+      await sendWaText(whatsappConfig, recipientPhone, `Your appointment is already cancelled.`);
+      return true;
+    }
+    await supabase.from("service_bookings")
+      .update({ status: "cancelled", checkin_state: null })
+      .eq("id", bookingId);
+    // Notify dealer
+    await supabase.from("notifications").insert({
+      tenant_id: tenantId,
+      user_id: booking.assigned_to ?? null,
+      title: "Appointment cancelled by customer",
+      message: `${booking.customer_name || "Customer"} (${booking.vehicle_model || "vehicle"}) cancelled their service appointment scheduled for ${booking.booking_date}.`,
+      type: "warning",
+      source: "service_booking",
+      source_id: bookingId,
+    });
+    await sendWaText(whatsappConfig, recipientPhone,
+      `Your appointment has been cancelled. We hope to see you again soon — book anytime when you're ready.`);
+    return true;
+  }
+
+  if (action === "keep") {
+    await supabase.from("service_bookings")
+      .update({ checkin_state: null }).eq("id", bookingId);
+    await sendWaText(whatsappConfig, recipientPhone,
+      `👍 Great — your appointment for tomorrow is still confirmed. See you then!`);
+    return true;
+  }
+
+  return false;
+}
+
+// Returns true if the inbound text/media was consumed as a check-in follow-up.
+async function handleCheckinFollowup(
+  supabase: any,
+  tenantId: string,
+  recipientPhone: string,
+  text: string,
+  hasMedia: boolean,
+  whatsappConfig: Record<string, any>,
+): Promise<boolean> {
+  const { data: booking } = await supabase
+    .from("service_bookings")
+    .select("id, tenant_id, checkin_state, customer_notes")
+    .eq("tenant_id", tenantId)
+    .eq("phone_number", recipientPhone)
+    .not("checkin_state", "is", null)
+    .order("booking_date", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (!booking) return false;
+
+  if (booking.checkin_state === "awaiting_comments" && text && !hasMedia) {
+    const prev = booking.customer_notes ? `${booking.customer_notes}\n` : "";
+    await supabase.from("service_bookings")
+      .update({
+        customer_notes: `${prev}${text}`.slice(0, 4000),
+        checkin_state: null,
+      })
+      .eq("id", booking.id);
+    await sendWaText(whatsappConfig, recipientPhone,
+      `✅ Thanks — your comments have been added to your booking. Our technician will review them before your appointment.`);
+    return true;
+  }
+
+  if (booking.checkin_state === "awaiting_photos" && hasMedia) {
+    // The media has already been attached to the booking by attachMediaToActiveBooking.
+    // Acknowledge but keep state so the customer can send more photos.
+    await sendWaText(whatsappConfig, recipientPhone,
+      `✅ Photo received and attached to your booking. Send more if you'd like, or reply "done" when finished.`);
+    return true;
+  }
+
+  if (booking.checkin_state === "awaiting_photos" && text && /^\s*done\s*$/i.test(text)) {
+    await supabase.from("service_bookings")
+      .update({ checkin_state: null }).eq("id", booking.id);
+    await sendWaText(whatsappConfig, recipientPhone,
+      `👍 All set — thanks for sharing those photos. See you tomorrow!`);
+    return true;
+  }
+
+  return false;
+}
+
 // Pick the localized string from a {en,hi,ar} bundle, falling back gracefully.
 function pickLang(bundle: any, lang: Lang): string {
   if (!bundle) return "";
