@@ -1108,6 +1108,15 @@ Deno.serve(async (req) => {
                 })
                 .select("id").single();
 
+              // Intercept inbound text/media as a pre-appointment check-in follow-up.
+              const { data: tenantWa2 } = await supabase
+                .from("tenants").select("whatsapp_config").eq("id", tenantId).maybeSingle();
+              const followupHandled = await handleCheckinFollowup(
+                supabase, tenantId, customerPhone, messageText, !!metaAttachment,
+                (tenantWa2?.whatsapp_config as Record<string, any>) || {},
+              );
+              if (followupHandled) continue;
+
               if (messageText || interactiveId) {
                 await processChatbotFlow(
                   supabase, tenantId, conversationId, savedMessage!.id,
