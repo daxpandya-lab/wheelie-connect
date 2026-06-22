@@ -875,6 +875,17 @@ Deno.serve(async (req) => {
             status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
+        // Intercept pre-appointment check-in button replies.
+        if (await handleCheckinButton(supabase, tenantId, customerPhone, interactiveId, tenantWaCfg, tenantSettings)) {
+          await supabase.from("chatbot_messages").insert({
+            tenant_id: tenantId, conversation_id: conversationId, sender_type: "customer",
+            content: messageText, message_type: "text",
+            metadata: { gateway: "evolution", evo_message_id: key.id, interactive_id: interactiveId, kind: "checkin_reply" },
+          });
+          return new Response(JSON.stringify({ success: true, gateway: "evolution", handled: "checkin" }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
 
         // Handle inbound media (image / voice note / video / doc) — store + attach to active booking
         let evoAttachment: Record<string, unknown> | null = null;
