@@ -1218,12 +1218,15 @@ export type Database = {
           assigned_to: string | null
           booking_date: string
           booking_source: string
+          checkin_sent_at: string | null
+          checkin_state: string | null
           completed_at: string | null
           created_at: string
           csat_sent_at: string | null
           customer_approval_status: string
           customer_id: string | null
           customer_name: string
+          customer_notes: string | null
           drop_required: boolean | null
           estimate_amount: number | null
           estimated_cost: number | null
@@ -1257,12 +1260,15 @@ export type Database = {
           assigned_to?: string | null
           booking_date: string
           booking_source?: string
+          checkin_sent_at?: string | null
+          checkin_state?: string | null
           completed_at?: string | null
           created_at?: string
           csat_sent_at?: string | null
           customer_approval_status?: string
           customer_id?: string | null
           customer_name: string
+          customer_notes?: string | null
           drop_required?: boolean | null
           estimate_amount?: number | null
           estimated_cost?: number | null
@@ -1296,12 +1302,15 @@ export type Database = {
           assigned_to?: string | null
           booking_date?: string
           booking_source?: string
+          checkin_sent_at?: string | null
+          checkin_state?: string | null
           completed_at?: string | null
           created_at?: string
           csat_sent_at?: string | null
           customer_approval_status?: string
           customer_id?: string | null
           customer_name?: string
+          customer_notes?: string | null
           drop_required?: boolean | null
           estimate_amount?: number | null
           estimated_cost?: number | null
@@ -1909,12 +1918,15 @@ export type Database = {
           assigned_to: string | null
           booking_date: string
           booking_source: string
+          checkin_sent_at: string | null
+          checkin_state: string | null
           completed_at: string | null
           created_at: string
           csat_sent_at: string | null
           customer_approval_status: string
           customer_id: string | null
           customer_name: string
+          customer_notes: string | null
           drop_required: boolean | null
           estimate_amount: number | null
           estimated_cost: number | null
