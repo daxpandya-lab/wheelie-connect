@@ -916,6 +916,15 @@ Deno.serve(async (req) => {
           })
           .select("id").single();
 
+        // Intercept inbound text/media as a pre-appointment check-in follow-up.
+        if (await handleCheckinFollowup(
+          supabase, tenantId, customerPhone, messageText, !!evoAttachment, tenantWaCfg,
+        )) {
+          return new Response(JSON.stringify({ success: true, gateway: "evolution", handled: "checkin_followup" }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
         // Only run flow processor when there's a textual / interactive payload to act on.
         if (messageText || interactiveId) {
           await processChatbotFlow(
