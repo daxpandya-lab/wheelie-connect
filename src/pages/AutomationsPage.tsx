@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Wrench, MessageCircleOff, Star, History, Save, Zap } from "lucide-react";
+import { Loader2, Wrench, MessageCircleOff, Star, History, Save, Zap, CalendarClock } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -30,13 +30,18 @@ type Settings = {
     enabled?: boolean;
     delay_hours?: 24 | 48;
   };
+  pre_appointment_checkin?: {
+    enabled?: boolean;
+    lead_time_hours?: 12 | 24 | 48 | 72;
+  };
   google_review_url?: string | null;
 };
 
-const DEFAULTS: Required<Pick<Settings, "predictive_service_reminder" | "chat_drop_off_recovery" | "post_service_feedback">> = {
+const DEFAULTS: Required<Pick<Settings, "predictive_service_reminder" | "chat_drop_off_recovery" | "post_service_feedback" | "pre_appointment_checkin">> = {
   predictive_service_reminder: { enabled: true, interval_months: 6, mileage_tracking: false },
   chat_drop_off_recovery: { enabled: true, timeout_minutes: 30 },
   post_service_feedback: { enabled: true, delay_hours: 24 },
+  pre_appointment_checkin: { enabled: true, lead_time_hours: 24 },
 };
 
 export default function AutomationsPage() {
@@ -57,6 +62,7 @@ export default function AutomationsPage() {
       predictive_service_reminder: { ...DEFAULTS.predictive_service_reminder, ...(s.predictive_service_reminder || {}) },
       chat_drop_off_recovery: { ...DEFAULTS.chat_drop_off_recovery, ...(s.chat_drop_off_recovery || {}) },
       post_service_feedback: { ...DEFAULTS.post_service_feedback, ...(s.post_service_feedback || {}) },
+      pre_appointment_checkin: { ...DEFAULTS.pre_appointment_checkin, ...(s.pre_appointment_checkin || {}) },
       google_review_url: s.google_review_url || "",
     });
     setReviewUrl(s.google_review_url || "");
@@ -102,6 +108,7 @@ export default function AutomationsPage() {
   const p = settings.predictive_service_reminder!;
   const c = settings.chat_drop_off_recovery!;
   const f = settings.post_service_feedback!;
+  const pi = settings.pre_appointment_checkin!;
 
   return (
     <>
@@ -272,6 +279,57 @@ export default function AutomationsPage() {
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Dispatched by the <code>csat-followup</code> background job once a booking is marked Completed/Delivered. 4–5★ replies trigger an auto-reply with the Google Review link.
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* ---------- Pillar 4: Pre-Appointment Intake & Reminders ---------- */}
+            <Card className="border-l-4 border-l-accent">
+              <CardHeader className="flex flex-row items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+                    <CalendarClock className="w-5 h-5 text-accent-foreground" />
+                  </div>
+                  <div>
+                    <CardTitle>Pre-Appointment Intake & Reminders</CardTitle>
+                    <CardDescription>
+                      Reach out before a scheduled service to confirm, capture notes/photos, or allow cancellation.
+                    </CardDescription>
+                  </div>
+                </div>
+                <Switch
+                  checked={!!pi.enabled}
+                  onCheckedChange={(v) => persist({ pre_appointment_checkin: { ...pi, enabled: v } })}
+                />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Send Reminder Lead Time</Label>
+                    <Select
+                      value={String(pi.lead_time_hours ?? 24)}
+                      onValueChange={(v) => update("pre_appointment_checkin", { ...pi, lead_time_hours: Number(v) as 12 | 24 | 48 | 72 })}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="12">12 Hours Before</SelectItem>
+                        <SelectItem value="24">24 Hours Before</SelectItem>
+                        <SelectItem value="48">48 Hours Before</SelectItem>
+                        <SelectItem value="72">3 Days Before</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-end text-xs text-muted-foreground">
+                    <p>Quick replies offered: 📝 Add Comments / 📸 Upload Photos / ❌ Cancel</p>
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button size="sm" onClick={() => persist({ pre_appointment_checkin: pi })} disabled={saving}>
+                    {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />} Save Automation Rules
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Dispatched by the <code>pre-appointment-checkin</code> hourly job. The cron worker dynamically reads your selected lead time to decide which day's bookings to message.
                 </p>
               </CardContent>
             </Card>
