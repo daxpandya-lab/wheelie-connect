@@ -86,7 +86,7 @@ export default function IntegrationsPage() {
 
   return (
     <div className="flex-1 flex flex-col h-screen overflow-hidden">
-      <TopBar title="Integrations & API" subtitle="Connect external CRMs and workshop tools to your Dealer Doodle data" />
+      <TopBar title="Integrations & API" />
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         <div className="grid gap-6 lg:grid-cols-2">
           {/* API Token Key Card */}
