@@ -62,6 +62,7 @@ export default function AutomationsPage() {
       predictive_service_reminder: { ...DEFAULTS.predictive_service_reminder, ...(s.predictive_service_reminder || {}) },
       chat_drop_off_recovery: { ...DEFAULTS.chat_drop_off_recovery, ...(s.chat_drop_off_recovery || {}) },
       post_service_feedback: { ...DEFAULTS.post_service_feedback, ...(s.post_service_feedback || {}) },
+      pre_appointment_checkin: { ...DEFAULTS.pre_appointment_checkin, ...(s.pre_appointment_checkin || {}) },
       google_review_url: s.google_review_url || "",
     });
     setReviewUrl(s.google_review_url || "");
