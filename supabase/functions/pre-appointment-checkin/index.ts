@@ -100,7 +100,7 @@ Deno.serve(async (req) => {
             automationType: "pre_appointment_checkin",
             channel: result.channel,
             status: "sent",
-            payload: { booking_id: b.id, booking_date: tomorrowIso },
+            payload: { booking_id: b.id, booking_date: targetIso, lead_hours: leadHours },
           });
           totalSent++;
         } else if (result.status === "failed") {
