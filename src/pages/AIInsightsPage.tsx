@@ -39,7 +39,7 @@ export default function AIInsightsPage() {
 
   return (
     <div className="flex-1 flex flex-col h-screen overflow-hidden">
-      <TopBar title="AI Insights" subtitle="AI-generated executive diagnosis from your live workshop data" />
+      <TopBar title="AI Insights" />
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         <Card className="border-primary/20 bg-gradient-to-br from-primary/5 via-background to-background">
           <CardHeader>
