@@ -22,6 +22,8 @@ import DealerOperationsPage from "@/pages/DealerOperationsPage";
 import UserManagementPage from "@/pages/UserManagementPage";
 import FlowBuilderPage from "@/pages/FlowBuilderPage";
 import AutomationsPage from "@/pages/AutomationsPage";
+import AIInsightsPage from "@/pages/AIInsightsPage";
+import IntegrationsPage from "@/pages/IntegrationsPage";
 import LoginPage from "@/pages/LoginPage";
 import SignupPage from "@/pages/SignupPage";
 import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
@@ -90,6 +92,20 @@ const App = () => (
                   <Route path="/analytics" element={
                     <ProtectedRoute requiredRoles={["tenant_admin", "super_admin"]}>
                       <AnalyticsPage />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/ai-insights" element={
+                    <ProtectedRoute requiredRoles={["tenant_admin", "super_admin"]}>
+                      <ErrorBoundary fallbackTitle="AI Insights failed to load">
+                        <AIInsightsPage />
+                      </ErrorBoundary>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/integrations" element={
+                    <ProtectedRoute requiredRoles={["tenant_admin", "super_admin"]}>
+                      <ErrorBoundary fallbackTitle="Integrations failed to load">
+                        <IntegrationsPage />
+                      </ErrorBoundary>
                     </ProtectedRoute>
                   } />
                   <Route path="/flow-builder" element={

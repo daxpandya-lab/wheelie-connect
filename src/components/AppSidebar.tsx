@@ -3,7 +3,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Users, MessageSquare,
   BarChart3, Megaphone, Settings, ChevronLeft, ChevronRight,
-  Wrench, TestTube2, UserPlus, Shield, UsersRound, LogOut, Bot, Zap, Briefcase
+  Wrench, TestTube2, UserPlus, Shield, UsersRound, LogOut, Bot, Zap, Briefcase, Brain, Plug
 } from "lucide-react";
 import brandIcon from "@/assets/dealer-doodle-icon.png";
 import { cn } from "@/lib/utils";
@@ -36,6 +36,8 @@ export default function AppSidebar() {
         ...(isAdminOrAbove ? [
           { to: "/campaigns", icon: Megaphone, label: "Campaigns" },
           { to: "/analytics", icon: BarChart3, label: "Analytics" },
+          { to: "/ai-insights", icon: Brain, label: "AI Insights" },
+          { to: "/integrations", icon: Plug, label: "Integrations & API" },
           { to: "/flow-builder", icon: Bot, label: "Flow Builder" },
           { to: "/automations", icon: Zap, label: "Automations" },
         ] : []),
