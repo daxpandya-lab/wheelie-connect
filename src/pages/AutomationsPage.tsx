@@ -108,6 +108,7 @@ export default function AutomationsPage() {
   const p = settings.predictive_service_reminder!;
   const c = settings.chat_drop_off_recovery!;
   const f = settings.post_service_feedback!;
+  const pi = settings.pre_appointment_checkin!;
 
   return (
     <>
