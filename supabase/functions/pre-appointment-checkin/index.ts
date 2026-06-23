@@ -20,10 +20,6 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const tomorrow = new Date();
-    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
-    const tomorrowIso = tomorrow.toISOString().slice(0, 10);
-
     const { data: tenants, error: tErr } = await supabase
       .from("tenants")
       .select("id, name, settings")
@@ -41,11 +37,21 @@ Deno.serve(async (req) => {
       const settings = (t.settings as Record<string, any>) || {};
       const mapsUrl = String(settings.google_maps_url || settings.directions_url || "").trim();
 
+      // Per-tenant dynamic lead time (hours). Default 24h. Disable opt-out honored.
+      const checkinCfg = (settings.pre_appointment_checkin as Record<string, any>) || {};
+      if (checkinCfg.enabled === false) continue;
+      const leadHours = Number(checkinCfg.lead_time_hours ?? 24);
+      const leadDays = Math.max(0, Math.ceil(leadHours / 24));
+
+      const target = new Date();
+      target.setUTCDate(target.getUTCDate() + leadDays);
+      const targetIso = target.toISOString().slice(0, 10);
+
       const { data: bookings, error } = await supabase
         .from("service_bookings")
         .select("id, tenant_id, customer_name, phone_number, vehicle_model, booking_source, preferred_time")
         .eq("tenant_id", t.id)
-        .eq("booking_date", tomorrowIso)
+        .eq("booking_date", targetIso)
         .is("checkin_sent_at", null)
         .in("status", ["pending", "confirmed", "estimation_sent"])
         .limit(200);
