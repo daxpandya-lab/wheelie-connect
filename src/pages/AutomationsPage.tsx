@@ -282,6 +282,57 @@ export default function AutomationsPage() {
                 </p>
               </CardContent>
             </Card>
+
+            {/* ---------- Pillar 4: Pre-Appointment Intake & Reminders ---------- */}
+            <Card className="border-l-4 border-l-accent">
+              <CardHeader className="flex flex-row items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+                    <CalendarClock className="w-5 h-5 text-accent-foreground" />
+                  </div>
+                  <div>
+                    <CardTitle>Pre-Appointment Intake & Reminders</CardTitle>
+                    <CardDescription>
+                      Reach out before a scheduled service to confirm, capture notes/photos, or allow cancellation.
+                    </CardDescription>
+                  </div>
+                </div>
+                <Switch
+                  checked={!!pi.enabled}
+                  onCheckedChange={(v) => persist({ pre_appointment_checkin: { ...pi, enabled: v } })}
+                />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Send Reminder Lead Time</Label>
+                    <Select
+                      value={String(pi.lead_time_hours ?? 24)}
+                      onValueChange={(v) => update("pre_appointment_checkin", { ...pi, lead_time_hours: Number(v) as 12 | 24 | 48 | 72 })}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="12">12 Hours Before</SelectItem>
+                        <SelectItem value="24">24 Hours Before</SelectItem>
+                        <SelectItem value="48">48 Hours Before</SelectItem>
+                        <SelectItem value="72">3 Days Before</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-end text-xs text-muted-foreground">
+                    <p>Quick replies offered: 📝 Add Comments / 📸 Upload Photos / ❌ Cancel</p>
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button size="sm" onClick={() => persist({ pre_appointment_checkin: pi })} disabled={saving}>
+                    {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />} Save Automation Rules
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Dispatched by the <code>pre-appointment-checkin</code> hourly job. The cron worker dynamically reads your selected lead time to decide which day's bookings to message.
+                </p>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="logs">
