@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Wrench, MessageCircleOff, Star, History, Save, Zap } from "lucide-react";
+import { Loader2, Wrench, MessageCircleOff, Star, History, Save, Zap, CalendarClock } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
