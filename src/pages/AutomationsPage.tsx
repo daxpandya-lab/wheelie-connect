@@ -30,13 +30,18 @@ type Settings = {
     enabled?: boolean;
     delay_hours?: 24 | 48;
   };
+  pre_appointment_checkin?: {
+    enabled?: boolean;
+    lead_time_hours?: 12 | 24 | 48 | 72;
+  };
   google_review_url?: string | null;
 };
 
-const DEFAULTS: Required<Pick<Settings, "predictive_service_reminder" | "chat_drop_off_recovery" | "post_service_feedback">> = {
+const DEFAULTS: Required<Pick<Settings, "predictive_service_reminder" | "chat_drop_off_recovery" | "post_service_feedback" | "pre_appointment_checkin">> = {
   predictive_service_reminder: { enabled: true, interval_months: 6, mileage_tracking: false },
   chat_drop_off_recovery: { enabled: true, timeout_minutes: 30 },
   post_service_feedback: { enabled: true, delay_hours: 24 },
+  pre_appointment_checkin: { enabled: true, lead_time_hours: 24 },
 };
 
 export default function AutomationsPage() {
