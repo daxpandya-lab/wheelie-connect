@@ -80,30 +80,38 @@ export default function IntegrationsPage() {
     }
   };
 
-  const revoke = async (id: string) => {
+  const revoke = async (id: string, graceHours = 0) => {
+    const revokeAt = new Date(Date.now() + graceHours * 3600_000).toISOString();
     const { error } = await supabase
       .from("tenant_api_keys" as any)
-      .update({ revoked_at: new Date().toISOString() } as any)
+      .update({ revoked_at: revokeAt } as any)
       .eq("id", id);
     if (error) {
       toast({ title: "Could not revoke key", description: error.message, variant: "destructive" });
       return;
     }
-    toast({ title: "API key revoked", description: "Requests using this key will be rejected." });
+    toast({
+      title: graceHours > 0 ? "Revocation scheduled" : "API key revoked",
+      description: graceHours > 0
+        ? `Old key will keep working until ${new Date(revokeAt).toLocaleString()}.`
+        : "Requests using this key will be rejected immediately.",
+    });
     load();
   };
 
-  const regenerate = async (id: string) => {
-    // Revoke old, then mint new — existing integrations using the old key MUST be updated.
-    const { error: revokeErr } = await supabase
-      .from("tenant_api_keys" as any)
-      .update({ revoked_at: new Date().toISOString() } as any)
-      .eq("id", id);
-    if (revokeErr) {
-      toast({ title: "Could not rotate key", description: revokeErr.message, variant: "destructive" });
-      return;
-    }
+  const regenerate = async (id: string, graceHours: number) => {
+    // Schedule old key to expire after the grace period, then mint a brand-new key
+    // so integrations can be updated without downtime.
+    await revoke(id, graceHours);
     await generate();
+  };
+
+  // Status helpers: a key with a future revoked_at is still active but in a grace window.
+  const keyStatus = (k: ApiKeyRow): { label: string; tone: "active" | "grace" | "revoked"; until?: string } => {
+    if (!k.revoked_at) return { label: "Active", tone: "active" };
+    const ts = new Date(k.revoked_at).getTime();
+    if (ts > Date.now()) return { label: "Grace", tone: "grace", until: k.revoked_at };
+    return { label: "Revoked", tone: "revoked" };
   };
 
   const copy = async (txt: string) => {
