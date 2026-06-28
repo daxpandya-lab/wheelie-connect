@@ -48,6 +48,16 @@ export default function IntegrationsPage() {
   const [generating, setGenerating] = useState(false);
   const [freshToken, setFreshToken] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
+  const [graceById, setGraceById] = useState<Record<string, number>>({});
+  const graceFor = (id: string) => graceById[id] ?? 24;
+  const setGrace = (id: string, hours: number) => setGraceById((m) => ({ ...m, [id]: hours }));
+  const GRACE_CHOICES: { value: number; label: string }[] = [
+    { value: 0, label: "Immediate (no overlap)" },
+    { value: 1, label: "1 hour overlap" },
+    { value: 24, label: "24 hours overlap" },
+    { value: 72, label: "3 days overlap" },
+    { value: 168, label: "7 days overlap" },
+  ];
 
   const load = async () => {
     if (!tenantId) return;
@@ -80,30 +90,38 @@ export default function IntegrationsPage() {
     }
   };
 
-  const revoke = async (id: string) => {
+  const revoke = async (id: string, graceHours = 0) => {
+    const revokeAt = new Date(Date.now() + graceHours * 3600_000).toISOString();
     const { error } = await supabase
       .from("tenant_api_keys" as any)
-      .update({ revoked_at: new Date().toISOString() } as any)
+      .update({ revoked_at: revokeAt } as any)
       .eq("id", id);
     if (error) {
       toast({ title: "Could not revoke key", description: error.message, variant: "destructive" });
       return;
     }
-    toast({ title: "API key revoked", description: "Requests using this key will be rejected." });
+    toast({
+      title: graceHours > 0 ? "Revocation scheduled" : "API key revoked",
+      description: graceHours > 0
+        ? `Old key will keep working until ${new Date(revokeAt).toLocaleString()}.`
+        : "Requests using this key will be rejected immediately.",
+    });
     load();
   };
 
-  const regenerate = async (id: string) => {
-    // Revoke old, then mint new — existing integrations using the old key MUST be updated.
-    const { error: revokeErr } = await supabase
-      .from("tenant_api_keys" as any)
-      .update({ revoked_at: new Date().toISOString() } as any)
-      .eq("id", id);
-    if (revokeErr) {
-      toast({ title: "Could not rotate key", description: revokeErr.message, variant: "destructive" });
-      return;
-    }
+  const regenerate = async (id: string, graceHours: number) => {
+    // Schedule old key to expire after the grace period, then mint a brand-new key
+    // so integrations can be updated without downtime.
+    await revoke(id, graceHours);
     await generate();
+  };
+
+  // Status helpers: a key with a future revoked_at is still active but in a grace window.
+  const keyStatus = (k: ApiKeyRow): { label: string; tone: "active" | "grace" | "revoked"; until?: string } => {
+    if (!k.revoked_at) return { label: "Active", tone: "active" };
+    const ts = new Date(k.revoked_at).getTime();
+    if (ts > Date.now()) return { label: "Grace", tone: "grace", until: k.revoked_at };
+    return { label: "Revoked", tone: "revoked" };
   };
 
   const copy = async (txt: string) => {
@@ -164,17 +182,24 @@ export default function IntegrationsPage() {
                   <div className="text-sm text-muted-foreground">No keys yet.</div>
                 ) : (
                   <ul className="space-y-2">
-                    {keys.map((k) => (
-                      <li key={k.id} className="flex items-center justify-between gap-2 rounded border p-2 text-sm">
+                    {keys.map((k) => {
+                      const st = keyStatus(k);
+                      return (
+                      <li key={k.id} className="flex flex-wrap items-center justify-between gap-2 rounded border p-2 text-sm">
                         <div className="flex items-center gap-2 font-mono min-w-0">
                           <span className="truncate">{k.token_prefix}••••</span>
-                          {k.revoked_at && <Badge variant="destructive">revoked</Badge>}
+                          {st.tone === "revoked" && <Badge variant="destructive">Revoked</Badge>}
+                          {st.tone === "grace" && (
+                            <Badge variant="secondary" title={`Expires ${new Date(st.until!).toLocaleString()}`}>
+                              Grace · until {new Date(st.until!).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                            </Badge>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <span className="text-xs text-muted-foreground hidden sm:inline">
                             {new Date(k.created_at).toLocaleDateString()}
                           </span>
-                          {!k.revoked_at && (
+                          {st.tone !== "revoked" && (
                             <>
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>
@@ -184,17 +209,34 @@ export default function IntegrationsPage() {
                                 </AlertDialogTrigger>
                                 <AlertDialogContent>
                                   <AlertDialogHeader>
-                                    <AlertDialogTitle>Regenerate this API key?</AlertDialogTitle>
+                                    <AlertDialogTitle>Rotate this API key safely?</AlertDialogTitle>
                                     <AlertDialogDescription>
-                                      The current key will be revoked immediately and a brand-new key issued.
-                                      Any integration still using the old key will stop working until you update it
-                                      with the new token shown on the next screen.
+                                      A new key will be issued immediately. The current key keeps working during
+                                      the overlap window you choose, giving you time to update every integration
+                                      before the old key stops accepting requests.
                                     </AlertDialogDescription>
                                   </AlertDialogHeader>
+                                  <div className="space-y-2 py-2">
+                                    <label className="text-sm font-medium">Overlap (grace) period</label>
+                                    <select
+                                      className="w-full rounded border bg-background p-2 text-sm"
+                                      value={graceFor(k.id)}
+                                      onChange={(e) => setGrace(k.id, Number(e.target.value))}
+                                    >
+                                      {GRACE_CHOICES.map((c) => (
+                                        <option key={c.value} value={c.value}>{c.label}</option>
+                                      ))}
+                                    </select>
+                                    <p className="text-xs text-muted-foreground">
+                                      {graceFor(k.id) === 0
+                                        ? "Old key is revoked instantly — any integration still using it will break."
+                                        : `Old key will be auto-revoked at ${new Date(Date.now() + graceFor(k.id) * 3600_000).toLocaleString()}.`}
+                                    </p>
+                                  </div>
                                   <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => regenerate(k.id)}>
-                                      Revoke & issue new key
+                                    <AlertDialogAction onClick={() => regenerate(k.id, graceFor(k.id))}>
+                                      Issue new key
                                     </AlertDialogAction>
                                   </AlertDialogFooter>
                                 </AlertDialogContent>
@@ -215,7 +257,7 @@ export default function IntegrationsPage() {
                                   </AlertDialogHeader>
                                   <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => revoke(k.id)}>
+                                    <AlertDialogAction onClick={() => revoke(k.id, 0)}>
                                       Revoke key
                                     </AlertDialogAction>
                                   </AlertDialogFooter>
@@ -225,7 +267,8 @@ export default function IntegrationsPage() {
                           )}
                         </div>
                       </li>
-                    ))}
+                      );
+                    })}
                   </ul>
                 )}
               </div>
