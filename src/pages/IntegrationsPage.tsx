@@ -48,6 +48,16 @@ export default function IntegrationsPage() {
   const [generating, setGenerating] = useState(false);
   const [freshToken, setFreshToken] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
+  const [graceById, setGraceById] = useState<Record<string, number>>({});
+  const graceFor = (id: string) => graceById[id] ?? 24;
+  const setGrace = (id: string, hours: number) => setGraceById((m) => ({ ...m, [id]: hours }));
+  const GRACE_CHOICES: { value: number; label: string }[] = [
+    { value: 0, label: "Immediate (no overlap)" },
+    { value: 1, label: "1 hour overlap" },
+    { value: 24, label: "24 hours overlap" },
+    { value: 72, label: "3 days overlap" },
+    { value: 168, label: "7 days overlap" },
+  ];
 
   const load = async () => {
     if (!tenantId) return;
