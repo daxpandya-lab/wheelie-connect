@@ -80,6 +80,32 @@ export default function IntegrationsPage() {
     }
   };
 
+  const revoke = async (id: string) => {
+    const { error } = await supabase
+      .from("tenant_api_keys" as any)
+      .update({ revoked_at: new Date().toISOString() } as any)
+      .eq("id", id);
+    if (error) {
+      toast({ title: "Could not revoke key", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "API key revoked", description: "Requests using this key will be rejected." });
+    load();
+  };
+
+  const regenerate = async (id: string) => {
+    // Revoke old, then mint new — existing integrations using the old key MUST be updated.
+    const { error: revokeErr } = await supabase
+      .from("tenant_api_keys" as any)
+      .update({ revoked_at: new Date().toISOString() } as any)
+      .eq("id", id);
+    if (revokeErr) {
+      toast({ title: "Could not rotate key", description: revokeErr.message, variant: "destructive" });
+      return;
+    }
+    await generate();
+  };
+
   const copy = async (txt: string) => {
     await navigator.clipboard.writeText(txt);
     toast({ title: "Copied to clipboard" });
