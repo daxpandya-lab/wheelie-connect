@@ -165,14 +165,65 @@ export default function IntegrationsPage() {
                 ) : (
                   <ul className="space-y-2">
                     {keys.map((k) => (
-                      <li key={k.id} className="flex items-center justify-between rounded border p-2 text-sm">
-                        <div className="flex items-center gap-2 font-mono">
-                          {k.token_prefix}••••
+                      <li key={k.id} className="flex items-center justify-between gap-2 rounded border p-2 text-sm">
+                        <div className="flex items-center gap-2 font-mono min-w-0">
+                          <span className="truncate">{k.token_prefix}••••</span>
                           {k.revoked_at && <Badge variant="destructive">revoked</Badge>}
                         </div>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(k.created_at).toLocaleDateString()}
-                        </span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-xs text-muted-foreground hidden sm:inline">
+                            {new Date(k.created_at).toLocaleDateString()}
+                          </span>
+                          {!k.revoked_at && (
+                            <>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button size="sm" variant="outline" className="gap-1">
+                                    <RefreshCw className="w-3 h-3" /> Regenerate
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Regenerate this API key?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      The current key will be revoked immediately and a brand-new key issued.
+                                      Any integration still using the old key will stop working until you update it
+                                      with the new token shown on the next screen.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => regenerate(k.id)}>
+                                      Revoke & issue new key
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button size="sm" variant="ghost" className="gap-1 text-destructive hover:text-destructive">
+                                    <Ban className="w-3 h-3" /> Revoke
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Revoke this API key?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      All requests authenticated with this key will be rejected immediately.
+                                      This cannot be undone — generate a new key if you need continued access.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => revoke(k.id)}>
+                                      Revoke key
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </>
+                          )}
+                        </div>
                       </li>
                     ))}
                   </ul>
