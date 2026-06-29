@@ -50,15 +50,39 @@ type ServiceBooking = {
 
 
 const FIXED_COLS = [
-  { key: "customer_name", label: "Customer" },
-  { key: "phone_number", label: "Phone" },
-  { key: "vehicle_model", label: "Vehicle" },
-  { key: "service_type", label: "Service" },
+  { key: "customer_name", label: "Customer Name" },
+  { key: "phone_number", label: "Phone Number" },
+  { key: "vehicle_model", label: "Vehicle Model" },
+  { key: "service_type", label: "Service Type" },
   { key: "booking_date", label: "Date" },
-  { key: "status", label: "Status" },
+  { key: "pickup_address", label: "Pickup Address" },
+  { key: "drop_address", label: "Drop Address" },
+  { key: "status", label: "Booking Status" },
   { key: "approval_status", label: "Approval" },
   { key: "booking_source", label: "Source" },
 ];
+
+// Flatten logistics fields out of metadata JSON so spreadsheet exports
+// surface Pickup / Drop addresses (and pickup metadata) instead of blank cells.
+// Self-drive drop-offs get a scannable fallback label.
+const SELF_ARRIVAL_LABEL = "Workshop Self-Arrival";
+function flattenForExport(row: any) {
+  const meta = (row?.metadata || {}) as Record<string, any>;
+  const pickup = row?.pickup_required
+    ? (meta.pickup_address_canonical || meta.pickup_address || meta.pickup_location || "").toString().trim()
+    : "";
+  const drop = row?.drop_required
+    ? (meta.drop_address_canonical || meta.drop_address || meta.drop_location || meta.pickup_address_canonical || meta.pickup_address || "").toString().trim()
+    : "";
+  return {
+    ...row,
+    pickup_address: pickup || SELF_ARRIVAL_LABEL,
+    drop_address: drop || SELF_ARRIVAL_LABEL,
+    pickup_scheduled_at: meta.pickup_scheduled_at || meta.pickup_time || "",
+    pickup_driver: meta.pickup_driver || meta.assigned_driver || "",
+  };
+}
+
 
 type Profile = { user_id: string; full_name: string | null };
 
