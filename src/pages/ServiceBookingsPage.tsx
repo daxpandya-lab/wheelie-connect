@@ -481,7 +481,7 @@ export default function ServiceBookingsPage() {
               title="Service Bookings"
               filename="service-bookings"
               columns={columns.filter(c => c.visible !== false).map(c => ({ key: c.key, label: c.label }))}
-              rows={filterByTab(searchedBookings)}
+              rows={filterByTab(searchedBookings).map(flattenForExport)}
               filters={[
                 { label: "Tab", value: tab },
                 { label: "Search", value: search.trim() },
