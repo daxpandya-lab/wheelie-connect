@@ -122,6 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setProfile(null);
     setRoles([]);
+    queryClient.clear();
   };
 
   const isSuperAdmin = roles.includes("super_admin");
