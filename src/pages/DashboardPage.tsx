@@ -32,7 +32,9 @@ export default function DashboardPage() {
     const execFilter = (q: any) => (isExecutive && user?.id ? q.eq("assigned_to", user.id) : q);
 
     const [customersRes, bookingsRes, testDrivesRes, convosRes, leadsRes, tenantRes] = await Promise.all([
-      supabase.from("customers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
+      execFilter(
+        supabase.from("customers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId)
+      ),
       execFilter(
         supabase.from("service_bookings")
           .select("id, customer_name, phone_number, vehicle_model, service_type, booking_date, status, assigned_to")
@@ -42,7 +44,10 @@ export default function DashboardPage() {
       execFilter(
         supabase.from("test_drive_bookings").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId)
       ),
-      supabase.from("chatbot_conversations").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("status", "active"),
+      // Conversations are not per-executive; executives see workshop totals here.
+      isExecutive
+        ? Promise.resolve({ count: 0 } as any)
+        : supabase.from("chatbot_conversations").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("status", "active"),
       execFilter(
         supabase.from("leads").select("id, status, assigned_to").eq("tenant_id", tenantId)
       ),

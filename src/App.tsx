@@ -1,4 +1,5 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "@/lib/query-client";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
@@ -33,22 +34,6 @@ import PublicChatPage from "@/pages/PublicChatPage";
 import EstimateApprovalPage from "@/pages/EstimateApprovalPage";
 import NotFound from "@/pages/NotFound";
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      // Long stale window + no refetch-on-mount so navigating between
-      // sidebar tabs serves cached data instantly instead of re-fetching
-      // and re-rendering the page-level loading spinners.
-      staleTime: 5 * 60 * 1000,
-      gcTime: 30 * 60 * 1000,
-      refetchOnWindowFocus: false,
-      refetchOnMount: false,
-      refetchOnReconnect: false,
-      retry: 2,
-      retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
-    },
-  },
-});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>

@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, useRef, ReactNode } fro
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
+import { queryClient } from "@/lib/query-client";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
 
@@ -57,7 +58,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
-        setSession(session);
+        setSession((prev) => {
+          // On user-id change (sign-in, sign-out, account swap) flush any
+          // cached query data so an Executive's filtered views don't bleed
+          // into a Dealer overview (or vice versa) during the transition.
+          if (prev?.user?.id !== session?.user?.id) {
+            queryClient.clear();
+          }
+          return session;
+        });
         setUser(session?.user ?? null);
 
         if (session?.user) {
@@ -113,6 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setProfile(null);
     setRoles([]);
+    queryClient.clear();
   };
 
   const isSuperAdmin = roles.includes("super_admin");
