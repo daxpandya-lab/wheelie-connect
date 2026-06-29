@@ -33,7 +33,7 @@ import PublicChatPage from "@/pages/PublicChatPage";
 import EstimateApprovalPage from "@/pages/EstimateApprovalPage";
 import NotFound from "@/pages/NotFound";
 
-const queryClient = new QueryClient({
+export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       // Long stale window + no refetch-on-mount so navigating between
