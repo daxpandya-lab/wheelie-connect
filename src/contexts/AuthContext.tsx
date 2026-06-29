@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, useRef, ReactNode } fro
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
-import { queryClient } from "@/App";
+import { queryClient } from "@/lib/query-client";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
 
