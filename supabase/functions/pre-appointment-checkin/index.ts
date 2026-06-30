@@ -70,6 +70,20 @@ Deno.serve(async (req) => {
           `Need to make any changes? Just tap below:`;
         if (mapsUrl) body += `\n\n📍 Get Directions to Workshop: ${mapsUrl}`;
 
+        const allowCancellations = checkinCfg.allow_cancellations !== false;
+        let reminderBody = body;
+        if (!allowCancellations) {
+          reminderBody = reminderBody.replace(/\n\nNeed to make any changes\?[^\n]*/i, "\n\nWant to share anything ahead of your visit?");
+        }
+
+        const buttons = [
+          { id: `chk_comments_${b.id}`, title: "📝 Add Comments" },
+          { id: `chk_photos_${b.id}`,   title: "📸 Upload Photos" },
+        ];
+        if (allowCancellations) {
+          buttons.push({ id: `chk_cancel_${b.id}`, title: "❌ Cancel" });
+        }
+
         const result = await dispatchNotification(
           supabase,
           {
@@ -80,12 +94,8 @@ Deno.serve(async (req) => {
           },
           {
             kind: "buttons",
-            text: body,
-            buttons: [
-              { id: `chk_comments_${b.id}`, title: "📝 Add Comments" },
-              { id: `chk_photos_${b.id}`,   title: "📸 Upload Photos" },
-              { id: `chk_cancel_${b.id}`,   title: "❌ Cancel" },
-            ],
+            text: reminderBody,
+            buttons,
           },
         );
 
