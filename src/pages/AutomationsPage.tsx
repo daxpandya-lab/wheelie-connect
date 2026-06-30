@@ -376,6 +376,50 @@ export default function AutomationsPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Pre-Appointment Reminder Preview</DialogTitle>
+            <DialogDescription>
+              Exact quick-reply options the customer will receive based on your current toggle state.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-2xl bg-[#dcf8c6] dark:bg-emerald-900/40 px-4 py-3 text-sm leading-relaxed shadow-sm">
+              <p className="font-medium mb-1">Hi Priya 👋</p>
+              <p>
+                This is a friendly reminder about your <b>Honda City</b> service scheduled in{" "}
+                <b>{pi.lead_time_hours ?? 24} hours</b>.
+              </p>
+              <p className="mt-2">How would you like to proceed?</p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <button className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-left hover:bg-muted">
+                📝 Add Comments
+              </button>
+              <button className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-left hover:bg-muted">
+                📸 Upload Photos
+              </button>
+              {pi.allow_cancellations !== false && (
+                <button className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-left hover:bg-muted">
+                  ❌ Cancel Appointment
+                </button>
+              )}
+            </div>
+            <div className="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+              <b>Active config:</b> Lead time {pi.lead_time_hours ?? 24}h ·{" "}
+              Cancellations {pi.allow_cancellations !== false ? "enabled" : "disabled"} ·{" "}
+              Automation {pi.enabled ? "ON" : "OFF"}
+              {pi.allow_cancellations !== false && (
+                <div className="mt-1">
+                  Cancel chip triggers double-confirmation if &gt;4h remain before the appointment.
+                </div>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
