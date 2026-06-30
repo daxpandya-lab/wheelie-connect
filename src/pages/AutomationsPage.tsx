@@ -33,6 +33,7 @@ type Settings = {
   pre_appointment_checkin?: {
     enabled?: boolean;
     lead_time_hours?: 12 | 24 | 48 | 72;
+    allow_cancellations?: boolean;
   };
   google_review_url?: string | null;
 };
@@ -41,7 +42,7 @@ const DEFAULTS: Required<Pick<Settings, "predictive_service_reminder" | "chat_dr
   predictive_service_reminder: { enabled: true, interval_months: 6, mileage_tracking: false },
   chat_drop_off_recovery: { enabled: true, timeout_minutes: 30 },
   post_service_feedback: { enabled: true, delay_hours: 24 },
-  pre_appointment_checkin: { enabled: true, lead_time_hours: 24 },
+  pre_appointment_checkin: { enabled: true, lead_time_hours: 24, allow_cancellations: true },
 };
 
 export default function AutomationsPage() {
@@ -303,6 +304,19 @@ export default function AutomationsPage() {
                 />
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2">
+                  <div>
+                    <Label className="text-sm font-medium">Allow Bot Cancellations & Reconfirmations</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      When off, the reminder shows only 📝 Comments and 📸 Photos — the ❌ Cancel chip is removed.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={pi.allow_cancellations !== false}
+                    onCheckedChange={(v) => persist({ pre_appointment_checkin: { ...pi, allow_cancellations: v } })}
+                    disabled={!pi.enabled}
+                  />
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Send Reminder Lead Time</Label>
