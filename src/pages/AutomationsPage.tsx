@@ -33,6 +33,7 @@ type Settings = {
   pre_appointment_checkin?: {
     enabled?: boolean;
     lead_time_hours?: 12 | 24 | 48 | 72;
+    allow_cancellations?: boolean;
   };
   google_review_url?: string | null;
 };
@@ -41,7 +42,7 @@ const DEFAULTS: Required<Pick<Settings, "predictive_service_reminder" | "chat_dr
   predictive_service_reminder: { enabled: true, interval_months: 6, mileage_tracking: false },
   chat_drop_off_recovery: { enabled: true, timeout_minutes: 30 },
   post_service_feedback: { enabled: true, delay_hours: 24 },
-  pre_appointment_checkin: { enabled: true, lead_time_hours: 24 },
+  pre_appointment_checkin: { enabled: true, lead_time_hours: 24, allow_cancellations: true },
 };
 
 export default function AutomationsPage() {
