@@ -339,7 +339,10 @@ export default function AutomationsPage() {
                     <p>Quick replies offered: 📝 Add Comments / 📸 Upload Photos / ❌ Cancel</p>
                   </div>
                 </div>
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setPreviewOpen(true)}>
+                    <Eye className="w-4 h-4 mr-1" /> Preview Reminder
+                  </Button>
                   <Button size="sm" onClick={() => persist({ pre_appointment_checkin: pi })} disabled={saving}>
                     {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />} Save Automation Rules
                   </Button>
