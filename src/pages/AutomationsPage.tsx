@@ -53,6 +53,7 @@ export default function AutomationsPage() {
   const [settings, setSettings] = useState<Settings>({});
   const [reviewUrl, setReviewUrl] = useState("");
   const [logs, setLogs] = useState<any[]>([]);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!tenantId) return;
