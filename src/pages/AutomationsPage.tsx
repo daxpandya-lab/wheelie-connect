@@ -304,6 +304,19 @@ export default function AutomationsPage() {
                 />
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2">
+                  <div>
+                    <Label className="text-sm font-medium">Allow Bot Cancellations & Reconfirmations</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      When off, the reminder shows only 📝 Comments and 📸 Photos — the ❌ Cancel chip is removed.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={pi.allow_cancellations !== false}
+                    onCheckedChange={(v) => persist({ pre_appointment_checkin: { ...pi, allow_cancellations: v } })}
+                    disabled={!pi.enabled}
+                  />
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Send Reminder Lead Time</Label>
