@@ -15,6 +15,7 @@ import { Plus, Loader2, Pencil, KeyRound, Ban, CheckCircle, Trash2, Eye, EyeOff,
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import KpiCard from "@/components/KpiCard";
 import { toast } from "sonner";
+import DeveloperSandbox from "@/components/DeveloperSandbox";
 import type { Database } from "@/integrations/supabase/types";
 
 type TenantStatus = Database["public"]["Enums"]["tenant_status"];
@@ -35,7 +36,10 @@ const emptyForm = {
 };
 
 export default function SuperAdminPage() {
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, profile, user } = useAuth();
+  const isMasterAdmin =
+    isSuperAdmin &&
+    (`${profile?.full_name ?? ""} ${user?.email ?? ""}`).toLowerCase().includes("daxesh");
   const navigate = useNavigate();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
@@ -483,6 +487,8 @@ export default function SuperAdminPage() {
             </Table>
           </div>
         )}
+
+        {isMasterAdmin && <DeveloperSandbox />}
 
         {/* CREATE DIALOG */}
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
