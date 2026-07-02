@@ -14,6 +14,10 @@ type Body = {
   business_address?: string | null;
   chatbot_welcome_script?: string | null;
   google_review_url?: string | null;
+  logo_url?: string | null;
+  primary_color?: string | null;
+  // Super-admin only override — edit another tenant's settings.
+  tenant_id?: string | null;
 };
 
 const ALLOWED_KEYS = [
@@ -22,6 +26,8 @@ const ALLOWED_KEYS = [
   "business_address",
   "chatbot_welcome_script",
   "google_review_url",
+  "logo_url",
+  "primary_color",
 ] as const;
 
 function clean(v: unknown): string | null {
@@ -56,22 +62,35 @@ Deno.serve(async (req) => {
     // Resolve caller's tenant + verify tenant_admin role
     const { data: profile } = await admin
       .from("profiles").select("tenant_id").eq("user_id", userData.user.id).maybeSingle();
-    const tenantId = profile?.tenant_id;
-    if (!tenantId) {
+    const callerTenantId = profile?.tenant_id;
+    if (!callerTenantId) {
       return new Response(JSON.stringify({ error: "No active tenant" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { data: roleRow } = await admin
+    // Is the caller a super_admin? (super_admin rows are not always tenant-scoped)
+    const { data: superRow } = await admin
       .from("user_roles").select("role")
-      .eq("user_id", userData.user.id).eq("tenant_id", tenantId)
-      .in("role", ["tenant_admin", "super_admin"]).maybeSingle();
-    if (!roleRow) {
-      return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
+      .eq("user_id", userData.user.id).eq("role", "super_admin").maybeSingle();
+    const isSuperAdmin = !!superRow;
 
     let body: Body;
     try { body = await req.json(); } catch {
       return new Response(JSON.stringify({ error: "Invalid JSON" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // Super-admin may target any tenant via body.tenant_id; everyone else is
+    // locked to their own tenant regardless of what they send.
+    const requestedTenantId = typeof body.tenant_id === "string" && body.tenant_id.length ? body.tenant_id : null;
+    const tenantId = isSuperAdmin && requestedTenantId ? requestedTenantId : callerTenantId;
+
+    if (!isSuperAdmin) {
+      const { data: roleRow } = await admin
+        .from("user_roles").select("role")
+        .eq("user_id", userData.user.id).eq("tenant_id", tenantId)
+        .in("role", ["tenant_admin"]).maybeSingle();
+      if (!roleRow) {
+        return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
     }
 
     // Only pick allowed keys
@@ -83,9 +102,18 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "No valid fields provided" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Validate URL if provided
+    // Validate URLs / hex if provided
     if (patch.google_review_url && !/^https?:\/\/.+/i.test(patch.google_review_url)) {
       return new Response(JSON.stringify({ error: "google_review_url must be a valid URL" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (patch.logo_url && !/^https?:\/\/.+/i.test(patch.logo_url)) {
+      return new Response(JSON.stringify({ error: "logo_url must be a valid URL" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (patch.primary_color && !/^#?[0-9a-fA-F]{6}$/.test(patch.primary_color)) {
+      return new Response(JSON.stringify({ error: "primary_color must be a 6-digit hex" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (patch.primary_color && !patch.primary_color.startsWith("#")) {
+      patch.primary_color = `#${patch.primary_color}`;
     }
 
     // Merge patch into existing settings — preserve all other keys.
