@@ -4,6 +4,7 @@ import WhatsAppConfig from "@/components/whatsapp/WhatsAppConfig";
 import ReminderSettings from "@/components/settings/ReminderSettings";
 import DealershipBrandingSettings from "@/components/settings/DealershipBrandingSettings";
 import TeamRolesSettings from "@/components/settings/TeamRolesSettings";
+import NotificationsSettings from "@/components/settings/NotificationsSettings";
 import { Building2, Globe, Palette, Bell, Shield, CreditCard, ChevronLeft, Car, Bot, BellRing, Megaphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -466,6 +467,15 @@ export default function SettingsPage() {
       <>
         <TopBar title="Team & Roles" />
         <div className="flex-1 overflow-y-auto p-6"><div className="max-w-5xl">{renderBack()}<TeamRolesSettings /></div></div>
+      </>
+    );
+  }
+
+  if (activeSection === "notifications") {
+    return (
+      <>
+        <TopBar title="Notifications" />
+        <div className="flex-1 overflow-y-auto p-6"><div className="max-w-4xl">{renderBack()}<NotificationsSettings /></div></div>
       </>
     );
   }
