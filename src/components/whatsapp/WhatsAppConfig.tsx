@@ -265,7 +265,10 @@ export default function WhatsAppConfig() {
                   <Copy className="w-4 h-4" />
                 </Button>
               </div>
-            </div>
+          </div>
+          <p className="text-[11px] text-muted-foreground -mt-1">
+            🔒 Exclusive: only one gateway can be active per dealership. Switching providers on save archives and disables the other set of credentials automatically.
+          </p>
           )}
         </CardContent>
       </Card>
