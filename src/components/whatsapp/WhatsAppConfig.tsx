@@ -297,6 +297,10 @@ export default function WhatsAppConfig() {
               Evolution API
             </Button>
           </div>
+          <p className="text-[11px] text-muted-foreground">
+            🔒 Exclusive: only one gateway can be active per dealership. Selecting a provider disables the inactive form; on save, the other provider's credentials are archived and stop serving traffic.
+          </p>
+
 
           {provider === "meta" ? (
             <>
