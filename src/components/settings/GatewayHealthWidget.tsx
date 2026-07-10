@@ -76,9 +76,28 @@ export default function GatewayHealthWidget() {
 
   const statusKey = row?.status || "unknown";
   const s = STATUS_MAP[statusKey] || STATUS_MAP.unknown;
+  const isHardFailure = ["auth_failure", "unreachable"].includes(statusKey);
+  const isActionRequired = statusKey === "action_required" || row?.action_required === true;
+  const showDynamicBanner = isHardFailure || isActionRequired;
+  const bannerTone = isHardFailure
+    ? "border-red-500/40 bg-red-500/10 text-red-800 dark:text-red-300"
+    : "border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200";
 
   return (
-    <Card>
+    <div className="space-y-4">
+      {showDynamicBanner && (
+        <div
+          role="alert"
+          aria-live="polite"
+          className={`rounded-lg border-2 p-4 flex items-start gap-3 shadow-sm ${bannerTone}`}
+        >
+          <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0" />
+          <p className="text-sm font-medium leading-relaxed">
+            ⚠️ Dynamic Gateway Update Required: The system has detected an upstream update or connection interruption. System integrity optimization recommended to prevent downtime.
+          </p>
+        </div>
+      )}
+      <Card>
       <CardHeader className="flex flex-row items-start justify-between gap-4">
         <div className="flex items-start gap-3">
           <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
@@ -136,7 +155,8 @@ export default function GatewayHealthWidget() {
           </p>
         )}
       </CardContent>
-    </Card>
+      </Card>
+    </div>
   );
 }
 
