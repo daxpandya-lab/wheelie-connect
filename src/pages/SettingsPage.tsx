@@ -461,6 +461,15 @@ export default function SettingsPage() {
     );
   }
 
+  if (activeSection === "team") {
+    return (
+      <>
+        <TopBar title="Team & Roles" />
+        <div className="flex-1 overflow-y-auto p-6"><div className="max-w-5xl">{renderBack()}<TeamRolesSettings /></div></div>
+      </>
+    );
+  }
+
   return (
     <>
       <TopBar title="Settings" />
