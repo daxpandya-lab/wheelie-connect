@@ -155,7 +155,8 @@ export default function GatewayHealthWidget() {
           </p>
         )}
       </CardContent>
-    </Card>
+      </Card>
+    </div>
   );
 }
 
