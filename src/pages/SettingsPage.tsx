@@ -471,6 +471,15 @@ export default function SettingsPage() {
     );
   }
 
+  if (activeSection === "notifications") {
+    return (
+      <>
+        <TopBar title="Notifications" />
+        <div className="flex-1 overflow-y-auto p-6"><div className="max-w-4xl">{renderBack()}<NotificationsSettings /></div></div>
+      </>
+    );
+  }
+
   return (
     <>
       <TopBar title="Settings" />
