@@ -198,6 +198,9 @@ Deno.serve(async (req) => {
         evolution: { ...(cfg.evolution || {}), status: "disconnected" },
       };
       await supabase.from("tenants").update({ whatsapp_config: next }).eq("id", tenant_id);
+      await supabase.from("whatsapp_instances")
+        .update({ status: "disconnected", disconnected_at: new Date().toISOString() })
+        .eq("tenant_id", tenant_id);
       return json({ ok: true });
     }
 
