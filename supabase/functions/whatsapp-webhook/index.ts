@@ -807,6 +807,10 @@ Deno.serve(async (req) => {
         await supabase.from("whatsapp_sessions")
           .update({ last_webhook_at: new Date().toISOString() })
           .eq("tenant_id", tenantId);
+        // Stamp last_event_at on whatsapp_instances (Evolution-only mirror)
+        await supabase.from("whatsapp_instances")
+          .update({ last_event_at: new Date().toISOString(), status: "connected" })
+          .eq("tenant_id", tenantId);
 
         // Find / create customer
         let customerId: string | null = null;
