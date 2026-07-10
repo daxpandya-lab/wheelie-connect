@@ -1781,6 +1781,62 @@ export type Database = {
           },
         ]
       }
+      whatsapp_instances: {
+        Row: {
+          connected_at: string | null
+          created_at: string
+          disconnected_at: string | null
+          id: string
+          instance_name: string
+          instance_token: string | null
+          last_error: string | null
+          last_event_at: string | null
+          metadata: Json
+          status: string
+          tenant_id: string
+          updated_at: string
+          webhook_url: string | null
+        }
+        Insert: {
+          connected_at?: string | null
+          created_at?: string
+          disconnected_at?: string | null
+          id?: string
+          instance_name: string
+          instance_token?: string | null
+          last_error?: string | null
+          last_event_at?: string | null
+          metadata?: Json
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          webhook_url?: string | null
+        }
+        Update: {
+          connected_at?: string | null
+          created_at?: string
+          disconnected_at?: string | null
+          id?: string
+          instance_name?: string
+          instance_token?: string | null
+          last_error?: string | null
+          last_event_at?: string | null
+          metadata?: Json
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          webhook_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_instances_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_message_queue: {
         Row: {
           attempts: number
