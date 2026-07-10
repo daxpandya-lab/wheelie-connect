@@ -4,6 +4,7 @@ import WhatsAppConfig from "@/components/whatsapp/WhatsAppConfig";
 import ReminderSettings from "@/components/settings/ReminderSettings";
 import DealershipBrandingSettings from "@/components/settings/DealershipBrandingSettings";
 import TeamRolesSettings from "@/components/settings/TeamRolesSettings";
+import NotificationsSettings from "@/components/settings/NotificationsSettings";
 import { Building2, Globe, Palette, Bell, Shield, CreditCard, ChevronLeft, Car, Bot, BellRing, Megaphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
