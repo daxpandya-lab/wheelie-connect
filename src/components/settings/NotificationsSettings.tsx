@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, Save, CalendarClock, BellRing, Activity, MessageSquare, Radio } from "lucide-react";
 import { toast } from "sonner";
+import GatewayHealthWidget from "./GatewayHealthWidget";
 
 type PreCheckin = {
   enabled?: boolean;
