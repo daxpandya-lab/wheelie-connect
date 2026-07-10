@@ -1,5 +1,6 @@
 import { Search } from "lucide-react";
 import NotificationBell from "@/components/NotificationBell";
+import SystemAlertBadge from "@/components/SystemAlertBadge";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function TopBar({ title }: { title: string }) {
@@ -18,6 +19,7 @@ export default function TopBar({ title }: { title: string }) {
             className="h-9 w-56 rounded-lg border border-input bg-background pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
+        <SystemAlertBadge />
         <NotificationBell />
         <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-semibold">
           {initials}

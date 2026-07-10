@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, Save, CalendarClock, BellRing, Activity, MessageSquare, Radio } from "lucide-react";
 import { toast } from "sonner";
+import GatewayHealthWidget from "./GatewayHealthWidget";
 
 type PreCheckin = {
   enabled?: boolean;
@@ -59,6 +60,7 @@ function DealerNotifications() {
 
   return (
     <div className="space-y-6">
+      <GatewayHealthWidget />
       <Card className="border-l-4 border-l-accent">
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div className="flex items-start gap-3">

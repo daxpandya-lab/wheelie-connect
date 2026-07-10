@@ -102,23 +102,31 @@ export default function WhatsAppConfig() {
       .eq("id", tenantId)
       .single();
     const existingConfig = (tenant?.whatsapp_config as Record<string, any>) || {};
+    // EXCLUSIVE GATEWAY: only one provider block is active per tenant.
+    // The inactive provider block is preserved as `*_archived` for audit but
+    // removed from the live keys so downstream code cannot pick it up.
     const nextConfig: Record<string, any> = {
       ...existingConfig,
       provider,
-      meta: { ...(existingConfig.meta || {}) },
-      evolution: { ...(existingConfig.evolution || {}) },
+      active_since: new Date().toISOString(),
     };
 
     if (provider === "meta") {
-      nextConfig.meta.phone_number_id = form.phoneNumberId.trim();
-      nextConfig.meta.waba_id = form.wabaId.trim() || null;
+      nextConfig.meta = {
+        ...(existingConfig.meta || {}),
+        phone_number_id: form.phoneNumberId.trim(),
+        waba_id: form.wabaId.trim() || null,
+      };
       if (form.accessToken.trim()) {
         nextConfig.meta.access_token = form.accessToken.trim();
-        // legacy field still read by some code paths
         nextConfig.access_token = form.accessToken.trim();
       }
+      // Archive & disable Evolution so it cannot serve traffic
+      if (existingConfig.evolution) {
+        nextConfig.evolution_archived = { ...existingConfig.evolution, disabled_at: new Date().toISOString() };
+      }
+      delete nextConfig.evolution;
 
-      // Keep whatsapp_sessions in sync for Meta
       const sessionData: any = {
         tenant_id: tenantId,
         phone_number_id: form.phoneNumberId.trim(),
@@ -131,10 +139,23 @@ export default function WhatsAppConfig() {
         await supabase.from("whatsapp_sessions").insert(sessionData);
       }
     } else {
-      nextConfig.evolution.instance_url = form.evolutionUrl.trim().replace(/\/+$/, "");
-      nextConfig.evolution.instance_name = form.evolutionInstance.trim();
+      nextConfig.evolution = {
+        ...(existingConfig.evolution || {}),
+        instance_url: form.evolutionUrl.trim().replace(/\/+$/, ""),
+        instance_name: form.evolutionInstance.trim(),
+      };
       if (form.evolutionApiKey.trim()) {
         nextConfig.evolution.api_key = form.evolutionApiKey.trim();
+      }
+      // Archive & disable Meta so it cannot serve traffic
+      if (existingConfig.meta || existingConfig.access_token) {
+        nextConfig.meta_archived = { ...(existingConfig.meta || {}), disabled_at: new Date().toISOString() };
+      }
+      delete nextConfig.meta;
+      delete nextConfig.access_token;
+      // Deactivate Meta session so webhooks stop routing there
+      if (session) {
+        await supabase.from("whatsapp_sessions").update({ is_active: false }).eq("id", session.id);
       }
     }
 
@@ -249,6 +270,8 @@ export default function WhatsAppConfig() {
         </CardContent>
       </Card>
 
+
+
       {/* WhatsApp Gateway Provider */}
       <Card>
         <CardHeader className="pb-3">
@@ -274,6 +297,10 @@ export default function WhatsAppConfig() {
               Evolution API
             </Button>
           </div>
+          <p className="text-[11px] text-muted-foreground">
+            🔒 Exclusive: only one gateway can be active per dealership. Selecting a provider disables the inactive form; on save, the other provider's credentials are archived and stop serving traffic.
+          </p>
+
 
           {provider === "meta" ? (
             <>
