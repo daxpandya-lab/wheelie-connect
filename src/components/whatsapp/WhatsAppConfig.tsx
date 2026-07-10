@@ -270,12 +270,7 @@ export default function WhatsAppConfig() {
         </CardContent>
       </Card>
 
-      {/* placeholder removed */}
-      {false && (
-        <></>
-      )}
-        </CardContent>
-      </Card>
+
 
       {/* WhatsApp Gateway Provider */}
       <Card>
