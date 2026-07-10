@@ -71,39 +71,68 @@ Deno.serve(async (req) => {
     };
 
     if (action === "create_and_qr") {
-      // 1. Try create instance (idempotent — ignore "already exists")
-      const createRes = await evoFetch(`/instance/create`, {
+      const normalizeQr = (v: any): string | null => {
+        if (!v) return null;
+        if (typeof v === "string") {
+          return v.startsWith("data:") ? v : `data:image/png;base64,${v}`;
+        }
+        const b64 = v.base64 || v.qrcode?.base64 || v.qr || null;
+        if (b64) return b64.startsWith("data:") ? b64 : `data:image/png;base64,${b64}`;
+        return null;
+      };
+
+      // 1. Try minimal create first (Evolution v1.8.2 rejects some nested webhook shapes → 400)
+      let createRes = await evoFetch(`/instance/create`, {
         method: "POST",
         body: JSON.stringify({
           instanceName,
           qrcode: true,
           integration: "WHATSAPP-BAILEYS",
-          webhook: {
-            url: webhookUrl,
-            byEvents: false,
-            base64: false,
-            events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE"],
-          },
         }),
       });
-      console.log(`[evolution-connect] create status=${createRes.status}`);
+      console.log(`[evolution-connect] create status=${createRes.status} body=${JSON.stringify(createRes.data)?.slice(0, 400)}`);
 
-      // Capture per-instance token (Evolution returns it under `hash.apikey`
-      // on create; some versions expose it under `instance.instanceApikey`).
+      // If create failed for a reason other than "already exists", surface it.
+      const alreadyExists =
+        createRes.status === 403 ||
+        createRes.status === 409 ||
+        (createRes.status === 400 &&
+          JSON.stringify(createRes.data || {}).toLowerCase().includes("already"));
+
+      if (!createRes.ok && !alreadyExists) {
+        return json({
+          error: "Evolution create failed",
+          status: createRes.status,
+          detail: createRes.data,
+        }, 502);
+      }
+
       const instanceToken: string | null =
         createRes.data?.hash?.apikey ||
-        createRes.data?.hash ||
+        (typeof createRes.data?.hash === "string" ? createRes.data.hash : null) ||
         createRes.data?.instance?.instanceApikey ||
         null;
 
-      // 2. Fetch QR code
-      let qrcode: string | null = createRes.data?.qrcode?.base64 || null;
+      // 2. Fetch QR — prefer create response, otherwise call /instance/connect/{name}
+      let qrcode: string | null = normalizeQr(createRes.data?.qrcode) || normalizeQr(createRes.data);
       if (!qrcode) {
         const qrRes = await evoFetch(`/instance/connect/${encodeURIComponent(instanceName)}`, { method: "GET" });
-        qrcode = qrRes.data?.base64 || qrRes.data?.qrcode?.base64 || null;
+        console.log(`[evolution-connect] connect status=${qrRes.status}`);
+        qrcode = normalizeQr(qrRes.data);
       }
 
-      // Mirror into whatsapp_instances (dedicated per-dealer table)
+      // 3. Register webhook separately (v1.8.2 uses flat body under `/webhook/set/{instance}`)
+      await evoFetch(`/webhook/set/${encodeURIComponent(instanceName)}`, {
+        method: "POST",
+        body: JSON.stringify({
+          url: webhookUrl,
+          webhook_by_events: false,
+          webhook_base64: false,
+          events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE"],
+        }),
+      }).catch(() => {});
+
+      // Mirror into whatsapp_instances
       await supabase.from("whatsapp_instances").upsert({
         tenant_id,
         instance_name: instanceName,
@@ -112,7 +141,7 @@ Deno.serve(async (req) => {
         webhook_url: webhookUrl,
       }, { onConflict: "tenant_id" });
 
-      // 3. Persist pending state in tenant config
+      // Persist pending state in tenant config
       const { data: tenantRow } = await supabase
         .from("tenants").select("whatsapp_config").eq("id", tenant_id).single();
       const cfg = (tenantRow?.whatsapp_config as Record<string, any>) || {};
@@ -129,6 +158,15 @@ Deno.serve(async (req) => {
         },
       };
       await supabase.from("tenants").update({ whatsapp_config: next }).eq("id", tenant_id);
+
+      if (!qrcode) {
+        return json({
+          instanceName,
+          qrcode: null,
+          webhookUrl,
+          error: "QR code not returned by Evolution API. Check EVOLUTION_API_URL/KEY and instance state.",
+        }, 502);
+      }
 
       return json({ instanceName, qrcode, webhookUrl });
     }
