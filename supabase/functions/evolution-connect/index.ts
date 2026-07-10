@@ -161,6 +161,16 @@ Deno.serve(async (req) => {
         };
         await supabase.from("tenants").update({ whatsapp_config: next }).eq("id", tenant_id);
 
+        // Mirror connected state into whatsapp_instances
+        await supabase.from("whatsapp_instances").upsert({
+          tenant_id,
+          instance_name: instanceName,
+          status: "connected",
+          webhook_url: webhookUrl,
+          connected_at: new Date().toISOString(),
+          last_event_at: new Date().toISOString(),
+        }, { onConflict: "tenant_id" });
+
         // Re-assert the webhook (in case create skipped it)
         await evoFetch(`/webhook/set/${encodeURIComponent(instanceName)}`, {
           method: "POST",
