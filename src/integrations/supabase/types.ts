@@ -900,6 +900,59 @@ export type Database = {
         }
         Relationships: []
       }
+      gateway_health_status: {
+        Row: {
+          action_required: boolean
+          created_at: string
+          error_message: string | null
+          id: string
+          last_check_at: string
+          last_success_at: string | null
+          metadata: Json
+          provider: string
+          status: string
+          tenant_id: string
+          updated_at: string
+          version: string | null
+        }
+        Insert: {
+          action_required?: boolean
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          last_check_at?: string
+          last_success_at?: string | null
+          metadata?: Json
+          provider: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          version?: string | null
+        }
+        Update: {
+          action_required?: boolean
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          last_check_at?: string
+          last_success_at?: string | null
+          metadata?: Json
+          provider?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          version?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gateway_health_status_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads: {
         Row: {
           assigned_to: string | null
