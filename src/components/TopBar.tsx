@@ -1,5 +1,6 @@
 import { Search } from "lucide-react";
 import NotificationBell from "@/components/NotificationBell";
+import SystemAlertBadge from "@/components/SystemAlertBadge";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function TopBar({ title }: { title: string }) {
