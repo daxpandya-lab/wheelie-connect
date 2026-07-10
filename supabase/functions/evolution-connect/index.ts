@@ -88,12 +88,29 @@ Deno.serve(async (req) => {
       });
       console.log(`[evolution-connect] create status=${createRes.status}`);
 
+      // Capture per-instance token (Evolution returns it under `hash.apikey`
+      // on create; some versions expose it under `instance.instanceApikey`).
+      const instanceToken: string | null =
+        createRes.data?.hash?.apikey ||
+        createRes.data?.hash ||
+        createRes.data?.instance?.instanceApikey ||
+        null;
+
       // 2. Fetch QR code
       let qrcode: string | null = createRes.data?.qrcode?.base64 || null;
       if (!qrcode) {
         const qrRes = await evoFetch(`/instance/connect/${encodeURIComponent(instanceName)}`, { method: "GET" });
         qrcode = qrRes.data?.base64 || qrRes.data?.qrcode?.base64 || null;
       }
+
+      // Mirror into whatsapp_instances (dedicated per-dealer table)
+      await supabase.from("whatsapp_instances").upsert({
+        tenant_id,
+        instance_name: instanceName,
+        instance_token: instanceToken,
+        status: "pending",
+        webhook_url: webhookUrl,
+      }, { onConflict: "tenant_id" });
 
       // 3. Persist pending state in tenant config
       const { data: tenantRow } = await supabase
