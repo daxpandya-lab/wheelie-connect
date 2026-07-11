@@ -72,10 +72,11 @@ Deno.serve(async (req) => {
     const metaAccessToken = waConfig.meta?.access_token || waConfig.access_token;
     let metaPhoneNumberId: string | null = waConfig.meta?.phone_number_id || null;
 
-    // Evolution credentials
-    const evoUrl: string | undefined = waConfig.evolution?.instance_url;
+    // Evolution credentials (fall back to platform master when tenant doesn't
+    // carry an api_key — Scan & Go provisioned instances use the master key).
+    const evoUrl: string | undefined = (waConfig.evolution?.instance_url || Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "") || undefined;
     const evoInstance: string | undefined = waConfig.evolution?.instance_name;
-    const evoApiKey: string | undefined = waConfig.evolution?.api_key;
+    const evoApiKey: string | undefined = waConfig.evolution?.api_key || Deno.env.get("EVOLUTION_API_KEY") || undefined;
 
     if (provider === "meta") {
       if (!metaAccessToken) {
