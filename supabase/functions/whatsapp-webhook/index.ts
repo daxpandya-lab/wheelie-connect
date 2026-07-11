@@ -175,12 +175,20 @@ async function handleCsatButton(
   const provider: "meta" | "evolution" = whatsappConfig.provider === "evolution" ? "evolution" : "meta";
   const sendText = async (to: string, body: string) => {
     try {
-      if (provider === "evolution" && whatsappConfig.evolution?.instance_url && whatsappConfig.evolution?.api_key && whatsappConfig.evolution?.instance_name) {
-        await fetch(`${whatsappConfig.evolution.instance_url}/message/sendText/${encodeURIComponent(whatsappConfig.evolution.instance_name)}`, {
-          method: "POST",
-          headers: { apikey: whatsappConfig.evolution.api_key, "Content-Type": "application/json" },
-          body: JSON.stringify({ number: to, text: body }),
-        });
+      if (provider === "evolution") {
+        const url = (whatsappConfig.evolution?.instance_url || Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "");
+        const inst = whatsappConfig.evolution?.instance_name;
+        const key = whatsappConfig.evolution?.api_key || Deno.env.get("EVOLUTION_API_KEY") || "";
+        const cleaned = cleanPhoneNumber(to);
+        if (url && inst && key && cleaned) {
+          await sendPresence(url, inst, key, cleaned);
+          await sleep(humanTypingDelayMs(body));
+          await fetch(`${url}/message/sendText/${encodeURIComponent(inst)}`, {
+            method: "POST",
+            headers: { apikey: key, "Content-Type": "application/json" },
+            body: JSON.stringify({ number: cleaned, text: body }),
+          });
+        }
       } else if (provider === "meta") {
         const token = whatsappConfig.meta?.access_token || whatsappConfig.access_token;
         const phoneNumberId = whatsappConfig.meta?.phone_number_id;
