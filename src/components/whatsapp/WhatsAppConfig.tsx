@@ -23,6 +23,9 @@ export default function WhatsAppConfig() {
   const [provider, setProvider] = useState<"meta" | "evolution">("meta");
   const [scanOpen, setScanOpen] = useState(false);
   const [evolutionStatus, setEvolutionStatus] = useState<string>("disconnected");
+  // Persisted-active gateway (nullable) — the tenant's currently live pipeline.
+  // Drives the mutual-exclusion overlay + dynamic connection badge.
+  const [activeGateway, setActiveGateway] = useState<"meta" | "evolution" | null>(null);
   const [form, setForm] = useState({
     phoneNumberId: "",
     wabaId: "",
