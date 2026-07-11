@@ -96,14 +96,17 @@ async function handleEstimateButton(
   const provider: "meta" | "evolution" = whatsappConfig.provider === "evolution" ? "evolution" : "meta";
   try {
     if (provider === "evolution") {
-      const evoUrl = whatsappConfig.evolution?.instance_url;
+      const evoUrl = (whatsappConfig.evolution?.instance_url || Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "");
       const evoInstance = whatsappConfig.evolution?.instance_name;
-      const evoApiKey = whatsappConfig.evolution?.api_key;
-      if (evoUrl && evoInstance && evoApiKey) {
+      const evoApiKey = whatsappConfig.evolution?.api_key || Deno.env.get("EVOLUTION_API_KEY") || "";
+      const cleaned = cleanPhoneNumber(recipientPhone);
+      if (evoUrl && evoInstance && evoApiKey && cleaned) {
+        await sendPresence(evoUrl, evoInstance, evoApiKey, cleaned);
+        await sleep(humanTypingDelayMs(reply));
         await fetch(`${evoUrl}/message/sendText/${encodeURIComponent(evoInstance)}`, {
           method: "POST",
           headers: { apikey: evoApiKey, "Content-Type": "application/json" },
-          body: JSON.stringify({ number: recipientPhone, text: reply }),
+          body: JSON.stringify({ number: cleaned, text: reply }),
         });
       }
     } else {
