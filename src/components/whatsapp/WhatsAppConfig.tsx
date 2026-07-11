@@ -108,6 +108,7 @@ export default function WhatsAppConfig() {
     const nextConfig: Record<string, any> = {
       ...existingConfig,
       provider,
+      active_gateway: provider, // exclusive gateway marker consumed by badges + guards
       active_since: new Date().toISOString(),
     };
 
