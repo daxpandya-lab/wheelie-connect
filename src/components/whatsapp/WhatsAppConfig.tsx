@@ -59,7 +59,15 @@ export default function WhatsAppConfig() {
       .eq("id", tenantId!)
       .single();
     const cfg = (tenantRow?.whatsapp_config as Record<string, any>) || {};
-    setProvider(cfg.provider === "evolution" ? "evolution" : "meta");
+    const persisted: "meta" | "evolution" =
+      (cfg.active_gateway === "meta" || cfg.active_gateway === "evolution")
+        ? cfg.active_gateway
+        : (cfg.provider === "evolution" ? "evolution" : "meta");
+    setProvider(persisted);
+    // Only mark a gateway as "active" when it actually has a live connection.
+    const metaLive = !!(sessionData?.is_active && (cfg.meta?.phone_number_id || sessionData?.phone_number_id));
+    const evoLive = cfg.evolution?.status === "connected";
+    setActiveGateway(persisted === "meta" ? (metaLive ? "meta" : null) : (evoLive ? "evolution" : null));
     setEvolutionStatus(cfg.evolution?.status || "disconnected");
     setForm({
       phoneNumberId: sessionData?.phone_number_id || cfg.meta?.phone_number_id || "",
