@@ -307,6 +307,7 @@ export default function WhatsAppConfig() {
               type="button"
               variant={provider === "meta" ? "default" : "outline"}
               onClick={() => setProvider("meta")}
+              disabled={activeGateway === "evolution"}
             >
               Official Meta API
             </Button>
@@ -314,6 +315,7 @@ export default function WhatsAppConfig() {
               type="button"
               variant={provider === "evolution" ? "default" : "outline"}
               onClick={() => setProvider("evolution")}
+              disabled={activeGateway === "meta"}
             >
               Evolution API
             </Button>
@@ -321,6 +323,16 @@ export default function WhatsAppConfig() {
           <p className="text-[11px] text-muted-foreground">
             🔒 Exclusive: only one gateway can be active per dealership. Selecting a provider disables the inactive form; on save, the other provider's credentials are archived and stop serving traffic.
           </p>
+
+          {/* Mutual-exclusion overlay: when one gateway is live, block the other's UI. */}
+          {activeGateway && activeGateway !== provider && (
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
+              {activeGateway === "meta"
+                ? "Please disconnect your Official Meta API connection first to activate Evolution WhatsApp."
+                : "Please disconnect your Evolution WhatsApp connection first to activate Official Meta API."}
+            </div>
+          )}
+
 
 
           {provider === "meta" ? (
