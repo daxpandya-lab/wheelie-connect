@@ -241,13 +241,20 @@ Deno.serve(async (req) => {
           });
           result = await response.json();
         } else {
-          // Evolution API
+          // Evolution API — clean recipient number, prime "typing…" presence,
+          // then hold for a humanized 3–6s delay before firing the payload.
+          const cleaned = cleanPhoneNumber(msg.recipient_phone);
+          if (!cleaned) throw new Error("Invalid recipient phone");
+
+          await sendPresence(evoUrl!, evoInstance!, evoApiKey!, cleaned);
+          await sleep(humanTypingDelayMs(renderedContent ?? ""));
+
           let evoEndpoint: string;
           let evoBody: Record<string, unknown>;
           if (mediaUrl && mediaType) {
             evoEndpoint = `${evoUrl}/message/sendMedia/${encodeURIComponent(evoInstance!)}`;
             evoBody = {
-              number: msg.recipient_phone,
+              number: cleaned,
               mediatype: mediaType, // "image" | "video" | "document"
               media: mediaUrl,
               caption: renderedContent ?? "",
@@ -256,11 +263,11 @@ Deno.serve(async (req) => {
           } else {
             evoEndpoint = `${evoUrl}/message/sendText/${encodeURIComponent(evoInstance!)}`;
             evoBody = {
-              number: msg.recipient_phone,
+              number: cleaned,
               text: renderedContent ?? "",
             };
           }
-          console.log(`[BATCH-SEND][EVOLUTION] POST ${evoEndpoint}`);
+          console.log(`[BATCH-SEND][EVOLUTION] POST ${evoEndpoint} to=${cleaned}`);
           response = await fetch(evoEndpoint, {
             method: "POST",
             headers: {
