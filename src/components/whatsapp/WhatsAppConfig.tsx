@@ -207,10 +207,19 @@ export default function WhatsAppConfig() {
                 <CardDescription>Connect your WhatsApp Business Account</CardDescription>
               </div>
             </div>
-            <Badge variant={session?.is_active ? "default" : "secondary"} className="gap-1">
-              {session?.is_active ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-              {session?.is_active ? "Connected" : "Not Connected"}
-            </Badge>
+            {activeGateway === "meta" ? (
+              <Badge className="gap-1 bg-emerald-600 hover:bg-emerald-600 text-white">
+                <Wifi className="w-3 h-3" /> WhatsApp Meta API Connected
+              </Badge>
+            ) : activeGateway === "evolution" ? (
+              <Badge className="gap-1 bg-emerald-600 hover:bg-emerald-600 text-white">
+                <Wifi className="w-3 h-3" /> Evolution WhatsApp Api Connected
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="gap-1">
+                <WifiOff className="w-3 h-3" /> Not Connected
+              </Badge>
+            )}
           </div>
         </CardHeader>
       </Card>
