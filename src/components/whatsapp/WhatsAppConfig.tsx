@@ -335,6 +335,10 @@ export default function WhatsAppConfig() {
 
 
 
+          <fieldset
+            disabled={!!activeGateway && activeGateway !== provider}
+            className={`space-y-4 ${activeGateway && activeGateway !== provider ? "opacity-50 pointer-events-none" : ""}`}
+          >
           {provider === "meta" ? (
             <>
               <p className="text-xs text-muted-foreground">
