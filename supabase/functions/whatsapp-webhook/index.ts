@@ -286,15 +286,18 @@ async function sendWaButtons(
     whatsappConfig.provider === "evolution" ? "evolution" : "meta";
   try {
     if (provider === "evolution") {
-      const url = whatsappConfig.evolution?.instance_url;
+      const url = (whatsappConfig.evolution?.instance_url || Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "");
       const inst = whatsappConfig.evolution?.instance_name;
-      const key = whatsappConfig.evolution?.api_key;
-      if (!url || !inst || !key) return;
+      const key = whatsappConfig.evolution?.api_key || Deno.env.get("EVOLUTION_API_KEY") || "";
+      const cleaned = cleanPhoneNumber(to);
+      if (!url || !inst || !key || !cleaned) return;
+      await sendPresence(url, inst, key, cleaned);
+      await sleep(humanTypingDelayMs(text));
       await fetch(`${url}/message/sendButtons/${encodeURIComponent(inst)}`, {
         method: "POST",
         headers: { apikey: key, "Content-Type": "application/json" },
         body: JSON.stringify({
-          number: to, title: " ", description: text, footer: " ",
+          number: cleaned, title: " ", description: text, footer: " ",
           buttons: buttons.map((b) => ({ type: "reply", displayText: b.title, id: b.id })),
         }),
       });
