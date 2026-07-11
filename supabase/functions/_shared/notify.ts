@@ -199,15 +199,24 @@ async function dispatchEvolution(
   ctx: NotifyContext,
   payload: NotifyPayload,
 ): Promise<NotifyResult> {
-  const evoUrl = wa.evolution?.instance_url;
+  const { cleanPhoneNumber, sendPresence, humanTypingDelayMs, sleep } =
+    await import("./wa-evolution.ts");
+  const evoUrl = (wa.evolution?.instance_url || Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "");
   const instance = wa.evolution?.instance_name;
-  const apiKey = wa.evolution?.api_key;
-  if (!evoUrl || !instance || !apiKey || !ctx.phoneNumber) {
+  // Fall back to the platform master key when the tenant row doesn't carry one
+  // (Scan & Go provisions with the master key server-side).
+  const apiKey = wa.evolution?.api_key || Deno.env.get("EVOLUTION_API_KEY") || "";
+  const number = cleanPhoneNumber(ctx.phoneNumber);
+  if (!evoUrl || !instance || !apiKey || !number) {
     return { channel: "evolution", status: "skipped", error: "evolution not configured" };
   }
   const headers = { apikey: apiKey, "Content-Type": "application/json" };
   const base = `${evoUrl}/message`;
   const enc = encodeURIComponent(instance);
+
+  // Anti-ban: show typing indicator, then hold for a humanized delay.
+  await sendPresence(evoUrl, instance, apiKey, number);
+  await sleep(humanTypingDelayMs(payload.text));
 
   try {
     let r: Response;
@@ -215,7 +224,7 @@ async function dispatchEvolution(
       r = await fetch(`${base}/sendButtons/${enc}`, {
         method: "POST", headers,
         body: JSON.stringify({
-          number: ctx.phoneNumber,
+          number,
           title: " ",
           description: payload.text,
           footer: " ",
@@ -225,17 +234,16 @@ async function dispatchEvolution(
         }),
       });
     } else if (payload.kind === "document" && payload.document) {
-      // Send caption text first, then the document.
       if (payload.text) {
         await fetch(`${base}/sendText/${enc}`, {
           method: "POST", headers,
-          body: JSON.stringify({ number: ctx.phoneNumber, text: payload.text }),
+          body: JSON.stringify({ number, text: payload.text }),
         });
       }
       r = await fetch(`${base}/sendMedia/${enc}`, {
         method: "POST", headers,
         body: JSON.stringify({
-          number: ctx.phoneNumber,
+          number,
           mediatype: "document",
           fileName: payload.document.filename,
           media: payload.document.url,
@@ -245,7 +253,7 @@ async function dispatchEvolution(
     } else {
       r = await fetch(`${base}/sendText/${enc}`, {
         method: "POST", headers,
-        body: JSON.stringify({ number: ctx.phoneNumber, text: payload.text }),
+        body: JSON.stringify({ number, text: payload.text }),
       });
     }
     if (!r.ok) {

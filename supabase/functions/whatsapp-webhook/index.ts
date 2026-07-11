@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { buildMediaAttachment } from "../_shared/media-attachment.ts";
+import { cleanPhoneNumber, sendPresence, humanTypingDelayMs, sleep } from "../_shared/wa-evolution.ts";
 
 // ============================================================
 // LANGUAGE DETECTION — script-based with keyword fallback
@@ -95,14 +96,17 @@ async function handleEstimateButton(
   const provider: "meta" | "evolution" = whatsappConfig.provider === "evolution" ? "evolution" : "meta";
   try {
     if (provider === "evolution") {
-      const evoUrl = whatsappConfig.evolution?.instance_url;
+      const evoUrl = (whatsappConfig.evolution?.instance_url || Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "");
       const evoInstance = whatsappConfig.evolution?.instance_name;
-      const evoApiKey = whatsappConfig.evolution?.api_key;
-      if (evoUrl && evoInstance && evoApiKey) {
+      const evoApiKey = whatsappConfig.evolution?.api_key || Deno.env.get("EVOLUTION_API_KEY") || "";
+      const cleaned = cleanPhoneNumber(recipientPhone);
+      if (evoUrl && evoInstance && evoApiKey && cleaned) {
+        await sendPresence(evoUrl, evoInstance, evoApiKey, cleaned);
+        await sleep(humanTypingDelayMs(reply));
         await fetch(`${evoUrl}/message/sendText/${encodeURIComponent(evoInstance)}`, {
           method: "POST",
           headers: { apikey: evoApiKey, "Content-Type": "application/json" },
-          body: JSON.stringify({ number: recipientPhone, text: reply }),
+          body: JSON.stringify({ number: cleaned, text: reply }),
         });
       }
     } else {
@@ -171,12 +175,20 @@ async function handleCsatButton(
   const provider: "meta" | "evolution" = whatsappConfig.provider === "evolution" ? "evolution" : "meta";
   const sendText = async (to: string, body: string) => {
     try {
-      if (provider === "evolution" && whatsappConfig.evolution?.instance_url && whatsappConfig.evolution?.api_key && whatsappConfig.evolution?.instance_name) {
-        await fetch(`${whatsappConfig.evolution.instance_url}/message/sendText/${encodeURIComponent(whatsappConfig.evolution.instance_name)}`, {
-          method: "POST",
-          headers: { apikey: whatsappConfig.evolution.api_key, "Content-Type": "application/json" },
-          body: JSON.stringify({ number: to, text: body }),
-        });
+      if (provider === "evolution") {
+        const url = (whatsappConfig.evolution?.instance_url || Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "");
+        const inst = whatsappConfig.evolution?.instance_name;
+        const key = whatsappConfig.evolution?.api_key || Deno.env.get("EVOLUTION_API_KEY") || "";
+        const cleaned = cleanPhoneNumber(to);
+        if (url && inst && key && cleaned) {
+          await sendPresence(url, inst, key, cleaned);
+          await sleep(humanTypingDelayMs(body));
+          await fetch(`${url}/message/sendText/${encodeURIComponent(inst)}`, {
+            method: "POST",
+            headers: { apikey: key, "Content-Type": "application/json" },
+            body: JSON.stringify({ number: cleaned, text: body }),
+          });
+        }
       } else if (provider === "meta") {
         const token = whatsappConfig.meta?.access_token || whatsappConfig.access_token;
         const phoneNumberId = whatsappConfig.meta?.phone_number_id;
@@ -237,14 +249,17 @@ async function sendWaText(
     whatsappConfig.provider === "evolution" ? "evolution" : "meta";
   try {
     if (provider === "evolution") {
-      const url = whatsappConfig.evolution?.instance_url;
+      const url = (whatsappConfig.evolution?.instance_url || Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "");
       const inst = whatsappConfig.evolution?.instance_name;
-      const key = whatsappConfig.evolution?.api_key;
-      if (!url || !inst || !key) return;
+      const key = whatsappConfig.evolution?.api_key || Deno.env.get("EVOLUTION_API_KEY") || "";
+      const cleaned = cleanPhoneNumber(to);
+      if (!url || !inst || !key || !cleaned) return;
+      await sendPresence(url, inst, key, cleaned);
+      await sleep(humanTypingDelayMs(text));
       await fetch(`${url}/message/sendText/${encodeURIComponent(inst)}`, {
         method: "POST",
         headers: { apikey: key, "Content-Type": "application/json" },
-        body: JSON.stringify({ number: to, text }),
+        body: JSON.stringify({ number: cleaned, text }),
       });
     } else {
       const token = whatsappConfig.meta?.access_token || whatsappConfig.access_token;
@@ -271,15 +286,18 @@ async function sendWaButtons(
     whatsappConfig.provider === "evolution" ? "evolution" : "meta";
   try {
     if (provider === "evolution") {
-      const url = whatsappConfig.evolution?.instance_url;
+      const url = (whatsappConfig.evolution?.instance_url || Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "");
       const inst = whatsappConfig.evolution?.instance_name;
-      const key = whatsappConfig.evolution?.api_key;
-      if (!url || !inst || !key) return;
+      const key = whatsappConfig.evolution?.api_key || Deno.env.get("EVOLUTION_API_KEY") || "";
+      const cleaned = cleanPhoneNumber(to);
+      if (!url || !inst || !key || !cleaned) return;
+      await sendPresence(url, inst, key, cleaned);
+      await sleep(humanTypingDelayMs(text));
       await fetch(`${url}/message/sendButtons/${encodeURIComponent(inst)}`, {
         method: "POST",
         headers: { apikey: key, "Content-Type": "application/json" },
         body: JSON.stringify({
-          number: to, title: " ", description: text, footer: " ",
+          number: cleaned, title: " ", description: text, footer: " ",
           buttons: buttons.map((b) => ({ type: "reply", displayText: b.title, id: b.id })),
         }),
       });
@@ -609,7 +627,9 @@ async function attachMediaToActiveBooking(
 async function fetchEvolutionMedia(
   cfg: Record<string, any>, msg: any,
 ): Promise<{ bytes: Uint8Array; mime: string } | null> {
-  const url = cfg?.evolution?.instance_url; const inst = cfg?.evolution?.instance_name; const key = cfg?.evolution?.api_key;
+  const url = (cfg?.evolution?.instance_url || Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "");
+  const inst = cfg?.evolution?.instance_name;
+  const key = cfg?.evolution?.api_key || Deno.env.get("EVOLUTION_API_KEY") || "";
   if (!url || !inst || !key) return null;
   const mediaMsg = msg?.imageMessage || msg?.audioMessage || msg?.videoMessage || msg?.documentMessage;
   if (!mediaMsg) return null;

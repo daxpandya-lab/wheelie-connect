@@ -23,6 +23,9 @@ export default function WhatsAppConfig() {
   const [provider, setProvider] = useState<"meta" | "evolution">("meta");
   const [scanOpen, setScanOpen] = useState(false);
   const [evolutionStatus, setEvolutionStatus] = useState<string>("disconnected");
+  // Persisted-active gateway (nullable) — the tenant's currently live pipeline.
+  // Drives the mutual-exclusion overlay + dynamic connection badge.
+  const [activeGateway, setActiveGateway] = useState<"meta" | "evolution" | null>(null);
   const [form, setForm] = useState({
     phoneNumberId: "",
     wabaId: "",
@@ -56,7 +59,15 @@ export default function WhatsAppConfig() {
       .eq("id", tenantId!)
       .single();
     const cfg = (tenantRow?.whatsapp_config as Record<string, any>) || {};
-    setProvider(cfg.provider === "evolution" ? "evolution" : "meta");
+    const persisted: "meta" | "evolution" =
+      (cfg.active_gateway === "meta" || cfg.active_gateway === "evolution")
+        ? cfg.active_gateway
+        : (cfg.provider === "evolution" ? "evolution" : "meta");
+    setProvider(persisted);
+    // Only mark a gateway as "active" when it actually has a live connection.
+    const metaLive = !!(sessionData?.is_active && (cfg.meta?.phone_number_id || sessionData?.phone_number_id));
+    const evoLive = cfg.evolution?.status === "connected";
+    setActiveGateway(persisted === "meta" ? (metaLive ? "meta" : null) : (evoLive ? "evolution" : null));
     setEvolutionStatus(cfg.evolution?.status || "disconnected");
     setForm({
       phoneNumberId: sessionData?.phone_number_id || cfg.meta?.phone_number_id || "",
@@ -108,6 +119,7 @@ export default function WhatsAppConfig() {
     const nextConfig: Record<string, any> = {
       ...existingConfig,
       provider,
+      active_gateway: provider, // exclusive gateway marker consumed by badges + guards
       active_since: new Date().toISOString(),
     };
 
@@ -195,10 +207,19 @@ export default function WhatsAppConfig() {
                 <CardDescription>Connect your WhatsApp Business Account</CardDescription>
               </div>
             </div>
-            <Badge variant={session?.is_active ? "default" : "secondary"} className="gap-1">
-              {session?.is_active ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-              {session?.is_active ? "Connected" : "Not Connected"}
-            </Badge>
+            {activeGateway === "meta" ? (
+              <Badge className="gap-1 bg-emerald-600 hover:bg-emerald-600 text-white">
+                <Wifi className="w-3 h-3" /> WhatsApp Meta API Connected
+              </Badge>
+            ) : activeGateway === "evolution" ? (
+              <Badge className="gap-1 bg-emerald-600 hover:bg-emerald-600 text-white">
+                <Wifi className="w-3 h-3" /> Evolution WhatsApp Api Connected
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="gap-1">
+                <WifiOff className="w-3 h-3" /> Not Connected
+              </Badge>
+            )}
           </div>
         </CardHeader>
       </Card>
@@ -286,6 +307,7 @@ export default function WhatsAppConfig() {
               type="button"
               variant={provider === "meta" ? "default" : "outline"}
               onClick={() => setProvider("meta")}
+              disabled={activeGateway === "evolution"}
             >
               Official Meta API
             </Button>
@@ -293,6 +315,7 @@ export default function WhatsAppConfig() {
               type="button"
               variant={provider === "evolution" ? "default" : "outline"}
               onClick={() => setProvider("evolution")}
+              disabled={activeGateway === "meta"}
             >
               Evolution API
             </Button>
@@ -301,7 +324,21 @@ export default function WhatsAppConfig() {
             🔒 Exclusive: only one gateway can be active per dealership. Selecting a provider disables the inactive form; on save, the other provider's credentials are archived and stop serving traffic.
           </p>
 
+          {/* Mutual-exclusion overlay: when one gateway is live, block the other's UI. */}
+          {activeGateway && activeGateway !== provider && (
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
+              {activeGateway === "meta"
+                ? "Please disconnect your Official Meta API connection first to activate Evolution WhatsApp."
+                : "Please disconnect your Evolution WhatsApp connection first to activate Official Meta API."}
+            </div>
+          )}
 
+
+
+          <fieldset
+            disabled={!!activeGateway && activeGateway !== provider}
+            className={`space-y-4 ${activeGateway && activeGateway !== provider ? "opacity-50 pointer-events-none" : ""}`}
+          >
           {provider === "meta" ? (
             <>
               <p className="text-xs text-muted-foreground">
@@ -389,6 +426,7 @@ export default function WhatsAppConfig() {
               </div>
             </>
           )}
+          </fieldset>
 
           <Button onClick={handleSave} disabled={saving} className="w-full">
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}

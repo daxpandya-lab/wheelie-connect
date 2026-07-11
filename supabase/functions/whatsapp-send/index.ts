@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { cleanPhoneNumber, sendPresence, humanTypingDelayMs, sleep } from "../_shared/wa-evolution.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -71,10 +72,11 @@ Deno.serve(async (req) => {
     const metaAccessToken = waConfig.meta?.access_token || waConfig.access_token;
     let metaPhoneNumberId: string | null = waConfig.meta?.phone_number_id || null;
 
-    // Evolution credentials
-    const evoUrl: string | undefined = waConfig.evolution?.instance_url;
+    // Evolution credentials (fall back to platform master when tenant doesn't
+    // carry an api_key — Scan & Go provisioned instances use the master key).
+    const evoUrl: string | undefined = (waConfig.evolution?.instance_url || Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "") || undefined;
     const evoInstance: string | undefined = waConfig.evolution?.instance_name;
-    const evoApiKey: string | undefined = waConfig.evolution?.api_key;
+    const evoApiKey: string | undefined = waConfig.evolution?.api_key || Deno.env.get("EVOLUTION_API_KEY") || undefined;
 
     if (provider === "meta") {
       if (!metaAccessToken) {
@@ -239,13 +241,20 @@ Deno.serve(async (req) => {
           });
           result = await response.json();
         } else {
-          // Evolution API
+          // Evolution API — clean recipient number, prime "typing…" presence,
+          // then hold for a humanized 3–6s delay before firing the payload.
+          const cleaned = cleanPhoneNumber(msg.recipient_phone);
+          if (!cleaned) throw new Error("Invalid recipient phone");
+
+          await sendPresence(evoUrl!, evoInstance!, evoApiKey!, cleaned);
+          await sleep(humanTypingDelayMs(renderedContent ?? ""));
+
           let evoEndpoint: string;
           let evoBody: Record<string, unknown>;
           if (mediaUrl && mediaType) {
             evoEndpoint = `${evoUrl}/message/sendMedia/${encodeURIComponent(evoInstance!)}`;
             evoBody = {
-              number: msg.recipient_phone,
+              number: cleaned,
               mediatype: mediaType, // "image" | "video" | "document"
               media: mediaUrl,
               caption: renderedContent ?? "",
@@ -254,11 +263,11 @@ Deno.serve(async (req) => {
           } else {
             evoEndpoint = `${evoUrl}/message/sendText/${encodeURIComponent(evoInstance!)}`;
             evoBody = {
-              number: msg.recipient_phone,
+              number: cleaned,
               text: renderedContent ?? "",
             };
           }
-          console.log(`[BATCH-SEND][EVOLUTION] POST ${evoEndpoint}`);
+          console.log(`[BATCH-SEND][EVOLUTION] POST ${evoEndpoint} to=${cleaned}`);
           response = await fetch(evoEndpoint, {
             method: "POST",
             headers: {
