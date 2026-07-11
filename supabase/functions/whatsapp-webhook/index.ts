@@ -627,7 +627,9 @@ async function attachMediaToActiveBooking(
 async function fetchEvolutionMedia(
   cfg: Record<string, any>, msg: any,
 ): Promise<{ bytes: Uint8Array; mime: string } | null> {
-  const url = cfg?.evolution?.instance_url; const inst = cfg?.evolution?.instance_name; const key = cfg?.evolution?.api_key;
+  const url = (cfg?.evolution?.instance_url || Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "");
+  const inst = cfg?.evolution?.instance_name;
+  const key = cfg?.evolution?.api_key || Deno.env.get("EVOLUTION_API_KEY") || "";
   if (!url || !inst || !key) return null;
   const mediaMsg = msg?.imageMessage || msg?.audioMessage || msg?.videoMessage || msg?.documentMessage;
   if (!mediaMsg) return null;
