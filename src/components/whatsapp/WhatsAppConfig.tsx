@@ -18,6 +18,7 @@ export default function WhatsAppConfig() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [removing, setRemoving] = useState<"meta" | "evolution" | null>(null);
   const [copied, setCopied] = useState(false);
   const [flows, setFlows] = useState<Array<{ id: string; name: string; is_active: boolean }>>([]);
   const [activatingFlow, setActivatingFlow] = useState(false);
