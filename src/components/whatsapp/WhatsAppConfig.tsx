@@ -464,8 +464,60 @@ export default function WhatsAppConfig() {
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
             Save Configuration
           </Button>
+
+          {/* Remove Connection — only for the currently active gateway. Isolated
+              from user session logout: purges provider config + Evolution instance. */}
+          {activeGateway && activeGateway === provider && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 space-y-2 mt-2">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-destructive flex items-center gap-1.5">
+                    <Unplug className="w-4 h-4" />
+                    {activeGateway === "meta" ? "Remove Meta API Connection" : "Disconnect Evolution Instance"}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {activeGateway === "meta"
+                      ? "Clears stored phone number IDs, WABA IDs and access tokens from this dealership. The opposite gateway becomes selectable again."
+                      : "Logs the device out of WhatsApp, deletes the instance from the Evolution server, and frees the Meta API panel."}
+                  </p>
+                </div>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" size="sm" disabled={!!removing}>
+                      {removing === activeGateway ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unplug className="w-4 h-4 mr-1" />}
+                      Remove Connection
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        {activeGateway === "meta" ? "Remove Meta API connection?" : "Disconnect Evolution instance?"}
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {activeGateway === "meta"
+                          ? "All stored Meta credentials (phone number ID, WABA ID, access token) will be cleared for this dealership. Incoming Meta webhooks will stop routing here until you reconnect."
+                          : "The linked WhatsApp device will be logged out and the instance memory cleared from the Evolution server. You'll need to scan a new QR to reconnect."}
+                        <br /><br />
+                        This does not sign you out of DealerDoodle.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => handleRemove(activeGateway)}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Yes, remove connection
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
+
 
       <ScanGoModal
         open={scanOpen}
