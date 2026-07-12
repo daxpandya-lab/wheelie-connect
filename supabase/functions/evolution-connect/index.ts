@@ -242,6 +242,65 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
+    // Full removal: logout the device, delete the instance from Evolution,
+    // clear tenant config for this provider, and null out active_gateway so the
+    // opposite provider's UI is immediately un-blurred.
+    if (action === "remove" || action === "remove_evolution") {
+      const logoutRes = await evoFetch(`/instance/logout/${encodeURIComponent(instanceName)}`, { method: "DELETE" });
+      const deleteRes = await evoFetch(`/instance/delete/${encodeURIComponent(instanceName)}`, { method: "DELETE" });
+      console.log(`[evolution-connect] remove logout=${logoutRes.status} delete=${deleteRes.status}`);
+
+      const { data: tenantRow } = await supabase
+        .from("tenants").select("whatsapp_config").eq("id", tenant_id).single();
+      const cfg = (tenantRow?.whatsapp_config as Record<string, any>) || {};
+      const next: Record<string, any> = { ...cfg };
+      // Archive for audit, remove live block
+      if (cfg.evolution) {
+        next.evolution_archived = { ...cfg.evolution, removed_at: new Date().toISOString() };
+      }
+      delete next.evolution;
+      next.active_gateway = null;
+      if (next.provider === "evolution") delete next.provider;
+      await supabase.from("tenants").update({ whatsapp_config: next }).eq("id", tenant_id);
+
+      await supabase.from("whatsapp_instances")
+        .delete()
+        .eq("tenant_id", tenant_id);
+
+      return json({
+        ok: true,
+        logout_status: logoutRes.status,
+        delete_status: deleteRes.status,
+      });
+    }
+
+    // Meta removal: purge stored provider keys, phone number IDs, tokens.
+    if (action === "remove_meta") {
+      const { data: tenantRow } = await supabase
+        .from("tenants").select("whatsapp_config").eq("id", tenant_id).single();
+      const cfg = (tenantRow?.whatsapp_config as Record<string, any>) || {};
+      const next: Record<string, any> = { ...cfg };
+      if (cfg.meta || cfg.access_token) {
+        next.meta_archived = {
+          ...(cfg.meta || {}),
+          access_token_present: !!cfg.access_token,
+          removed_at: new Date().toISOString(),
+        };
+      }
+      delete next.meta;
+      delete next.access_token;
+      next.active_gateway = null;
+      if (next.provider === "meta") delete next.provider;
+      await supabase.from("tenants").update({ whatsapp_config: next }).eq("id", tenant_id);
+
+      // Deactivate the Meta session row so webhooks stop routing.
+      await supabase.from("whatsapp_sessions")
+        .update({ is_active: false, phone_number_id: null, waba_id: null })
+        .eq("tenant_id", tenant_id);
+
+      return json({ ok: true });
+    }
+
     return json({ error: "Unknown action" }, 400);
   } catch (err) {
     console.error("evolution-connect error:", err);

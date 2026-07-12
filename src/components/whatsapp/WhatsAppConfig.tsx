@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { MessageSquare, Copy, Check, Loader2, ExternalLink, Wifi, WifiOff, QrCode } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { MessageSquare, Copy, Check, Loader2, ExternalLink, Wifi, WifiOff, QrCode, Unplug } from "lucide-react";
 import { toast } from "sonner";
 import ScanGoModal from "./ScanGoModal";
 
@@ -17,6 +18,7 @@ export default function WhatsAppConfig() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [removing, setRemoving] = useState<"meta" | "evolution" | null>(null);
   const [copied, setCopied] = useState(false);
   const [flows, setFlows] = useState<Array<{ id: string; name: string; is_active: boolean }>>([]);
   const [activatingFlow, setActivatingFlow] = useState(false);
@@ -179,6 +181,36 @@ export default function WhatsAppConfig() {
     setSaving(false);
     toast.success("WhatsApp configuration saved!");
     fetchSession();
+  };
+
+  /**
+   * Remove Connection — hard reset for the specified gateway.
+   * Meta: purges keys/tokens from tenant config, deactivates whatsapp_sessions row.
+   * Evolution: server-side logs out + deletes the instance from the self-hosted
+   * Evolution server using the platform master key, then clears the tenant
+   * config. Either path resets active_gateway=null so the opposite provider's
+   * form immediately un-blurs on refetch.
+   */
+  const handleRemove = async (which: "meta" | "evolution") => {
+    if (!tenantId) return;
+    setRemoving(which);
+    try {
+      const { data, error } = await supabase.functions.invoke("evolution-connect", {
+        body: { action: which === "meta" ? "remove_meta" : "remove_evolution", tenant_id: tenantId },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success(which === "meta" ? "Meta API connection removed" : "Evolution instance removed");
+      // Reset local form so the cleared provider shows empty fields immediately
+      setForm((f) => which === "meta"
+        ? { ...f, phoneNumberId: "", wabaId: "", accessToken: "" }
+        : { ...f, evolutionUrl: "", evolutionApiKey: "", evolutionInstance: "" });
+      await fetchSession();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to remove connection");
+    } finally {
+      setRemoving(null);
+    }
   };
 
   const copyWebhookUrl = () => {
@@ -432,8 +464,60 @@ export default function WhatsAppConfig() {
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
             Save Configuration
           </Button>
+
+          {/* Remove Connection — only for the currently active gateway. Isolated
+              from user session logout: purges provider config + Evolution instance. */}
+          {activeGateway && activeGateway === provider && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 space-y-2 mt-2">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-destructive flex items-center gap-1.5">
+                    <Unplug className="w-4 h-4" />
+                    {activeGateway === "meta" ? "Remove Meta API Connection" : "Disconnect Evolution Instance"}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {activeGateway === "meta"
+                      ? "Clears stored phone number IDs, WABA IDs and access tokens from this dealership. The opposite gateway becomes selectable again."
+                      : "Logs the device out of WhatsApp, deletes the instance from the Evolution server, and frees the Meta API panel."}
+                  </p>
+                </div>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" size="sm" disabled={!!removing}>
+                      {removing === activeGateway ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unplug className="w-4 h-4 mr-1" />}
+                      Remove Connection
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        {activeGateway === "meta" ? "Remove Meta API connection?" : "Disconnect Evolution instance?"}
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {activeGateway === "meta"
+                          ? "All stored Meta credentials (phone number ID, WABA ID, access token) will be cleared for this dealership. Incoming Meta webhooks will stop routing here until you reconnect."
+                          : "The linked WhatsApp device will be logged out and the instance memory cleared from the Evolution server. You'll need to scan a new QR to reconnect."}
+                        <br /><br />
+                        This does not sign you out of DealerDoodle.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => handleRemove(activeGateway)}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Yes, remove connection
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
+
 
       <ScanGoModal
         open={scanOpen}
