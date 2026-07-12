@@ -183,6 +183,36 @@ export default function WhatsAppConfig() {
     fetchSession();
   };
 
+  /**
+   * Remove Connection — hard reset for the specified gateway.
+   * Meta: purges keys/tokens from tenant config, deactivates whatsapp_sessions row.
+   * Evolution: server-side logs out + deletes the instance from the self-hosted
+   * Evolution server using the platform master key, then clears the tenant
+   * config. Either path resets active_gateway=null so the opposite provider's
+   * form immediately un-blurs on refetch.
+   */
+  const handleRemove = async (which: "meta" | "evolution") => {
+    if (!tenantId) return;
+    setRemoving(which);
+    try {
+      const { data, error } = await supabase.functions.invoke("evolution-connect", {
+        body: { action: which === "meta" ? "remove_meta" : "remove_evolution", tenant_id: tenantId },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success(which === "meta" ? "Meta API connection removed" : "Evolution instance removed");
+      // Reset local form so the cleared provider shows empty fields immediately
+      setForm((f) => which === "meta"
+        ? { ...f, phoneNumberId: "", wabaId: "", accessToken: "" }
+        : { ...f, evolutionUrl: "", evolutionApiKey: "", evolutionInstance: "" });
+      await fetchSession();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to remove connection");
+    } finally {
+      setRemoving(null);
+    }
+  };
+
   const copyWebhookUrl = () => {
     navigator.clipboard.writeText(webhookUrl);
     setCopied(true);
