@@ -258,10 +258,17 @@ async function dispatchEvolution(
     }
     if (!r.ok) {
       const err = (await r.text()).slice(0, 400);
-      return { channel: "evolution", status: "failed", error: err };
+      console.error(
+        `[notify][EVO] FAILURE status=${r.status} url=${r.url} instance="${instance}" ` +
+        `to=${number} kind=${payload.kind} body=${err}`,
+      );
+      return { channel: "evolution", status: "failed", error: `${r.status}: ${err}` };
     }
     return { channel: "evolution", status: "sent" };
   } catch (e) {
+    console.error(
+      `[notify][EVO] fetch threw instance="${instance}" to=${number} kind=${payload.kind}:`, e,
+    );
     return { channel: "evolution", status: "failed", error: String(e).slice(0, 300) };
   }
 }
