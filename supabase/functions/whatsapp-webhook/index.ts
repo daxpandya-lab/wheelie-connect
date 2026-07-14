@@ -1497,14 +1497,20 @@ async function queueReply(
     let externalId: string | null = null;
 
     if (provider === "evolution") {
-      const evoUrl: string | undefined = cfg.evolution?.instance_url;
+      // Strict tenant-scoped instance resolution — never fall back to a generic
+      // string. Master API key is only used as apikey fallback (Scan & Go).
+      const evoUrl: string | undefined =
+        (cfg.evolution?.instance_url || Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "") || undefined;
       const evoInstance: string | undefined = cfg.evolution?.instance_name;
-      const evoApiKey: string | undefined = cfg.evolution?.api_key;
+      const evoApiKey: string | undefined =
+        cfg.evolution?.api_key || Deno.env.get("EVOLUTION_API_KEY") || undefined;
       if (!evoUrl || !evoInstance || !evoApiKey) {
-        console.warn(`[SEND][EVO] Missing Evolution config for tenant ${tenantId}`);
+        const missing = [!evoUrl && "instance_url", !evoInstance && "instance_name", !evoApiKey && "api_key"]
+          .filter(Boolean).join(",");
+        console.warn(`[SEND][EVO] Missing Evolution config for tenant ${tenantId}: ${missing}`);
         if (queuedMsg) {
           await supabase.from("whatsapp_message_queue")
-            .update({ status: "failed", error_message: "Evolution API not fully configured" })
+            .update({ status: "failed", error_message: `Evolution API not fully configured (${missing})` })
             .eq("id", queuedMsg.id);
         }
         return;
@@ -1520,14 +1526,53 @@ async function queueReply(
           payload.rows.map((r, i) => `${i + 1}. ${r.title}`).join("\n");
       }
 
-      const evoEndpoint = `${evoUrl.replace(/\/+$/, "")}/message/sendText/${encodeURIComponent(evoInstance)}`;
-      console.log(`[SEND][EVO] POST ${evoEndpoint} type=${payload.type}`);
-      response = await fetch(evoEndpoint, {
-        method: "POST",
-        headers: { apikey: evoApiKey, "Content-Type": "application/json" },
-        body: JSON.stringify({ number: recipientPhone, text: evoText }),
-      });
-      result = await response.json().catch(() => ({}));
+      // Baileys requires digits-only JID; passing "+91..." or spaced numbers → 400.
+      const cleanedNumber = cleanPhoneNumber(recipientPhone);
+      if (!cleanedNumber) {
+        console.error(`[SEND][EVO] Invalid recipient phone "${recipientPhone}" for tenant ${tenantId}`);
+        if (queuedMsg) {
+          await supabase.from("whatsapp_message_queue")
+            .update({ status: "failed", error_message: `Invalid recipient phone: ${recipientPhone}` })
+            .eq("id", queuedMsg.id);
+        }
+        return;
+      }
+
+      // Humanized presence + delay (anti-ban).
+      await sendPresence(evoUrl, evoInstance, evoApiKey, cleanedNumber);
+      await sleep(humanTypingDelayMs(evoText));
+
+      const evoEndpoint = `${evoUrl}/message/sendText/${encodeURIComponent(evoInstance)}`;
+      console.log(`[SEND][EVO] POST ${evoEndpoint} instance="${evoInstance}" to=${cleanedNumber} type=${payload.type}`);
+      try {
+        response = await fetch(evoEndpoint, {
+          method: "POST",
+          headers: { apikey: evoApiKey, "Content-Type": "application/json" },
+          body: JSON.stringify({ number: cleanedNumber, text: evoText }),
+        });
+      } catch (fetchErr) {
+        console.error(`[SEND][EVO] fetch threw for ${evoEndpoint}:`, fetchErr);
+        throw fetchErr;
+      }
+
+      // Read raw body first so we can surface Evolution's error text on non-2xx.
+      const rawBody = await response.text();
+      if (!response.ok) {
+        console.error(
+          `[SEND][EVO] FAILURE status=${response.status} endpoint=${evoEndpoint} ` +
+          `instance="${evoInstance}" to=${cleanedNumber} body=${rawBody.slice(0, 800)}`,
+        );
+        if (queuedMsg) {
+          await supabase.from("whatsapp_message_queue")
+            .update({
+              status: "failed",
+              error_message: `Evolution ${response.status}: ${rawBody.slice(0, 500)}`,
+            })
+            .eq("id", queuedMsg.id);
+        }
+        return;
+      }
+      try { result = rawBody ? JSON.parse(rawBody) : {}; } catch { result = {}; }
       externalId = result?.key?.id || result?.id || null;
     } else {
       const accessToken = cfg.meta?.access_token || cfg.access_token;
