@@ -966,23 +966,67 @@ Deno.serve(async (req) => {
       const entries = body.object === "whatsapp_business_account" ? body.entry : [];
 
       for (const entry of entries) {
+        // Meta payload also carries the WABA id at entry.id — use it as a fallback
+        // when phone_number_id doesn't uniquely resolve a tenant.
+        const wabaIdFromEntry: string | null = entry?.id ? String(entry.id) : null;
         for (const change of entry.changes) {
           if (change.field !== "messages") continue;
           const value = change.value;
-          const phoneNumberId = value.metadata.phone_number_id;
+          const phoneNumberId = value?.metadata?.phone_number_id
+            ? String(value.metadata.phone_number_id)
+            : null;
+          const wabaId = value?.metadata?.display_phone_number
+            ? wabaIdFromEntry
+            : wabaIdFromEntry;
 
-          const allowed = await checkRateLimit(supabase, `webhook:${phoneNumberId}`, 120, 60);
-          if (!allowed) { console.warn(`Rate limited: ${phoneNumberId}`); continue; }
+          if (!phoneNumberId && !wabaId) {
+            console.error("[meta-webhook] payload missing phone_number_id AND waba id; cannot resolve tenant");
+            continue;
+          }
 
-          const { data: session } = await supabase
-            .from("whatsapp_sessions")
-            .select("id, tenant_id")
-            .eq("phone_number_id", phoneNumberId)
-            .eq("is_active", true)
-            .single();
+          const rlKey = `webhook:${phoneNumberId || wabaId}`;
+          const allowed = await checkRateLimit(supabase, rlKey, 120, 60);
+          if (!allowed) { console.warn(`Rate limited: ${rlKey}`); continue; }
 
-          if (!session) { console.error(`No tenant for phone_number_id: ${phoneNumberId}`); continue; }
+          // Strict multi-tenant routing: resolve dealer by Meta phone_number_id first,
+          // then fall back to WABA id. Only sessions marked is_active are eligible.
+          let session: { id: string; tenant_id: string } | null = null;
+          if (phoneNumberId) {
+            const { data } = await supabase
+              .from("whatsapp_sessions")
+              .select("id, tenant_id")
+              .eq("phone_number_id", phoneNumberId)
+              .eq("is_active", true)
+              .maybeSingle();
+            session = data as any;
+          }
+          if (!session && wabaId) {
+            const { data } = await supabase
+              .from("whatsapp_sessions")
+              .select("id, tenant_id")
+              .eq("waba_id", wabaId)
+              .eq("is_active", true)
+              .maybeSingle();
+            session = data as any;
+          }
+
+          if (!session) {
+            console.error(`[meta-webhook] No active tenant for phone_number_id=${phoneNumberId} waba_id=${wabaId}`);
+            continue;
+          }
           const tenantId = session.tenant_id;
+
+          // Extra guard: only process if the tenant's active gateway is Meta.
+          // Prevents routing when a dealer switched to Evolution but the old
+          // session row was left behind.
+          const { data: tenantGate } = await supabase
+            .from("tenants").select("whatsapp_config").eq("id", tenantId).maybeSingle();
+          const gateCfg = (tenantGate?.whatsapp_config as Record<string, any>) || {};
+          const gateActive = gateCfg.active_gateway || gateCfg.provider;
+          if (gateActive && gateActive !== "meta") {
+            console.warn(`[meta-webhook] Tenant ${tenantId} active_gateway=${gateActive}; ignoring Meta payload for phone_number_id=${phoneNumberId}`);
+            continue;
+          }
 
           await supabase.from("whatsapp_sessions")
             .update({ last_webhook_at: new Date().toISOString() })
