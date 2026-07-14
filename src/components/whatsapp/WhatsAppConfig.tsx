@@ -46,30 +46,33 @@ export default function WhatsAppConfig() {
 
   const fetchSession = async () => {
     if (!tenantId) { setLoading(false); return; }
-    const [{ data: sessionData }, { data: flowsData }] = await Promise.all([
-      supabase.from("whatsapp_sessions").select("*").eq("tenant_id", tenantId).single(),
+    // Strict per-tenant fetch. maybeSingle() so a missing row (fresh dealer or
+    // just-removed connection) resolves to null instead of throwing — otherwise
+    // the badge could get stuck on stale local state.
+    const [{ data: sessionData }, { data: flowsData }, { data: tenantRow }] = await Promise.all([
+      supabase.from("whatsapp_sessions").select("*").eq("tenant_id", tenantId).maybeSingle(),
       supabase.from("chatbot_flows").select("id, name, is_active").eq("tenant_id", tenantId).order("name"),
+      supabase.from("tenants").select("whatsapp_config").eq("id", tenantId).maybeSingle(),
     ]);
 
-    if (sessionData) {
-      setSession(sessionData);
-    }
-    // Load whatsapp_config to populate provider + creds
-    const { data: tenantRow } = await supabase
-      .from("tenants")
-      .select("whatsapp_config")
-      .eq("id", tenantId!)
-      .single();
+    setSession(sessionData || null);
     const cfg = (tenantRow?.whatsapp_config as Record<string, any>) || {};
     const persisted: "meta" | "evolution" =
       (cfg.active_gateway === "meta" || cfg.active_gateway === "evolution")
         ? cfg.active_gateway
         : (cfg.provider === "evolution" ? "evolution" : "meta");
     setProvider(persisted);
-    // Only mark a gateway as "active" when it actually has a live connection.
-    const metaLive = !!(sessionData?.is_active && (cfg.meta?.phone_number_id || sessionData?.phone_number_id));
-    const evoLive = cfg.evolution?.status === "connected";
-    setActiveGateway(persisted === "meta" ? (metaLive ? "meta" : null) : (evoLive ? "evolution" : null));
+    // A gateway is only "live" for THIS tenant when all three hold:
+    //   (a) it is the persisted active gateway on the tenant row,
+    //   (b) the tenant still has non-empty provider credentials, and
+    //   (c) for Meta, whatsapp_sessions row is is_active with a phone_number_id.
+    // This guarantees that when a dealer removes credentials, their badge flips
+    // to "Not Connected" regardless of any other tenant's state.
+    const metaHasCreds = !!(cfg.meta?.phone_number_id || sessionData?.phone_number_id);
+    const metaSessionLive = !!(sessionData?.is_active && sessionData?.tenant_id === tenantId);
+    const metaLive = cfg.active_gateway === "meta" && metaHasCreds && metaSessionLive;
+    const evoLive = cfg.active_gateway === "evolution" && cfg.evolution?.status === "connected";
+    setActiveGateway(metaLive ? "meta" : evoLive ? "evolution" : null);
     setEvolutionStatus(cfg.evolution?.status || "disconnected");
     setForm({
       phoneNumberId: sessionData?.phone_number_id || cfg.meta?.phone_number_id || "",
