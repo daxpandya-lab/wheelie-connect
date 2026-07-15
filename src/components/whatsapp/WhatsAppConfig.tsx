@@ -386,7 +386,7 @@ export default function WhatsAppConfig() {
 
           {/* Remove Connection — only for the currently active gateway. Isolated
               from user session logout: purges provider config + Evolution instance. */}
-          {activeGateway && activeGateway === provider && (
+          {activeGateway && (
             <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 space-y-2 mt-2">
               <div className="flex items-start justify-between gap-3">
                 <div>
