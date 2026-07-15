@@ -1151,7 +1151,8 @@ Deno.serve(async (req) => {
                 const { data: tenantCfg } = await supabase
                   .from("tenants").select("whatsapp_config").eq("id", tenantId).maybeSingle();
                 const accessToken = (tenantCfg?.whatsapp_config as any)?.meta?.access_token
-                  || (tenantCfg?.whatsapp_config as any)?.access_token;
+                  || (tenantCfg?.whatsapp_config as any)?.access_token
+                  || Deno.env.get("META_PERMANENT_TOKEN");
                 if (accessToken) {
                   const fetched = await fetchMetaMedia(accessToken, metaMedia.id);
                   if (fetched) {
