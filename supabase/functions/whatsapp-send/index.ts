@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
     const provider: "meta" | "evolution" = waConfig.provider === "evolution" ? "evolution" : "meta";
 
     // Meta credentials (with legacy fallbacks)
-    const metaAccessToken = waConfig.meta?.access_token || waConfig.access_token;
+    const metaAccessToken = waConfig.meta?.access_token || waConfig.access_token || Deno.env.get("META_PERMANENT_TOKEN");
     let metaPhoneNumberId: string | null = waConfig.meta?.phone_number_id || null;
 
     // Evolution credentials (fall back to platform master when tenant doesn't

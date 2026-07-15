@@ -118,7 +118,7 @@ async function dispatchMeta(
   ctx: NotifyContext,
   payload: NotifyPayload,
 ): Promise<NotifyResult> {
-  const token = wa.meta?.access_token || wa.access_token;
+  const token = wa.meta?.access_token || wa.access_token || Deno.env.get("META_PERMANENT_TOKEN");
   const phoneNumberId = wa.meta?.phone_number_id;
   if (!token || !phoneNumberId || !ctx.phoneNumber) {
     return { channel: "meta", status: "skipped", error: "meta not configured" };
