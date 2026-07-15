@@ -440,12 +440,8 @@ export default function WhatsAppConfig() {
       </Card>
 
 
-      <ScanGoModal
-        open={scanOpen}
-        onOpenChange={setScanOpen}
-        tenantId={tenantId}
-        onConnected={() => { setProvider("evolution"); fetchSession(); }}
-      />
+      {/* Evolution "Scan & Go" retired — Meta Cloud API is now the sole gateway. */}
+
 
       {/* Last Activity */}
       {session?.last_webhook_at && (
