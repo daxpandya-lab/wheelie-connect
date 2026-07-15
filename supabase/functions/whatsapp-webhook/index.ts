@@ -110,7 +110,7 @@ async function handleEstimateButton(
         });
       }
     } else {
-      const accessToken = whatsappConfig.meta?.access_token || whatsappConfig.access_token;
+      const accessToken = whatsappConfig.meta?.access_token || whatsappConfig.access_token || Deno.env.get("META_PERMANENT_TOKEN");
       const phoneNumberId = whatsappConfig.meta?.phone_number_id;
       if (accessToken && phoneNumberId) {
         await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
@@ -190,7 +190,7 @@ async function handleCsatButton(
           });
         }
       } else if (provider === "meta") {
-        const token = whatsappConfig.meta?.access_token || whatsappConfig.access_token;
+        const token = whatsappConfig.meta?.access_token || whatsappConfig.access_token || Deno.env.get("META_PERMANENT_TOKEN");
         const phoneNumberId = whatsappConfig.meta?.phone_number_id;
         if (token && phoneNumberId) {
           await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
@@ -262,7 +262,7 @@ async function sendWaText(
         body: JSON.stringify({ number: cleaned, text }),
       });
     } else {
-      const token = whatsappConfig.meta?.access_token || whatsappConfig.access_token;
+      const token = whatsappConfig.meta?.access_token || whatsappConfig.access_token || Deno.env.get("META_PERMANENT_TOKEN");
       const pnid = whatsappConfig.meta?.phone_number_id;
       if (!token || !pnid) return;
       await fetch(`https://graph.facebook.com/v21.0/${pnid}/messages`, {
@@ -302,7 +302,7 @@ async function sendWaButtons(
         }),
       });
     } else {
-      const token = whatsappConfig.meta?.access_token || whatsappConfig.access_token;
+      const token = whatsappConfig.meta?.access_token || whatsappConfig.access_token || Deno.env.get("META_PERMANENT_TOKEN");
       const pnid = whatsappConfig.meta?.phone_number_id;
       if (!token || !pnid) return;
       await fetch(`https://graph.facebook.com/v21.0/${pnid}/messages`, {
@@ -1151,7 +1151,8 @@ Deno.serve(async (req) => {
                 const { data: tenantCfg } = await supabase
                   .from("tenants").select("whatsapp_config").eq("id", tenantId).maybeSingle();
                 const accessToken = (tenantCfg?.whatsapp_config as any)?.meta?.access_token
-                  || (tenantCfg?.whatsapp_config as any)?.access_token;
+                  || (tenantCfg?.whatsapp_config as any)?.access_token
+                  || Deno.env.get("META_PERMANENT_TOKEN");
                 if (accessToken) {
                   const fetched = await fetchMetaMedia(accessToken, metaMedia.id);
                   if (fetched) {
@@ -1619,7 +1620,7 @@ async function queueReply(
       try { result = rawBody ? JSON.parse(rawBody) : {}; } catch { result = {}; }
       externalId = result?.key?.id || result?.id || null;
     } else {
-      const accessToken = cfg.meta?.access_token || cfg.access_token;
+      const accessToken = cfg.meta?.access_token || cfg.access_token || Deno.env.get("META_PERMANENT_TOKEN");
       if (!accessToken) { console.warn(`[SEND][META] No access token for tenant ${tenantId}`); return; }
 
       const { data: session } = await supabase.from("whatsapp_sessions")

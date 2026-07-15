@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { MessageSquare, Copy, Check, Loader2, ExternalLink, Wifi, WifiOff, QrCode, Unplug } from "lucide-react";
 import { toast } from "sonner";
-import ScanGoModal from "./ScanGoModal";
+// ScanGoModal (Evolution QR flow) retired — Meta Cloud API is the sole gateway.
 
 export default function WhatsAppConfig() {
   const { tenantId } = useAuth();
@@ -23,7 +23,7 @@ export default function WhatsAppConfig() {
   const [flows, setFlows] = useState<Array<{ id: string; name: string; is_active: boolean }>>([]);
   const [activatingFlow, setActivatingFlow] = useState(false);
   const [provider, setProvider] = useState<"meta" | "evolution">("meta");
-  const [scanOpen, setScanOpen] = useState(false);
+  
   const [evolutionStatus, setEvolutionStatus] = useState<string>("disconnected");
   // Persisted-active gateway (nullable) — the tenant's currently live pipeline.
   // Drives the mutual-exclusion overlay + dynamic connection badge.
@@ -57,11 +57,9 @@ export default function WhatsAppConfig() {
 
     setSession(sessionData || null);
     const cfg = (tenantRow?.whatsapp_config as Record<string, any>) || {};
-    const persisted: "meta" | "evolution" =
-      (cfg.active_gateway === "meta" || cfg.active_gateway === "evolution")
-        ? cfg.active_gateway
-        : (cfg.provider === "evolution" ? "evolution" : "meta");
-    setProvider(persisted);
+    // Evolution has been retired: Meta Cloud API is the sole gateway.
+    setProvider("meta");
+
     // A gateway is only "live" for THIS tenant when all three hold:
     //   (a) it is the persisted active gateway on the tenant row,
     //   (b) the tenant still has non-empty provider credentials, and
@@ -328,140 +326,58 @@ export default function WhatsAppConfig() {
 
 
 
-      {/* WhatsApp Gateway Provider */}
+      {/* WhatsApp Gateway — Meta Cloud API */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm">Primary Gateway for Chatbot</CardTitle>
+          <CardTitle className="text-sm">WhatsApp Gateway (Meta Cloud API)</CardTitle>
           <CardDescription>
-            Choose which provider receives webhooks and sends replies for this tenant's chatbot.
+            This dealership sends and receives WhatsApp messages via the Official Meta Cloud API.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              type="button"
-              variant={provider === "meta" ? "default" : "outline"}
-              onClick={() => setProvider("meta")}
-              disabled={activeGateway === "evolution"}
-            >
-              Official Meta API
-            </Button>
-            <Button
-              type="button"
-              variant={provider === "evolution" ? "default" : "outline"}
-              onClick={() => setProvider("evolution")}
-              disabled={activeGateway === "meta"}
-            >
-              Evolution API
-            </Button>
-          </div>
-          <p className="text-[11px] text-muted-foreground">
-            🔒 Exclusive: only one gateway can be active per dealership. Selecting a provider disables the inactive form; on save, the other provider's credentials are archived and stop serving traffic.
-          </p>
-
-          {/* Mutual-exclusion overlay: when one gateway is live, block the other's UI. */}
-          {activeGateway && activeGateway !== provider && (
+          {activeGateway === "evolution" && (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
-              {activeGateway === "meta"
-                ? "Please disconnect your Official Meta API connection first to activate Evolution WhatsApp."
-                : "Please disconnect your Evolution WhatsApp connection first to activate Official Meta API."}
+              Your previous Evolution connection is being retired. Remove it below and enter your Meta credentials to continue.
             </div>
           )}
 
-
-
-          <fieldset
-            disabled={!!activeGateway && activeGateway !== provider}
-            className={`space-y-4 ${activeGateway && activeGateway !== provider ? "opacity-50 pointer-events-none" : ""}`}
-          >
-          {provider === "meta" ? (
-            <>
-              <p className="text-xs text-muted-foreground">
-                Get these values from your{" "}
-                <a href="https://developers.facebook.com" target="_blank" rel="noopener" className="text-primary hover:underline inline-flex items-center gap-1">
-                  Meta Developer Console <ExternalLink className="w-3 h-3" />
-                </a>
+          <fieldset className="space-y-4">
+            <p className="text-xs text-muted-foreground">
+              Get these values from your{" "}
+              <a href="https://developers.facebook.com" target="_blank" rel="noopener" className="text-primary hover:underline inline-flex items-center gap-1">
+                Meta Developer Console <ExternalLink className="w-3 h-3" />
+              </a>
+            </p>
+            <div className="space-y-2">
+              <Label>Phone Number ID</Label>
+              <Input
+                value={form.phoneNumberId}
+                onChange={(e) => setForm({ ...form, phoneNumberId: e.target.value })}
+                placeholder="e.g., 123456789012345"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>WhatsApp Business Account ID (optional)</Label>
+              <Input
+                value={form.wabaId}
+                onChange={(e) => setForm({ ...form, wabaId: e.target.value })}
+                placeholder="e.g., 987654321098765"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Permanent Access Token (optional)</Label>
+              <Input
+                type="password"
+                value={form.accessToken}
+                onChange={(e) => setForm({ ...form, accessToken: e.target.value })}
+                placeholder={session ? "••••••••• (saved, enter new to override platform token)" : "Leave blank to use platform-managed token"}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Leave blank to inherit the platform's managed permanent token. Only override if you're using your own Meta app.
               </p>
-              <div className="space-y-2">
-                <Label>Phone Number ID</Label>
-                <Input
-                  value={form.phoneNumberId}
-                  onChange={(e) => setForm({ ...form, phoneNumberId: e.target.value })}
-                  placeholder="e.g., 123456789012345"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>WhatsApp Business Account ID (optional)</Label>
-                <Input
-                  value={form.wabaId}
-                  onChange={(e) => setForm({ ...form, wabaId: e.target.value })}
-                  placeholder="e.g., 987654321098765"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Permanent Access Token</Label>
-                <Input
-                  type="password"
-                  value={form.accessToken}
-                  onChange={(e) => setForm({ ...form, accessToken: e.target.value })}
-                  placeholder={session ? "••••••••• (saved, enter new to update)" : "Permanent access token"}
-                />
-              </div>
-            </>
-          ) : (
-            <>
-              {/* Scan & Go — platform-managed instance */}
-              <div className="rounded-lg border border-dashed p-4 space-y-3 bg-muted/30">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-medium flex items-center gap-2">
-                      <QrCode className="w-4 h-4" /> Scan & Go
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Quickest setup — scan a QR with your phone, no API keys needed.
-                    </p>
-                  </div>
-                  <Badge variant={evolutionStatus === "connected" ? "default" : "secondary"}>
-                    {evolutionStatus}
-                  </Badge>
-                </div>
-                <Button type="button" onClick={() => setScanOpen(true)} className="w-full">
-                  <QrCode className="w-4 h-4 mr-2" />
-                  {evolutionStatus === "connected" ? "Reconnect / Show QR" : "Scan QR Code"}
-                </Button>
-              </div>
-
-              <p className="text-xs text-muted-foreground pt-2">
-                Or connect your own self-hosted Evolution API instance below (advanced):
-              </p>
-              <div className="space-y-2">
-                <Label>Instance URL</Label>
-                <Input
-                  value={form.evolutionUrl}
-                  onChange={(e) => setForm({ ...form, evolutionUrl: e.target.value })}
-                  placeholder="https://evolution.yourdomain.com"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Instance Name</Label>
-                <Input
-                  value={form.evolutionInstance}
-                  onChange={(e) => setForm({ ...form, evolutionInstance: e.target.value })}
-                  placeholder="e.g., dealer1"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>API Key</Label>
-                <Input
-                  type="password"
-                  value={form.evolutionApiKey}
-                  onChange={(e) => setForm({ ...form, evolutionApiKey: e.target.value })}
-                  placeholder="Enter API key (leave blank to keep saved)"
-                />
-              </div>
-            </>
-          )}
+            </div>
           </fieldset>
+
 
           <Button onClick={handleSave} disabled={saving} className="w-full">
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -470,7 +386,7 @@ export default function WhatsAppConfig() {
 
           {/* Remove Connection — only for the currently active gateway. Isolated
               from user session logout: purges provider config + Evolution instance. */}
-          {activeGateway && activeGateway === provider && (
+          {activeGateway && (
             <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 space-y-2 mt-2">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -522,12 +438,8 @@ export default function WhatsAppConfig() {
       </Card>
 
 
-      <ScanGoModal
-        open={scanOpen}
-        onOpenChange={setScanOpen}
-        tenantId={tenantId}
-        onConnected={() => { setProvider("evolution"); fetchSession(); }}
-      />
+      {/* Evolution "Scan & Go" retired — Meta Cloud API is now the sole gateway. */}
+
 
       {/* Last Activity */}
       {session?.last_webhook_at && (
