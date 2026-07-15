@@ -57,11 +57,9 @@ export default function WhatsAppConfig() {
 
     setSession(sessionData || null);
     const cfg = (tenantRow?.whatsapp_config as Record<string, any>) || {};
-    const persisted: "meta" | "evolution" =
-      (cfg.active_gateway === "meta" || cfg.active_gateway === "evolution")
-        ? cfg.active_gateway
-        : (cfg.provider === "evolution" ? "evolution" : "meta");
-    setProvider(persisted);
+    // Evolution has been retired: Meta Cloud API is the sole gateway.
+    setProvider("meta");
+
     // A gateway is only "live" for THIS tenant when all three hold:
     //   (a) it is the persisted active gateway on the tenant row,
     //   (b) the tenant still has non-empty provider credentials, and
