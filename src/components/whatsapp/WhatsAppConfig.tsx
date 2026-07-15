@@ -23,7 +23,7 @@ export default function WhatsAppConfig() {
   const [flows, setFlows] = useState<Array<{ id: string; name: string; is_active: boolean }>>([]);
   const [activatingFlow, setActivatingFlow] = useState(false);
   const [provider, setProvider] = useState<"meta" | "evolution">("meta");
-  const [scanOpen, setScanOpen] = useState(false);
+  const [scanOpen, _setScanOpen] = useState(false); void scanOpen; void _setScanOpen;
   const [evolutionStatus, setEvolutionStatus] = useState<string>("disconnected");
   // Persisted-active gateway (nullable) — the tenant's currently live pipeline.
   // Drives the mutual-exclusion overlay + dynamic connection badge.
