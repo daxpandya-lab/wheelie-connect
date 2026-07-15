@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { MessageSquare, Copy, Check, Loader2, ExternalLink, Wifi, WifiOff, QrCode, Unplug } from "lucide-react";
 import { toast } from "sonner";
-import ScanGoModal from "./ScanGoModal";
+// ScanGoModal (Evolution QR flow) retired — Meta Cloud API is the sole gateway.
 
 export default function WhatsAppConfig() {
   const { tenantId } = useAuth();
