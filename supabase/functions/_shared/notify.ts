@@ -6,7 +6,7 @@
 //
 //   - booking_source === "web_bot"  -> insert into the chatbot timeline so
 //     it renders inside the embedded web chat / app webview.
-//   - Otherwise -> Meta Cloud API. If a templateName is provided, variables
+//   - Otherwise  -> Meta Cloud API. If a templateName is provided, variables
 //     are mapped to the official `template.components` parameter format.
 //     Otherwise an interactive button / text / document message is sent.
 
@@ -21,21 +21,20 @@ export interface NotifyButton {
 
 export interface NotifyPayload {
   kind: NotifyKind;
-  text: string;                    // body for text/buttons; caption for document
-  buttons?: NotifyButton[];        // for kind === "buttons"
+  text: string;
+  buttons?: NotifyButton[];
   document?: { url: string; filename: string };
-  // Meta template path
   templateName?: string;
-  templateLanguage?: string;       // default "en"
+  templateLanguage?: string;
   templateVariables?: Array<string | number>;
 }
 
 export interface NotifyContext {
   tenantId: string;
   bookingId?: string;
-  bookingSource?: string | null;   // service_bookings.booking_source
+  bookingSource?: string | null;
   phoneNumber?: string | null;
-  conversationId?: string | null;  // chatbot_conversations.id (web bot)
+  conversationId?: string | null;
 }
 
 export interface NotifyResult {
@@ -191,10 +190,6 @@ async function dispatchMeta(
   }
 }
 
-/**
- * Write a tracking row to outbound_communication_logs for telemetry.
- * Non-blocking: failures are logged but never bubble up to the caller.
- */
 export async function logOutbound(
   supabase: SupabaseClient,
   row: {
@@ -223,9 +218,6 @@ export async function logOutbound(
   }
 }
 
-/**
- * Substitute {{var}} placeholders in a string using the provided variables.
- */
 export function renderVariables(
   template: string,
   vars: Record<string, string | number | null | undefined>,
@@ -237,21 +229,14 @@ export function renderVariables(
   });
 }
 
-/**
- * Single entry-point used by every outbound flow. The caller does not need
- * to know which channel is active for the tenant.
- */
 export async function dispatchNotification(
   supabase: SupabaseClient,
   ctx: NotifyContext,
   payload: NotifyPayload,
 ): Promise<NotifyResult> {
-  // 1. Web bot wins when the booking originated from the embedded chat.
   if (isWebBot(ctx.bookingSource)) {
     return dispatchWebBot(supabase, ctx, payload);
   }
-
-  // 2. Otherwise route through Meta Cloud API (the sole supported gateway).
   const { data: tenant } = await supabase
     .from("tenants")
     .select("whatsapp_config, status")
