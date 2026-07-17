@@ -41,7 +41,13 @@ export interface NotifyContext {
   conversationId?: string | null;  // chatbot_conversations.id (web bot)
 }
 
-export interface NotifyResult {
+export type NotifyResult = {
+  channel: "web_bot" | "meta" | "none";
+  status: "sent" | "skipped" | "failed";
+  error?: string;
+};
+
+const _unused_result_placeholder = null;
   channel: "web_bot" | "meta" | "evolution" | "none";
   status: "sent" | "skipped" | "failed";
   error?: string;
@@ -194,85 +200,6 @@ async function dispatchMeta(
   }
 }
 
-async function dispatchEvolution(
-  wa: Record<string, any>,
-  ctx: NotifyContext,
-  payload: NotifyPayload,
-): Promise<NotifyResult> {
-  const { cleanPhoneNumber, sendPresence, humanTypingDelayMs, sleep } =
-    await import("./wa-evolution.ts");
-  const evoUrl = (wa.evolution?.instance_url || Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "");
-  const instance = wa.evolution?.instance_name;
-  // Fall back to the platform master key when the tenant row doesn't carry one
-  // (Scan & Go provisions with the master key server-side).
-  const apiKey = wa.evolution?.api_key || Deno.env.get("EVOLUTION_API_KEY") || "";
-  const number = cleanPhoneNumber(ctx.phoneNumber);
-  if (!evoUrl || !instance || !apiKey || !number) {
-    return { channel: "evolution", status: "skipped", error: "evolution not configured" };
-  }
-  const headers = { apikey: apiKey, "Content-Type": "application/json" };
-  const base = `${evoUrl}/message`;
-  const enc = encodeURIComponent(instance);
-
-  // Anti-ban: show typing indicator, then hold for a humanized delay.
-  await sendPresence(evoUrl, instance, apiKey, number);
-  await sleep(humanTypingDelayMs(payload.text));
-
-  try {
-    let r: Response;
-    if (payload.kind === "buttons" && payload.buttons?.length) {
-      r = await fetch(`${base}/sendButtons/${enc}`, {
-        method: "POST", headers,
-        body: JSON.stringify({
-          number,
-          title: " ",
-          description: payload.text,
-          footer: " ",
-          buttons: payload.buttons.map((b) => ({
-            type: "reply", displayText: b.title, id: b.id,
-          })),
-        }),
-      });
-    } else if (payload.kind === "document" && payload.document) {
-      if (payload.text) {
-        await fetch(`${base}/sendText/${enc}`, {
-          method: "POST", headers,
-          body: JSON.stringify({ number, text: payload.text }),
-        });
-      }
-      r = await fetch(`${base}/sendMedia/${enc}`, {
-        method: "POST", headers,
-        body: JSON.stringify({
-          number,
-          mediatype: "document",
-          fileName: payload.document.filename,
-          media: payload.document.url,
-          caption: payload.text,
-        }),
-      });
-    } else {
-      r = await fetch(`${base}/sendText/${enc}`, {
-        method: "POST", headers,
-        body: JSON.stringify({ number, text: payload.text }),
-      });
-    }
-    if (!r.ok) {
-      const err = (await r.text()).slice(0, 400);
-      console.error(
-        `[notify][EVO] FAILURE status=${r.status} url=${r.url} instance="${instance}" ` +
-        `to=${number} kind=${payload.kind} body=${err}`,
-      );
-      return { channel: "evolution", status: "failed", error: `${r.status}: ${err}` };
-    }
-    return { channel: "evolution", status: "sent" };
-  } catch (e) {
-    console.error(
-      `[notify][EVO] fetch threw instance="${instance}" to=${number} kind=${payload.kind}:`, e,
-    );
-    return { channel: "evolution", status: "failed", error: String(e).slice(0, 300) };
-  }
-}
-
 /**
  * Write a tracking row to outbound_communication_logs for telemetry.
  * Non-blocking: failures are logged but never bubble up to the caller.
@@ -333,7 +260,7 @@ export async function dispatchNotification(
     return dispatchWebBot(supabase, ctx, payload);
   }
 
-  // 2. Otherwise route through the tenant's configured WhatsApp provider.
+  // 2. Otherwise route through Meta Cloud API (the sole supported gateway).
   const { data: tenant } = await supabase
     .from("tenants")
     .select("whatsapp_config, status")
@@ -343,9 +270,5 @@ export async function dispatchNotification(
     return { channel: "none", status: "skipped", error: "tenant inactive" };
   }
   const wa = (tenant.whatsapp_config as Record<string, any>) || {};
-  const provider: "meta" | "evolution" =
-    wa.provider === "evolution" ? "evolution" : "meta";
-
-  if (provider === "evolution") return dispatchEvolution(wa, ctx, payload);
   return dispatchMeta(wa, ctx, payload);
 }
