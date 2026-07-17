@@ -128,15 +128,15 @@ Deno.serve(async (req) => {
     const results: any[] = [];
     for (const t of tenants || []) {
       const cfg = (t.whatsapp_config as any) || {};
-      const provider: Provider = cfg.provider === "evolution" ? "evolution" : "meta";
-      if (!cfg.provider) continue; // skip tenants that never configured a gateway
+      // Meta Cloud API is the sole supported gateway.
+      if (!cfg.meta?.phone_number_id && !cfg.access_token && !cfg.meta?.access_token) continue;
 
-      const health = provider === "meta" ? await checkMeta(cfg) : await checkEvolution(cfg);
+      const health = await checkMeta(cfg);
       const isSuccess = health.status === "operational";
 
       const { error: upErr } = await supabase.from("gateway_health_status").upsert({
         tenant_id: t.id,
-        provider,
+        provider: "meta",
         status: health.status,
         version: health.version,
         error_message: health.error_message,
@@ -146,12 +146,11 @@ Deno.serve(async (req) => {
         ...(isSuccess ? { last_success_at: new Date().toISOString() } : {}),
       }, { onConflict: "tenant_id,provider" });
 
-      // Notify super admins on hard failures
       if (health.action_required || health.status === "auth_failure" || health.status === "unreachable") {
         await supabase.from("notifications").insert({
           tenant_id: t.id,
           user_id: null,
-          title: `Gateway ${provider} — ${health.status}`,
+          title: `Gateway meta — ${health.status}`,
           message: `${t.name}: ${health.error_message || "check gateway"}`,
           type: health.status === "operational" ? "info" : "warning",
           source: "gateway_heartbeat",
@@ -159,7 +158,7 @@ Deno.serve(async (req) => {
         }).catch(() => {});
       }
 
-      results.push({ tenant_id: t.id, provider, ...health, upsert_error: upErr?.message });
+      results.push({ tenant_id: t.id, provider: "meta", ...health, upsert_error: upErr?.message });
     }
 
     return json({ ok: true, checked: results.length, results });

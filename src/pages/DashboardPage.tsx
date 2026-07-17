@@ -9,7 +9,6 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { format, isToday } from "date-fns";
 
 type GatewayStatus = {
-  provider: "meta" | "evolution";
   connected: boolean;
   detail: string;
 };
@@ -68,28 +67,16 @@ export default function DashboardPage() {
 
 
 
-    // Gateway connection status
+    // Gateway connection status — Meta Cloud API only.
     const wa = (tenantRes.data?.whatsapp_config as Record<string, any> | null) || {};
-    const provider: "meta" | "evolution" = wa.provider === "evolution" ? "evolution" : "meta";
-    if (provider === "evolution") {
-      const evo = wa.evolution || {};
-      const ok = !!(evo.instance_url && evo.instance_name && evo.api_key);
-      setGatewayStatus({
-        provider,
-        connected: ok,
-        detail: ok ? `Evolution · ${evo.instance_name}` : "Evolution API not fully configured",
-      });
-    } else {
-      const meta = wa.meta || {};
-      const token = meta.access_token || wa.access_token;
-      const phoneId = meta.phone_number_id;
-      const ok = !!(token && phoneId);
-      setGatewayStatus({
-        provider,
-        connected: ok,
-        detail: ok ? `Meta Cloud API · ${phoneId}` : "Meta token or Phone Number ID missing",
-      });
-    }
+    const meta = wa.meta || {};
+    const token = meta.access_token || wa.access_token;
+    const phoneId = meta.phone_number_id;
+    const ok = !!(token && phoneId);
+    setGatewayStatus({
+      connected: ok,
+      detail: ok ? `Meta Cloud API · ${phoneId}` : "Meta token or Phone Number ID missing",
+    });
 
     const bookings = bookingsRes.data || [];
     const leads = leadsRes.data || [];
@@ -191,8 +178,8 @@ export default function DashboardPage() {
               </p>
               <p className="text-xs text-muted-foreground">{gatewayStatus.detail}</p>
             </div>
-            <span className="text-xs px-2 py-1 rounded-full bg-secondary text-foreground capitalize">
-              {gatewayStatus.provider === "evolution" ? "Evolution API" : "Meta API"}
+            <span className="text-xs px-2 py-1 rounded-full bg-secondary text-foreground">
+              Meta API
             </span>
           </div>
         )}

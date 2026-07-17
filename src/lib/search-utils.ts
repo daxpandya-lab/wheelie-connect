@@ -25,14 +25,14 @@ export function matchesGlobalSearch(opts: {
 }
 
 // Booking source labels — "Web Bot" comes from the embeddable chat URL,
-// "WhatsApp Bot" comes from inbound Evolution / WhatsApp webhook bookings,
+// "WhatsApp Bot" comes from inbound WhatsApp webhook bookings,
 // anything explicitly "manual" is dealer-dashboard entry.
 export type BotSource = "manual" | "web_bot" | "whatsapp_bot" | "ai_bot";
 
 export function classifyBookingSource(raw: string | null | undefined): BotSource {
   const s = (raw || "").toLowerCase().trim();
   if (!s || s === "manual" || s === "dealer" || s === "dashboard") return "manual";
-  if (s.includes("whatsapp") || s.includes("evolution") || s.includes("wa_")) return "whatsapp_bot";
+  if (s.includes("whatsapp") || s.includes("wa_")) return "whatsapp_bot";
   if (s.includes("web") || s.includes("chatbot") || s.includes("ai")) return "web_bot";
   return "ai_bot";
 }
