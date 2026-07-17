@@ -6,12 +6,9 @@
 //
 //   - booking_source === "web_bot"  -> insert into the chatbot timeline so
 //     it renders inside the embedded web chat / app webview.
-//   - whatsapp_config.provider === "meta"      -> Meta Cloud API. If a
-//     templateName is provided, variables are mapped to the official
-//     `template.components` parameter format. Otherwise an interactive
-//     button / text / document message is sent.
-//   - whatsapp_config.provider === "evolution" -> Evolution API. Markdown
-//     text + native button arrays + sendMedia for documents.
+//   - Otherwise -> Meta Cloud API. If a templateName is provided, variables
+//     are mapped to the official `template.components` parameter format.
+//     Otherwise an interactive button / text / document message is sent.
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 
@@ -41,14 +38,8 @@ export interface NotifyContext {
   conversationId?: string | null;  // chatbot_conversations.id (web bot)
 }
 
-export type NotifyResult = {
+export interface NotifyResult {
   channel: "web_bot" | "meta" | "none";
-  status: "sent" | "skipped" | "failed";
-  error?: string;
-};
-
-const _unused_result_placeholder = null;
-  channel: "web_bot" | "meta" | "evolution" | "none";
   status: "sent" | "skipped" | "failed";
   error?: string;
 }
