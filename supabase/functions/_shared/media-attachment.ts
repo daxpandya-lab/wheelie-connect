@@ -2,7 +2,7 @@
 // Keep both files in sync — Deno edge functions can't import from src/.
 
 export type MediaKind = "image" | "audio" | "video" | "file";
-export type MediaSource = "web_chat" | "whatsapp_evolution" | "whatsapp_meta";
+export type MediaSource = "web_chat" | "whatsapp_meta";
 
 export interface MediaAttachment {
   url: string;

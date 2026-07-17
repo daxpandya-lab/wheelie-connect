@@ -142,7 +142,7 @@ export default function GatewayHealthWidget() {
             <div>
               <p className="font-medium">Provider update detected.</p>
               <p className="opacity-90 mt-0.5">
-                A mismatch or authentication failure was detected during the last heartbeat. Open the provider portal (Meta Developer Console or your Evolution instance) to reconcile credentials or update the API version.
+                A mismatch or authentication failure was detected during the last heartbeat. Open the Meta Developer Console to reconcile credentials or update the API version.
               </p>
             </div>
           </div>

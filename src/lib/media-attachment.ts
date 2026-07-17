@@ -14,7 +14,6 @@ export type MediaKind = "image" | "audio" | "video" | "file";
 /** Allowed provenance values — one per ingestion channel. */
 export type MediaSource =
   | "web_chat"            // PublicChatPage upload to `service-intake-media`
-  | "whatsapp_evolution"  // Evolution API webhook
   | "whatsapp_meta";      // Meta Cloud API webhook
 
 export interface MediaAttachment {

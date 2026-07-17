@@ -11,9 +11,6 @@ const json = (b: unknown, s = 200) =>
 
 // Track expected/current versions so we can flag provider deprecations.
 const META_EXPECTED_VERSION = "v21.0";
-const EVOLUTION_EXPECTED_MAJOR = 2;
-
-type Provider = "meta" | "evolution";
 
 interface HealthResult {
   status: "operational" | "degraded" | "action_required" | "auth_failure" | "unreachable";
@@ -57,57 +54,6 @@ async function checkMeta(cfg: any): Promise<HealthResult> {
   }
 }
 
-async function checkEvolution(cfg: any): Promise<HealthResult> {
-  const ev = cfg?.evolution || {};
-  const url = (ev.instance_url || Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "");
-  const key = ev.api_key || Deno.env.get("EVOLUTION_API_KEY") || "";
-  const inst = ev.instance_name;
-  if (!url || !key || !inst) {
-    return { status: "action_required", version: null, action_required: true,
-      error_message: "Evolution config incomplete", metadata: {} };
-  }
-  try {
-    // Version endpoint
-    let version: string | null = null;
-    try {
-      const vRes = await fetch(`${url}/`, { headers: { apikey: key } });
-      const vBody = await vRes.json().catch(() => ({}));
-      version = vBody?.version || vBody?.data?.version || null;
-    } catch { /* ignore */ }
-
-    const res = await fetch(`${url}/instance/connectionState/${encodeURIComponent(inst)}`, {
-      headers: { apikey: key },
-    });
-    if (res.status === 401 || res.status === 403) {
-      return { status: "auth_failure", version, action_required: true,
-        error_message: "Evolution API key rejected", metadata: { http: res.status } };
-    }
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      return { status: "unreachable", version, action_required: true,
-        error_message: body?.message || `HTTP ${res.status}`, metadata: { http: res.status } };
-    }
-    const state = body?.instance?.state || body?.state || "unknown";
-    const connected = state === "open" || state === "connected";
-
-    // Version deprecation detection
-    let actionRequired = false;
-    let statusFinal: HealthResult["status"] = connected ? "operational" : "degraded";
-    if (version) {
-      const major = parseInt(String(version).split(".")[0] || "0", 10);
-      if (major && major < EVOLUTION_EXPECTED_MAJOR) {
-        actionRequired = true;
-        statusFinal = "action_required";
-      }
-    }
-    return { status: statusFinal, version, action_required: actionRequired,
-      error_message: connected ? null : `Instance state: ${state}`,
-      metadata: { state } };
-  } catch (e) {
-    return { status: "unreachable", version: null, action_required: true,
-      error_message: String(e?.message || e), metadata: {} };
-  }
-}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -128,15 +74,15 @@ Deno.serve(async (req) => {
     const results: any[] = [];
     for (const t of tenants || []) {
       const cfg = (t.whatsapp_config as any) || {};
-      const provider: Provider = cfg.provider === "evolution" ? "evolution" : "meta";
-      if (!cfg.provider) continue; // skip tenants that never configured a gateway
+      // Meta Cloud API is the sole supported gateway.
+      if (!cfg.meta?.phone_number_id && !cfg.access_token && !cfg.meta?.access_token) continue;
 
-      const health = provider === "meta" ? await checkMeta(cfg) : await checkEvolution(cfg);
+      const health = await checkMeta(cfg);
       const isSuccess = health.status === "operational";
 
       const { error: upErr } = await supabase.from("gateway_health_status").upsert({
         tenant_id: t.id,
-        provider,
+        provider: "meta",
         status: health.status,
         version: health.version,
         error_message: health.error_message,
@@ -146,12 +92,11 @@ Deno.serve(async (req) => {
         ...(isSuccess ? { last_success_at: new Date().toISOString() } : {}),
       }, { onConflict: "tenant_id,provider" });
 
-      // Notify super admins on hard failures
       if (health.action_required || health.status === "auth_failure" || health.status === "unreachable") {
         await supabase.from("notifications").insert({
           tenant_id: t.id,
           user_id: null,
-          title: `Gateway ${provider} — ${health.status}`,
+          title: `Gateway meta — ${health.status}`,
           message: `${t.name}: ${health.error_message || "check gateway"}`,
           type: health.status === "operational" ? "info" : "warning",
           source: "gateway_heartbeat",
@@ -159,7 +104,7 @@ Deno.serve(async (req) => {
         }).catch(() => {});
       }
 
-      results.push({ tenant_id: t.id, provider, ...health, upsert_error: upErr?.message });
+      results.push({ tenant_id: t.id, provider: "meta", ...health, upsert_error: upErr?.message });
     }
 
     return json({ ok: true, checked: results.length, results });

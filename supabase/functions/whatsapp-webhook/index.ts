@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { buildMediaAttachment } from "../_shared/media-attachment.ts";
-import { cleanPhoneNumber, sendPresence, humanTypingDelayMs, sleep } from "../_shared/wa-evolution.ts";
+
 
 // ============================================================
 // LANGUAGE DETECTION — script-based with keyword fallback
@@ -93,37 +93,20 @@ async function handleEstimateButton(
     : "📞 Got it — our service advisor will call you shortly.";
 
 
-  const provider: "meta" | "evolution" = whatsappConfig.provider === "evolution" ? "evolution" : "meta";
   try {
-    if (provider === "evolution") {
-      const evoUrl = (whatsappConfig.evolution?.instance_url || Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "");
-      const evoInstance = whatsappConfig.evolution?.instance_name;
-      const evoApiKey = whatsappConfig.evolution?.api_key || Deno.env.get("EVOLUTION_API_KEY") || "";
-      const cleaned = cleanPhoneNumber(recipientPhone);
-      if (evoUrl && evoInstance && evoApiKey && cleaned) {
-        await sendPresence(evoUrl, evoInstance, evoApiKey, cleaned);
-        await sleep(humanTypingDelayMs(reply));
-        await fetch(`${evoUrl}/message/sendText/${encodeURIComponent(evoInstance)}`, {
-          method: "POST",
-          headers: { apikey: evoApiKey, "Content-Type": "application/json" },
-          body: JSON.stringify({ number: cleaned, text: reply }),
-        });
-      }
-    } else {
-      const accessToken = whatsappConfig.meta?.access_token || whatsappConfig.access_token || Deno.env.get("META_PERMANENT_TOKEN");
-      const phoneNumberId = whatsappConfig.meta?.phone_number_id;
-      if (accessToken && phoneNumberId) {
-        await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messaging_product: "whatsapp",
-            to: recipientPhone,
-            type: "text",
-            text: { body: reply },
-          }),
-        });
-      }
+    const accessToken = whatsappConfig.meta?.access_token || whatsappConfig.access_token || Deno.env.get("META_PERMANENT_TOKEN");
+    const phoneNumberId = whatsappConfig.meta?.phone_number_id;
+    if (accessToken && phoneNumberId) {
+      await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to: recipientPhone,
+          type: "text",
+          text: { body: reply },
+        }),
+      });
     }
   } catch (e) {
     console.error("[estimate-reply] failed to send", e);
@@ -172,36 +155,20 @@ async function handleCsatButton(
     reply = "We're sorry to hear that. Our service manager will reach out to make things right.";
   }
 
-  const provider: "meta" | "evolution" = whatsappConfig.provider === "evolution" ? "evolution" : "meta";
   const sendText = async (to: string, body: string) => {
     try {
-      if (provider === "evolution") {
-        const url = (whatsappConfig.evolution?.instance_url || Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "");
-        const inst = whatsappConfig.evolution?.instance_name;
-        const key = whatsappConfig.evolution?.api_key || Deno.env.get("EVOLUTION_API_KEY") || "";
-        const cleaned = cleanPhoneNumber(to);
-        if (url && inst && key && cleaned) {
-          await sendPresence(url, inst, key, cleaned);
-          await sleep(humanTypingDelayMs(body));
-          await fetch(`${url}/message/sendText/${encodeURIComponent(inst)}`, {
-            method: "POST",
-            headers: { apikey: key, "Content-Type": "application/json" },
-            body: JSON.stringify({ number: cleaned, text: body }),
-          });
-        }
-      } else if (provider === "meta") {
-        const token = whatsappConfig.meta?.access_token || whatsappConfig.access_token || Deno.env.get("META_PERMANENT_TOKEN");
-        const phoneNumberId = whatsappConfig.meta?.phone_number_id;
-        if (token && phoneNumberId) {
-          await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ messaging_product: "whatsapp", to, type: "text", text: { body } }),
-          });
-        }
+      const token = whatsappConfig.meta?.access_token || whatsappConfig.access_token || Deno.env.get("META_PERMANENT_TOKEN");
+      const phoneNumberId = whatsappConfig.meta?.phone_number_id;
+      if (token && phoneNumberId) {
+        await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ messaging_product: "whatsapp", to, type: "text", text: { body } }),
+        });
       }
     } catch (e) { console.error("[csat] send failed", e); }
   };
+
 
   await sendText(recipientPhone, reply);
 
@@ -245,34 +212,17 @@ async function sendWaText(
   to: string,
   text: string,
 ): Promise<void> {
-  const provider: "meta" | "evolution" =
-    whatsappConfig.provider === "evolution" ? "evolution" : "meta";
   try {
-    if (provider === "evolution") {
-      const url = (whatsappConfig.evolution?.instance_url || Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "");
-      const inst = whatsappConfig.evolution?.instance_name;
-      const key = whatsappConfig.evolution?.api_key || Deno.env.get("EVOLUTION_API_KEY") || "";
-      const cleaned = cleanPhoneNumber(to);
-      if (!url || !inst || !key || !cleaned) return;
-      await sendPresence(url, inst, key, cleaned);
-      await sleep(humanTypingDelayMs(text));
-      await fetch(`${url}/message/sendText/${encodeURIComponent(inst)}`, {
-        method: "POST",
-        headers: { apikey: key, "Content-Type": "application/json" },
-        body: JSON.stringify({ number: cleaned, text }),
-      });
-    } else {
-      const token = whatsappConfig.meta?.access_token || whatsappConfig.access_token || Deno.env.get("META_PERMANENT_TOKEN");
-      const pnid = whatsappConfig.meta?.phone_number_id;
-      if (!token || !pnid) return;
-      await fetch(`https://graph.facebook.com/v21.0/${pnid}/messages`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messaging_product: "whatsapp", to, type: "text", text: { body: text },
-        }),
-      });
-    }
+    const token = whatsappConfig.meta?.access_token || whatsappConfig.access_token || Deno.env.get("META_PERMANENT_TOKEN");
+    const pnid = whatsappConfig.meta?.phone_number_id;
+    if (!token || !pnid) return;
+    await fetch(`https://graph.facebook.com/v21.0/${pnid}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messaging_product: "whatsapp", to, type: "text", text: { body: text },
+      }),
+    });
   } catch (e) { console.error("[checkin] send text failed", e); }
 }
 
@@ -282,46 +232,26 @@ async function sendWaButtons(
   text: string,
   buttons: { id: string; title: string }[],
 ): Promise<void> {
-  const provider: "meta" | "evolution" =
-    whatsappConfig.provider === "evolution" ? "evolution" : "meta";
   try {
-    if (provider === "evolution") {
-      const url = (whatsappConfig.evolution?.instance_url || Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "");
-      const inst = whatsappConfig.evolution?.instance_name;
-      const key = whatsappConfig.evolution?.api_key || Deno.env.get("EVOLUTION_API_KEY") || "";
-      const cleaned = cleanPhoneNumber(to);
-      if (!url || !inst || !key || !cleaned) return;
-      await sendPresence(url, inst, key, cleaned);
-      await sleep(humanTypingDelayMs(text));
-      await fetch(`${url}/message/sendButtons/${encodeURIComponent(inst)}`, {
-        method: "POST",
-        headers: { apikey: key, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          number: cleaned, title: " ", description: text, footer: " ",
-          buttons: buttons.map((b) => ({ type: "reply", displayText: b.title, id: b.id })),
-        }),
-      });
-    } else {
-      const token = whatsappConfig.meta?.access_token || whatsappConfig.access_token || Deno.env.get("META_PERMANENT_TOKEN");
-      const pnid = whatsappConfig.meta?.phone_number_id;
-      if (!token || !pnid) return;
-      await fetch(`https://graph.facebook.com/v21.0/${pnid}/messages`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messaging_product: "whatsapp", to, type: "interactive",
-          interactive: {
-            type: "button",
-            body: { text },
-            action: {
-              buttons: buttons.slice(0, 3).map((b) => ({
-                type: "reply", reply: { id: b.id, title: b.title.slice(0, 20) },
-              })),
-            },
+    const token = whatsappConfig.meta?.access_token || whatsappConfig.access_token || Deno.env.get("META_PERMANENT_TOKEN");
+    const pnid = whatsappConfig.meta?.phone_number_id;
+    if (!token || !pnid) return;
+    await fetch(`https://graph.facebook.com/v21.0/${pnid}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messaging_product: "whatsapp", to, type: "interactive",
+        interactive: {
+          type: "button",
+          body: { text },
+          action: {
+            buttons: buttons.slice(0, 3).map((b) => ({
+              type: "reply", reply: { id: b.id, title: b.title.slice(0, 20) },
+            })),
           },
-        }),
-      });
-    }
+        },
+      }),
+    });
   } catch (e) { console.error("[checkin] send buttons failed", e); }
 }
 
@@ -624,33 +554,6 @@ async function attachMediaToActiveBooking(
   return booking.id;
 }
 
-async function fetchEvolutionMedia(
-  cfg: Record<string, any>, msg: any,
-): Promise<{ bytes: Uint8Array; mime: string } | null> {
-  const url = (cfg?.evolution?.instance_url || Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "");
-  const inst = cfg?.evolution?.instance_name;
-  const key = cfg?.evolution?.api_key || Deno.env.get("EVOLUTION_API_KEY") || "";
-  if (!url || !inst || !key) return null;
-  const mediaMsg = msg?.imageMessage || msg?.audioMessage || msg?.videoMessage || msg?.documentMessage;
-  if (!mediaMsg) return null;
-  const mime = mediaMsg.mimetype || (msg.imageMessage ? "image/jpeg" : msg.audioMessage ? "audio/ogg" : "application/octet-stream");
-  try {
-    const endpoint = `${url.replace(/\/+$/, "")}/chat/getBase64FromMediaMessage/${encodeURIComponent(inst)}`;
-    const resp = await fetch(endpoint, {
-      method: "POST",
-      headers: { apikey: key, "Content-Type": "application/json" },
-      body: JSON.stringify({ message: { key: msg.key || {}, message: { ...msg } } }),
-    });
-    if (!resp.ok) { console.error("[MEDIA][EVO] fetch failed", resp.status, await resp.text().catch(() => "")); return null; }
-    const j = await resp.json().catch(() => ({} as any));
-    const b64: string | undefined = j?.base64 || j?.media || j?.data;
-    if (!b64) return null;
-    const bin = atob(b64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return { bytes, mime };
-  } catch (e) { console.error("[MEDIA][EVO] error", e); return null; }
-}
 
 async function fetchMetaMedia(
   accessToken: string, mediaId: string,
@@ -739,228 +642,7 @@ Deno.serve(async (req) => {
     try {
       const body = await req.json();
 
-      // -------- Evolution API webhook (message.upsert / messages.upsert) --------
-      // Evolution payload shape (varies slightly by version):
-      // { event: "messages.upsert", instance: "<instance_name>",
-      //   data: { key: { remoteJid: "5511...@s.whatsapp.net", id, fromMe },
-      //           message: { conversation, extendedTextMessage:{text}, buttonsResponseMessage:{...}, listResponseMessage:{...} },
-      //           pushName: "Customer Name" } }
-      const evtName = (body.event || body.eventName || "").toString().toLowerCase().replace(/_/g, ".");
-      const isEvolution =
-        !!body.instance &&
-        (evtName.includes("messages.upsert") || evtName.includes("message.upsert") ||
-         evtName.includes("messages.update") || !!body.data?.key);
-
-      if (isEvolution) {
-        const instanceName = String(body.instance || "").trim();
-        const data = body.data || {};
-        const key = data.key || {};
-        if (key.fromMe) {
-          return new Response(JSON.stringify({ success: true, skipped: "fromMe" }), {
-            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-
-        // Extract phone from remoteJid (strip @s.whatsapp.net / @c.us, drop group msgs)
-        const remoteJid: string = key.remoteJid || "";
-        if (!remoteJid || remoteJid.includes("@g.us")) {
-          return new Response(JSON.stringify({ success: true, skipped: "group_or_empty" }), {
-            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-        const customerPhone = remoteJid.split("@")[0].replace(/\D/g, "");
-        if (!customerPhone) {
-          return new Response(JSON.stringify({ success: true, skipped: "no_phone" }), {
-            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-        const customerName = data.pushName || customerPhone;
-
-        // Extract message text + interactive id
-        const m = data.message || {};
-        let messageText = "";
-        let interactiveId: string | null = null;
-        if (typeof m.conversation === "string") messageText = m.conversation;
-        else if (m.extendedTextMessage?.text) messageText = m.extendedTextMessage.text;
-        else if (m.buttonsResponseMessage) {
-          messageText = m.buttonsResponseMessage.selectedDisplayText || m.buttonsResponseMessage.selectedButtonId || "";
-          interactiveId = m.buttonsResponseMessage.selectedButtonId || null;
-        } else if (m.listResponseMessage) {
-          messageText = m.listResponseMessage.title || m.listResponseMessage.singleSelectReply?.selectedRowId || "";
-          interactiveId = m.listResponseMessage.singleSelectReply?.selectedRowId || null;
-        } else if (m.templateButtonReplyMessage) {
-          messageText = m.templateButtonReplyMessage.selectedDisplayText || "";
-          interactiveId = m.templateButtonReplyMessage.selectedId || null;
-        }
-
-        const evoMediaMsg = m.imageMessage || m.audioMessage || m.videoMessage || m.documentMessage || null;
-        if (!messageText && !interactiveId && !evoMediaMsg) {
-          return new Response(JSON.stringify({ success: true, skipped: "non_text" }), {
-            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-
-        // Resolve tenant by Evolution instance_name in whatsapp_config
-        const { data: tenantRow } = await supabase
-          .from("tenants")
-          .select("id, name, status, whatsapp_config, settings")
-          .eq("status", "active")
-          .filter("whatsapp_config->evolution->>instance_name", "eq", instanceName)
-          .maybeSingle();
-
-        if (!tenantRow) {
-          console.error(`[EVO] No tenant for instance="${instanceName}"`);
-          return new Response(JSON.stringify({ success: true, skipped: "no_tenant" }), {
-            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-        const tenantId = tenantRow.id;
-
-        const allowed = await checkRateLimit(supabase, `webhook:evo:${tenantId}`, 120, 60);
-        if (!allowed) {
-          return new Response(JSON.stringify({ success: true, rate_limited: true }), {
-            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-
-        // Stamp last_webhook_at on whatsapp_sessions if one exists (for status indicator)
-        await supabase.from("whatsapp_sessions")
-          .update({ last_webhook_at: new Date().toISOString() })
-          .eq("tenant_id", tenantId);
-        // Stamp last_event_at on whatsapp_instances (Evolution-only mirror)
-        await supabase.from("whatsapp_instances")
-          .update({ last_event_at: new Date().toISOString(), status: "connected" })
-          .eq("tenant_id", tenantId);
-
-        // Find / create customer
-        let customerId: string | null = null;
-        const { data: existingCustomer } = await supabase
-          .from("customers").select("id")
-          .eq("tenant_id", tenantId).eq("phone", customerPhone).maybeSingle();
-        if (existingCustomer) customerId = existingCustomer.id;
-        else {
-          const { data: newCustomer } = await supabase.from("customers")
-            .insert({ tenant_id: tenantId, name: customerName, phone: customerPhone })
-            .select("id").single();
-          customerId = newCustomer?.id || null;
-        }
-
-        // Find / create conversation
-        const { data: existingConvo } = await supabase
-          .from("chatbot_conversations").select("id, metadata")
-          .eq("tenant_id", tenantId).eq("phone_number", customerPhone)
-          .eq("status", "active").order("started_at", { ascending: false })
-          .limit(1).maybeSingle();
-
-        let conversationId: string;
-        let conversationMetadata: Record<string, unknown> = {};
-        if (existingConvo) {
-          conversationId = existingConvo.id;
-          conversationMetadata = (existingConvo.metadata as Record<string, unknown>) || {};
-        } else {
-          const initialMeta: Record<string, unknown> = {
-            current_flow_id: null,
-            current_node_id: null,
-            collected_data: {},
-            gateway: "evolution",
-          };
-          const { data: newConvo } = await supabase.from("chatbot_conversations")
-            .insert({
-              tenant_id: tenantId, customer_id: customerId, channel: "whatsapp",
-              phone_number: customerPhone, status: "active",
-              metadata: initialMeta,
-            })
-            .select("id, metadata").single();
-          conversationId = newConvo!.id;
-          conversationMetadata = (newConvo!.metadata as Record<string, unknown>) || {};
-        }
-
-        // Intercept CSAT button replies before any flow logic.
-        const tenantWaCfg = (tenantRow.whatsapp_config as Record<string, any>) || {};
-        const tenantSettings = (tenantRow.settings as Record<string, any>) || {};
-        if (await handleCsatButton(supabase, tenantId, customerPhone, interactiveId, tenantWaCfg, tenantSettings, tenantRow.name || "")) {
-          await supabase.from("chatbot_messages").insert({
-            tenant_id: tenantId, conversation_id: conversationId, sender_type: "customer",
-            content: messageText, message_type: "text",
-            metadata: { gateway: "evolution", evo_message_id: key.id, interactive_id: interactiveId, kind: "csat_reply" },
-          });
-          return new Response(JSON.stringify({ success: true, gateway: "evolution", handled: "csat" }), {
-            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-        // Intercept service-estimate button replies before any flow logic.
-        if (await handleEstimateButton(supabase, tenantId, customerPhone, interactiveId, tenantWaCfg)) {
-          await supabase.from("chatbot_messages").insert({
-            tenant_id: tenantId, conversation_id: conversationId, sender_type: "customer",
-            content: messageText, message_type: "text",
-            metadata: { gateway: "evolution", evo_message_id: key.id, interactive_id: interactiveId, kind: "estimate_reply" },
-          });
-          return new Response(JSON.stringify({ success: true, gateway: "evolution", handled: "estimate" }), {
-            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-        // Intercept pre-appointment check-in button replies.
-        if (await handleCheckinButton(supabase, tenantId, customerPhone, interactiveId, tenantWaCfg, tenantSettings)) {
-          await supabase.from("chatbot_messages").insert({
-            tenant_id: tenantId, conversation_id: conversationId, sender_type: "customer",
-            content: messageText, message_type: "text",
-            metadata: { gateway: "evolution", evo_message_id: key.id, interactive_id: interactiveId, kind: "checkin_reply" },
-          });
-          return new Response(JSON.stringify({ success: true, gateway: "evolution", handled: "checkin" }), {
-            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-
-        // Handle inbound media (image / voice note / video / doc) — store + attach to active booking
-        let evoAttachment: Record<string, unknown> | null = null;
-        if (evoMediaMsg) {
-          const media = await fetchEvolutionMedia(tenantWaCfg, m);
-          if (media) {
-            const publicUrl = await uploadMediaToBucket(supabase, tenantId, media.bytes, media.mime);
-            if (publicUrl) {
-              evoAttachment = buildMediaAttachment({
-                url: publicUrl, mime: media.mime, source: "whatsapp_evolution",
-              });
-              const bookingId = await attachMediaToActiveBooking(supabase, tenantId, customerPhone, evoAttachment);
-              (evoAttachment as any).booking_id = bookingId;
-            }
-          }
-        }
-
-        // Persist inbound message
-        const evoMsgType = evoAttachment
-          ? (evoAttachment.kind === "image" ? "image" : evoAttachment.kind === "audio" ? "audio" : "text")
-          : "text";
-        const { data: savedMessage } = await supabase.from("chatbot_messages")
-          .insert({
-            tenant_id: tenantId, conversation_id: conversationId, sender_type: "customer",
-            content: messageText || (evoAttachment ? `[${evoAttachment.kind}] ${evoAttachment.url}` : ""),
-            message_type: evoMsgType,
-            metadata: { gateway: "evolution", evo_message_id: key.id, interactive_id: interactiveId, media: evoAttachment },
-          })
-          .select("id").single();
-
-        // Intercept inbound text/media as a pre-appointment check-in follow-up.
-        if (await handleCheckinFollowup(
-          supabase, tenantId, customerPhone, messageText, !!evoAttachment, tenantWaCfg,
-        )) {
-          return new Response(JSON.stringify({ success: true, gateway: "evolution", handled: "checkin_followup" }), {
-            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-
-        // Only run flow processor when there's a textual / interactive payload to act on.
-        if (messageText || interactiveId) {
-          await processChatbotFlow(
-            supabase, tenantId, conversationId, savedMessage!.id,
-            messageText, interactiveId, customerPhone, conversationMetadata, customerId,
-          );
-        }
-
-        return new Response(JSON.stringify({ success: true, gateway: "evolution", media: evoAttachment?.kind || null }), {
-          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+      // Evolution API webhook branch removed — Meta Cloud API is the sole gateway.
 
       // -------- Official Meta Cloud API webhook --------
       const entries = body.object === "whatsapp_business_account" ? body.entry : [];
@@ -1016,17 +698,7 @@ Deno.serve(async (req) => {
           }
           const tenantId = session.tenant_id;
 
-          // Extra guard: only process if the tenant's active gateway is Meta.
-          // Prevents routing when a dealer switched to Evolution but the old
-          // session row was left behind.
-          const { data: tenantGate } = await supabase
-            .from("tenants").select("whatsapp_config").eq("id", tenantId).maybeSingle();
-          const gateCfg = (tenantGate?.whatsapp_config as Record<string, any>) || {};
-          const gateActive = gateCfg.active_gateway || gateCfg.provider;
-          if (gateActive && gateActive !== "meta") {
-            console.warn(`[meta-webhook] Tenant ${tenantId} active_gateway=${gateActive}; ignoring Meta payload for phone_number_id=${phoneNumberId}`);
-            continue;
-          }
+          // Meta is the sole gateway — no extra active_gateway guard needed.
 
           await supabase.from("whatsapp_sessions")
             .update({ last_webhook_at: new Date().toISOString() })
@@ -1396,10 +1068,8 @@ async function processChatbotFlow(
       cleanMetadata.source_ad_name = adSource.source_ad_name || adSource.source_ad_headline || null;
     }
 
-    // Determine the originating gateway so reports can distinguish Meta vs Evolution
-    const gateway = ((metadata as any)?.gateway as string) || "meta";
-    const bookingSource = gateway === "evolution" ? "whatsapp_evolution" : "ai_bot";
-    cleanMetadata.gateway = gateway;
+    const bookingSource = "ai_bot";
+    cleanMetadata.gateway = "meta";
 
     if (node.metadata.action === "create_service_booking") {
       await supabase.from("service_bookings").insert({
@@ -1529,7 +1199,6 @@ async function queueReply(
     const { data: tenantData } = await supabase.from("tenants")
       .select("whatsapp_config").eq("id", tenantId).single();
     const cfg = (tenantData?.whatsapp_config as any) || {};
-    const provider: "meta" | "evolution" = cfg.provider === "evolution" ? "evolution" : "meta";
 
     if (queuedMsg) {
       await supabase.from("whatsapp_message_queue")
@@ -1537,135 +1206,67 @@ async function queueReply(
         .eq("id", queuedMsg.id);
     }
 
-    let response: Response;
-    let result: any = {};
-    let externalId: string | null = null;
-
-    if (provider === "evolution") {
-      // Strict tenant-scoped instance resolution — never fall back to a generic
-      // string. Master API key is only used as apikey fallback (Scan & Go).
-      const evoUrl: string | undefined =
-        (cfg.evolution?.instance_url || Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "") || undefined;
-      const evoInstance: string | undefined = cfg.evolution?.instance_name;
-      const evoApiKey: string | undefined =
-        cfg.evolution?.api_key || Deno.env.get("EVOLUTION_API_KEY") || undefined;
-      if (!evoUrl || !evoInstance || !evoApiKey) {
-        const missing = [!evoUrl && "instance_url", !evoInstance && "instance_name", !evoApiKey && "api_key"]
-          .filter(Boolean).join(",");
-        console.warn(`[SEND][EVO] Missing Evolution config for tenant ${tenantId}: ${missing}`);
-        if (queuedMsg) {
-          await supabase.from("whatsapp_message_queue")
-            .update({ status: "failed", error_message: `Evolution API not fully configured (${missing})` })
-            .eq("id", queuedMsg.id);
-        }
-        return;
+    const accessToken = cfg.meta?.access_token || cfg.access_token || Deno.env.get("META_PERMANENT_TOKEN");
+    if (!accessToken) {
+      console.warn(`[SEND][META] No access token for tenant ${tenantId}`);
+      if (queuedMsg) {
+        await supabase.from("whatsapp_message_queue")
+          .update({ status: "failed", error_message: "No Meta access token configured" })
+          .eq("id", queuedMsg.id);
       }
-
-      // Evolution sendText is plain text; for buttons/list we render a numbered text fallback
-      let evoText = payload.body;
-      if (payload.type === "buttons") {
-        evoText = `${payload.body}\n\n` +
-          payload.buttons.map((b, i) => `${i + 1}. ${b.title}`).join("\n");
-      } else if (payload.type === "list") {
-        evoText = `${payload.body}\n\n` +
-          payload.rows.map((r, i) => `${i + 1}. ${r.title}`).join("\n");
-      }
-
-      // Baileys requires digits-only JID; passing "+91..." or spaced numbers → 400.
-      const cleanedNumber = cleanPhoneNumber(recipientPhone);
-      if (!cleanedNumber) {
-        console.error(`[SEND][EVO] Invalid recipient phone "${recipientPhone}" for tenant ${tenantId}`);
-        if (queuedMsg) {
-          await supabase.from("whatsapp_message_queue")
-            .update({ status: "failed", error_message: `Invalid recipient phone: ${recipientPhone}` })
-            .eq("id", queuedMsg.id);
-        }
-        return;
-      }
-
-      // Humanized presence + delay (anti-ban).
-      await sendPresence(evoUrl, evoInstance, evoApiKey, cleanedNumber);
-      await sleep(humanTypingDelayMs(evoText));
-
-      const evoEndpoint = `${evoUrl}/message/sendText/${encodeURIComponent(evoInstance)}`;
-      console.log(`[SEND][EVO] POST ${evoEndpoint} instance="${evoInstance}" to=${cleanedNumber} type=${payload.type}`);
-      try {
-        response = await fetch(evoEndpoint, {
-          method: "POST",
-          headers: { apikey: evoApiKey, "Content-Type": "application/json" },
-          body: JSON.stringify({ number: cleanedNumber, text: evoText }),
-        });
-      } catch (fetchErr) {
-        console.error(`[SEND][EVO] fetch threw for ${evoEndpoint}:`, fetchErr);
-        throw fetchErr;
-      }
-
-      // Read raw body first so we can surface Evolution's error text on non-2xx.
-      const rawBody = await response.text();
-      if (!response.ok) {
-        console.error(
-          `[SEND][EVO] FAILURE status=${response.status} endpoint=${evoEndpoint} ` +
-          `instance="${evoInstance}" to=${cleanedNumber} body=${rawBody.slice(0, 800)}`,
-        );
-        if (queuedMsg) {
-          await supabase.from("whatsapp_message_queue")
-            .update({
-              status: "failed",
-              error_message: `Evolution ${response.status}: ${rawBody.slice(0, 500)}`,
-            })
-            .eq("id", queuedMsg.id);
-        }
-        return;
-      }
-      try { result = rawBody ? JSON.parse(rawBody) : {}; } catch { result = {}; }
-      externalId = result?.key?.id || result?.id || null;
-    } else {
-      const accessToken = cfg.meta?.access_token || cfg.access_token || Deno.env.get("META_PERMANENT_TOKEN");
-      if (!accessToken) { console.warn(`[SEND][META] No access token for tenant ${tenantId}`); return; }
-
-      const { data: session } = await supabase.from("whatsapp_sessions")
-        .select("phone_number_id").eq("tenant_id", tenantId).eq("is_active", true).single();
-      if (!session) { console.warn(`[SEND][META] No active session for tenant ${tenantId}`); return; }
-
-      const metaUrl = `https://graph.facebook.com/v21.0/${session.phone_number_id}/messages`;
-      let metaBody: Record<string, unknown>;
-
-      if (payload.type === "text") {
-        metaBody = { messaging_product: "whatsapp", to: recipientPhone, type: "text", text: { body: payload.body } };
-      } else if (payload.type === "buttons") {
-        metaBody = {
-          messaging_product: "whatsapp", to: recipientPhone, type: "interactive",
-          interactive: {
-            type: "button",
-            body: { text: payload.body },
-            action: { buttons: payload.buttons.map((b) => ({ type: "reply", reply: { id: b.id, title: b.title.substring(0, 20) } })) },
-          },
-        };
-      } else {
-        metaBody = {
-          messaging_product: "whatsapp", to: recipientPhone, type: "interactive",
-          interactive: {
-            type: "list",
-            body: { text: payload.body },
-            action: {
-              button: payload.buttonText.substring(0, 20),
-              sections: [{ title: "Options", rows: payload.rows.slice(0, 10).map((r) => ({ id: r.id, title: r.title.substring(0, 24) })) }],
-            },
-          },
-        };
-      }
-
-      console.log(`[SEND][META] POST ${metaUrl} type=${payload.type}`);
-      response = await fetch(metaUrl, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify(metaBody),
-      });
-      result = await response.json();
-      externalId = result?.messages?.[0]?.id || null;
+      return;
     }
 
-    console.log(`[SEND] status=${response.status} provider=${provider}`);
+    const { data: session } = await supabase.from("whatsapp_sessions")
+      .select("phone_number_id").eq("tenant_id", tenantId).eq("is_active", true).single();
+    if (!session) {
+      console.warn(`[SEND][META] No active session for tenant ${tenantId}`);
+      if (queuedMsg) {
+        await supabase.from("whatsapp_message_queue")
+          .update({ status: "failed", error_message: "No active WhatsApp session" })
+          .eq("id", queuedMsg.id);
+      }
+      return;
+    }
+
+    const metaUrl = `https://graph.facebook.com/v21.0/${session.phone_number_id}/messages`;
+    let metaBody: Record<string, unknown>;
+
+    if (payload.type === "text") {
+      metaBody = { messaging_product: "whatsapp", to: recipientPhone, type: "text", text: { body: payload.body } };
+    } else if (payload.type === "buttons") {
+      metaBody = {
+        messaging_product: "whatsapp", to: recipientPhone, type: "interactive",
+        interactive: {
+          type: "button",
+          body: { text: payload.body },
+          action: { buttons: payload.buttons.map((b) => ({ type: "reply", reply: { id: b.id, title: b.title.substring(0, 20) } })) },
+        },
+      };
+    } else {
+      metaBody = {
+        messaging_product: "whatsapp", to: recipientPhone, type: "interactive",
+        interactive: {
+          type: "list",
+          body: { text: payload.body },
+          action: {
+            button: payload.buttonText.substring(0, 20),
+            sections: [{ title: "Options", rows: payload.rows.slice(0, 10).map((r) => ({ id: r.id, title: r.title.substring(0, 24) })) }],
+          },
+        },
+      };
+    }
+
+    console.log(`[SEND][META] POST ${metaUrl} type=${payload.type}`);
+    const response = await fetch(metaUrl, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify(metaBody),
+    });
+    const result = await response.json();
+    const externalId: string | null = result?.messages?.[0]?.id || null;
+
+    console.log(`[SEND] status=${response.status} provider=meta`);
 
     if (response.ok && externalId) {
       if (queuedMsg) {

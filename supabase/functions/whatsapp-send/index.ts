@@ -1,6 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { cleanPhoneNumber, sendPresence, humanTypingDelayMs, sleep } from "../_shared/wa-evolution.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -66,47 +65,31 @@ Deno.serve(async (req) => {
     }
 
     const waConfig = (tenantData.whatsapp_config as Record<string, any>) || {};
-    const provider: "meta" | "evolution" = waConfig.provider === "evolution" ? "evolution" : "meta";
 
-    // Meta credentials (with legacy fallbacks)
+    // Meta credentials (with legacy fallback + platform-managed permanent token)
     const metaAccessToken = waConfig.meta?.access_token || waConfig.access_token || Deno.env.get("META_PERMANENT_TOKEN");
     let metaPhoneNumberId: string | null = waConfig.meta?.phone_number_id || null;
 
-    // Evolution credentials (fall back to platform master when tenant doesn't
-    // carry an api_key — Scan & Go provisioned instances use the master key).
-    const evoUrl: string | undefined = (waConfig.evolution?.instance_url || Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "") || undefined;
-    const evoInstance: string | undefined = waConfig.evolution?.instance_name;
-    const evoApiKey: string | undefined = waConfig.evolution?.api_key || Deno.env.get("EVOLUTION_API_KEY") || undefined;
-
-    if (provider === "meta") {
-      if (!metaAccessToken) {
-        return new Response(JSON.stringify({ error: "WhatsApp access token not configured" }), {
-          status: 400,
+    if (!metaAccessToken) {
+      return new Response(JSON.stringify({ error: "WhatsApp access token not configured" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (!metaPhoneNumberId) {
+      const { data: session } = await supabase
+        .from("whatsapp_sessions")
+        .select("phone_number_id")
+        .eq("tenant_id", tenant_id)
+        .eq("is_active", true)
+        .single();
+      if (!session) {
+        return new Response(JSON.stringify({ error: "No active WhatsApp session" }), {
+          status: 404,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (!metaPhoneNumberId) {
-        const { data: session } = await supabase
-          .from("whatsapp_sessions")
-          .select("phone_number_id")
-          .eq("tenant_id", tenant_id)
-          .eq("is_active", true)
-          .single();
-        if (!session) {
-          return new Response(JSON.stringify({ error: "No active WhatsApp session" }), {
-            status: 404,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-        metaPhoneNumberId = session.phone_number_id;
-      }
-    } else {
-      if (!evoUrl || !evoInstance || !evoApiKey) {
-        return new Response(JSON.stringify({ error: "Evolution API not fully configured" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+      metaPhoneNumberId = session.phone_number_id;
     }
 
     // Helper: replace {{name}}, {{phone}}, {{vehicle_model}}, {{booking_date}} placeholders
@@ -146,7 +129,6 @@ Deno.serve(async (req) => {
 
       try {
         // Build variable context for placeholder substitution.
-        // Look up customer + most recent service booking by phone number.
         const ctx: Record<string, string> = {
           phone: msg.recipient_phone || "",
         };
@@ -176,115 +158,70 @@ Deno.serve(async (req) => {
 
         const renderedContent = msg.content ? renderVariables(msg.content, ctx) : msg.content;
 
-        let response: Response;
-        let result: any;
-
         const mediaUrl: string | null = msg.media_url || null;
         const mediaType: string | null = msg.media_type || null; // "image" | "video" | "document"
         const mediaFilename: string | null = msg.media_filename || null;
 
-        if (provider === "meta") {
-          let waBody: Record<string, unknown>;
-          if (msg.template_name) {
-            // Map media as header parameter for templates that declare a header
-            let components: any[] = Array.isArray(msg.template_params) ? [...msg.template_params] : [];
-            if (mediaUrl && mediaType) {
-              const headerParam =
-                mediaType === "image" ? { type: "image", image: { link: mediaUrl } } :
-                mediaType === "video" ? { type: "video", video: { link: mediaUrl } } :
-                { type: "document", document: { link: mediaUrl, filename: mediaFilename || "document.pdf" } };
-              const hasHeader = components.some((c: any) => (c?.type || "").toLowerCase() === "header");
-              if (!hasHeader) {
-                components = [{ type: "header", parameters: [headerParam] }, ...components];
-              }
-            }
-            waBody = {
-              messaging_product: "whatsapp",
-              to: msg.recipient_phone,
-              type: "template",
-              template: {
-                name: msg.template_name,
-                language: { code: "en" },
-                components,
-              },
-            };
-          } else if (mediaUrl && mediaType) {
-            // Direct media message
-            const metaType = mediaType === "image" ? "image" : mediaType === "video" ? "video" : "document";
-            const mediaPayload: Record<string, unknown> = { link: mediaUrl };
-            if (renderedContent) (mediaPayload as any).caption = renderedContent;
-            if (metaType === "document") (mediaPayload as any).filename = mediaFilename || "document.pdf";
-            waBody = {
-              messaging_product: "whatsapp",
-              to: msg.recipient_phone,
-              type: metaType,
-              [metaType]: mediaPayload,
-            };
-          } else {
-            waBody = {
-              messaging_product: "whatsapp",
-              to: msg.recipient_phone,
-              type: "text",
-              text: { body: renderedContent },
-            };
-          }
-
-          const metaUrl = `https://graph.facebook.com/v21.0/${metaPhoneNumberId}/messages`;
-          console.log(`[BATCH-SEND][META] POST ${metaUrl}`);
-          response = await fetch(metaUrl, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${metaAccessToken}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(waBody),
-          });
-          result = await response.json();
-        } else {
-          // Evolution API — clean recipient number, prime "typing…" presence,
-          // then hold for a humanized 3–6s delay before firing the payload.
-          const cleaned = cleanPhoneNumber(msg.recipient_phone);
-          if (!cleaned) throw new Error("Invalid recipient phone");
-
-          await sendPresence(evoUrl!, evoInstance!, evoApiKey!, cleaned);
-          await sleep(humanTypingDelayMs(renderedContent ?? ""));
-
-          let evoEndpoint: string;
-          let evoBody: Record<string, unknown>;
+        let waBody: Record<string, unknown>;
+        if (msg.template_name) {
+          // Map media as header parameter for templates that declare a header
+          let components: any[] = Array.isArray(msg.template_params) ? [...msg.template_params] : [];
           if (mediaUrl && mediaType) {
-            evoEndpoint = `${evoUrl}/message/sendMedia/${encodeURIComponent(evoInstance!)}`;
-            evoBody = {
-              number: cleaned,
-              mediatype: mediaType, // "image" | "video" | "document"
-              media: mediaUrl,
-              caption: renderedContent ?? "",
-              fileName: mediaFilename || undefined,
-            };
-          } else {
-            evoEndpoint = `${evoUrl}/message/sendText/${encodeURIComponent(evoInstance!)}`;
-            evoBody = {
-              number: cleaned,
-              text: renderedContent ?? "",
-            };
+            const headerParam =
+              mediaType === "image" ? { type: "image", image: { link: mediaUrl } } :
+              mediaType === "video" ? { type: "video", video: { link: mediaUrl } } :
+              { type: "document", document: { link: mediaUrl, filename: mediaFilename || "document.pdf" } };
+            const hasHeader = components.some((c: any) => (c?.type || "").toLowerCase() === "header");
+            if (!hasHeader) {
+              components = [{ type: "header", parameters: [headerParam] }, ...components];
+            }
           }
-          console.log(`[BATCH-SEND][EVOLUTION] POST ${evoEndpoint} to=${cleaned}`);
-          response = await fetch(evoEndpoint, {
-            method: "POST",
-            headers: {
-              apikey: evoApiKey!,
-              "Content-Type": "application/json",
+          waBody = {
+            messaging_product: "whatsapp",
+            to: msg.recipient_phone,
+            type: "template",
+            template: {
+              name: msg.template_name,
+              language: { code: "en" },
+              components,
             },
-            body: JSON.stringify(evoBody),
-          });
-          result = await response.json().catch(() => ({}));
+          };
+        } else if (mediaUrl && mediaType) {
+          // Direct media message
+          const metaType = mediaType === "image" ? "image" : mediaType === "video" ? "video" : "document";
+          const mediaPayload: Record<string, unknown> = { link: mediaUrl };
+          if (renderedContent) (mediaPayload as any).caption = renderedContent;
+          if (metaType === "document") (mediaPayload as any).filename = mediaFilename || "document.pdf";
+          waBody = {
+            messaging_product: "whatsapp",
+            to: msg.recipient_phone,
+            type: metaType,
+            [metaType]: mediaPayload,
+          };
+        } else {
+          waBody = {
+            messaging_product: "whatsapp",
+            to: msg.recipient_phone,
+            type: "text",
+            text: { body: renderedContent },
+          };
         }
+
+        const metaUrl = `https://graph.facebook.com/v21.0/${metaPhoneNumberId}/messages`;
+        console.log(`[BATCH-SEND][META] POST ${metaUrl}`);
+        const response = await fetch(metaUrl, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${metaAccessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(waBody),
+        });
+        const result = await response.json();
 
         console.log(`[BATCH-SEND] Response ${response.status}: ${JSON.stringify(result).slice(0, 500)}`);
 
-        const externalId =
-          provider === "meta"
-            ? result?.messages?.[0]?.id
-            : result?.key?.id || result?.id;
+        const externalId = result?.messages?.[0]?.id;
 
         if (response.ok && externalId) {
           await supabase

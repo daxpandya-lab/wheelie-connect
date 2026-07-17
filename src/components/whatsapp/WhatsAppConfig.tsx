@@ -5,36 +5,30 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { MessageSquare, Copy, Check, Loader2, ExternalLink, Wifi, WifiOff, QrCode, Unplug } from "lucide-react";
+import { MessageSquare, Copy, Check, Loader2, ExternalLink, Wifi, WifiOff, Unplug } from "lucide-react";
 import { toast } from "sonner";
-// ScanGoModal (Evolution QR flow) retired — Meta Cloud API is the sole gateway.
 
 export default function WhatsAppConfig() {
   const { tenantId } = useAuth();
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [removing, setRemoving] = useState<"meta" | "evolution" | null>(null);
+  const [removing, setRemoving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [flows, setFlows] = useState<Array<{ id: string; name: string; is_active: boolean }>>([]);
   const [activatingFlow, setActivatingFlow] = useState(false);
-  const [provider, setProvider] = useState<"meta" | "evolution">("meta");
-  
-  const [evolutionStatus, setEvolutionStatus] = useState<string>("disconnected");
-  // Persisted-active gateway (nullable) — the tenant's currently live pipeline.
-  // Drives the mutual-exclusion overlay + dynamic connection badge.
-  const [activeGateway, setActiveGateway] = useState<"meta" | "evolution" | null>(null);
+
+  // Meta Cloud API is the sole gateway. `metaConnected` reflects THIS tenant's
+  // credentials + active session only, so removing credentials flips only the
+  // current dealer's badge to "Not Connected".
+  const [metaConnected, setMetaConnected] = useState(false);
   const [form, setForm] = useState({
     phoneNumberId: "",
     wabaId: "",
     accessToken: "",
-    evolutionUrl: "",
-    evolutionApiKey: "",
-    evolutionInstance: "",
   });
 
   const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || "";
@@ -46,9 +40,6 @@ export default function WhatsAppConfig() {
 
   const fetchSession = async () => {
     if (!tenantId) { setLoading(false); return; }
-    // Strict per-tenant fetch. maybeSingle() so a missing row (fresh dealer or
-    // just-removed connection) resolves to null instead of throwing — otherwise
-    // the badge could get stuck on stale local state.
     const [{ data: sessionData }, { data: flowsData }, { data: tenantRow }] = await Promise.all([
       supabase.from("whatsapp_sessions").select("*").eq("tenant_id", tenantId).maybeSingle(),
       supabase.from("chatbot_flows").select("id, name, is_active").eq("tenant_id", tenantId).order("name"),
@@ -57,28 +48,15 @@ export default function WhatsAppConfig() {
 
     setSession(sessionData || null);
     const cfg = (tenantRow?.whatsapp_config as Record<string, any>) || {};
-    // Evolution has been retired: Meta Cloud API is the sole gateway.
-    setProvider("meta");
 
-    // A gateway is only "live" for THIS tenant when all three hold:
-    //   (a) it is the persisted active gateway on the tenant row,
-    //   (b) the tenant still has non-empty provider credentials, and
-    //   (c) for Meta, whatsapp_sessions row is is_active with a phone_number_id.
-    // This guarantees that when a dealer removes credentials, their badge flips
-    // to "Not Connected" regardless of any other tenant's state.
     const metaHasCreds = !!(cfg.meta?.phone_number_id || sessionData?.phone_number_id);
     const metaSessionLive = !!(sessionData?.is_active && sessionData?.tenant_id === tenantId);
-    const metaLive = cfg.active_gateway === "meta" && metaHasCreds && metaSessionLive;
-    const evoLive = cfg.active_gateway === "evolution" && cfg.evolution?.status === "connected";
-    setActiveGateway(metaLive ? "meta" : evoLive ? "evolution" : null);
-    setEvolutionStatus(cfg.evolution?.status || "disconnected");
+    setMetaConnected(metaHasCreds && metaSessionLive);
+
     setForm({
       phoneNumberId: sessionData?.phone_number_id || cfg.meta?.phone_number_id || "",
       wabaId: sessionData?.waba_id || cfg.meta?.waba_id || "",
       accessToken: "",
-      evolutionUrl: cfg.evolution?.instance_url || "",
-      evolutionApiKey: "",
-      evolutionInstance: cfg.evolution?.instance_name || "",
     });
     if (flowsData) setFlows(flowsData);
     setLoading(false);
@@ -89,7 +67,6 @@ export default function WhatsAppConfig() {
   const handleSetActiveFlow = async (flowId: string) => {
     if (!tenantId) return;
     setActivatingFlow(true);
-    // Deactivate all, then activate selected
     await supabase.from("chatbot_flows").update({ is_active: false }).eq("tenant_id", tenantId);
     const { error } = await supabase.from("chatbot_flows").update({ is_active: true }).eq("id", flowId);
     setActivatingFlow(false);
@@ -99,79 +76,44 @@ export default function WhatsAppConfig() {
 
   const handleSave = async () => {
     if (!tenantId) return;
-    if (provider === "meta" && !form.phoneNumberId.trim()) {
+    if (!form.phoneNumberId.trim()) {
       toast.error("Phone Number ID is required");
-      return;
-    }
-    if (provider === "evolution" && (!form.evolutionUrl.trim() || !form.evolutionInstance.trim())) {
-      toast.error("Evolution Instance URL and Instance Name are required");
       return;
     }
     setSaving(true);
 
-    // Load existing config to merge
     const { data: tenant } = await supabase
       .from("tenants")
       .select("whatsapp_config")
       .eq("id", tenantId)
       .single();
     const existingConfig = (tenant?.whatsapp_config as Record<string, any>) || {};
-    // EXCLUSIVE GATEWAY: only one provider block is active per tenant.
-    // The inactive provider block is preserved as `*_archived` for audit but
-    // removed from the live keys so downstream code cannot pick it up.
     const nextConfig: Record<string, any> = {
       ...existingConfig,
-      provider,
-      active_gateway: provider, // exclusive gateway marker consumed by badges + guards
+      provider: "meta",
+      active_gateway: "meta",
       active_since: new Date().toISOString(),
-    };
-
-    if (provider === "meta") {
-      nextConfig.meta = {
+      meta: {
         ...(existingConfig.meta || {}),
         phone_number_id: form.phoneNumberId.trim(),
         waba_id: form.wabaId.trim() || null,
-      };
-      if (form.accessToken.trim()) {
-        nextConfig.meta.access_token = form.accessToken.trim();
-        nextConfig.access_token = form.accessToken.trim();
-      }
-      // Archive & disable Evolution so it cannot serve traffic
-      if (existingConfig.evolution) {
-        nextConfig.evolution_archived = { ...existingConfig.evolution, disabled_at: new Date().toISOString() };
-      }
-      delete nextConfig.evolution;
+      },
+    };
+    if (form.accessToken.trim()) {
+      nextConfig.meta.access_token = form.accessToken.trim();
+      nextConfig.access_token = form.accessToken.trim();
+    }
 
-      const sessionData: any = {
-        tenant_id: tenantId,
-        phone_number_id: form.phoneNumberId.trim(),
-        waba_id: form.wabaId.trim() || null,
-        is_active: true,
-      };
-      if (session) {
-        await supabase.from("whatsapp_sessions").update(sessionData).eq("id", session.id);
-      } else {
-        await supabase.from("whatsapp_sessions").insert(sessionData);
-      }
+    const sessionData: any = {
+      tenant_id: tenantId,
+      phone_number_id: form.phoneNumberId.trim(),
+      waba_id: form.wabaId.trim() || null,
+      is_active: true,
+    };
+    if (session) {
+      await supabase.from("whatsapp_sessions").update(sessionData).eq("id", session.id);
     } else {
-      nextConfig.evolution = {
-        ...(existingConfig.evolution || {}),
-        instance_url: form.evolutionUrl.trim().replace(/\/+$/, ""),
-        instance_name: form.evolutionInstance.trim(),
-      };
-      if (form.evolutionApiKey.trim()) {
-        nextConfig.evolution.api_key = form.evolutionApiKey.trim();
-      }
-      // Archive & disable Meta so it cannot serve traffic
-      if (existingConfig.meta || existingConfig.access_token) {
-        nextConfig.meta_archived = { ...(existingConfig.meta || {}), disabled_at: new Date().toISOString() };
-      }
-      delete nextConfig.meta;
-      delete nextConfig.access_token;
-      // Deactivate Meta session so webhooks stop routing there
-      if (session) {
-        await supabase.from("whatsapp_sessions").update({ is_active: false }).eq("id", session.id);
-      }
+      await supabase.from("whatsapp_sessions").insert(sessionData);
     }
 
     await supabase
@@ -185,32 +127,38 @@ export default function WhatsAppConfig() {
   };
 
   /**
-   * Remove Connection — hard reset for the specified gateway.
-   * Meta: purges keys/tokens from tenant config, deactivates whatsapp_sessions row.
-   * Evolution: server-side logs out + deletes the instance from the self-hosted
-   * Evolution server using the platform master key, then clears the tenant
-   * config. Either path resets active_gateway=null so the opposite provider's
-   * form immediately un-blurs on refetch.
+   * Remove Meta Connection — purges Meta credentials from the tenant config
+   * and deactivates the whatsapp_sessions row so incoming webhooks no longer
+   * route to this dealership until reconnected. Does NOT sign the user out.
    */
-  const handleRemove = async (which: "meta" | "evolution") => {
+  const handleRemove = async () => {
     if (!tenantId) return;
-    setRemoving(which);
+    setRemoving(true);
     try {
-      const { data, error } = await supabase.functions.invoke("evolution-connect", {
-        body: { action: which === "meta" ? "remove_meta" : "remove_evolution", tenant_id: tenantId },
-      });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
-      toast.success(which === "meta" ? "Meta API connection removed" : "Evolution instance removed");
-      // Reset local form so the cleared provider shows empty fields immediately
-      setForm((f) => which === "meta"
-        ? { ...f, phoneNumberId: "", wabaId: "", accessToken: "" }
-        : { ...f, evolutionUrl: "", evolutionApiKey: "", evolutionInstance: "" });
+      const { data: tenant } = await supabase
+        .from("tenants").select("whatsapp_config").eq("id", tenantId).single();
+      const existingConfig = (tenant?.whatsapp_config as Record<string, any>) || {};
+      const nextConfig: Record<string, any> = { ...existingConfig };
+      if (existingConfig.meta || existingConfig.access_token) {
+        nextConfig.meta_archived = { ...(existingConfig.meta || {}), disabled_at: new Date().toISOString() };
+      }
+      delete nextConfig.meta;
+      delete nextConfig.access_token;
+      nextConfig.active_gateway = null;
+      nextConfig.provider = null;
+
+      await supabase.from("tenants").update({ whatsapp_config: nextConfig }).eq("id", tenantId);
+      if (session) {
+        await supabase.from("whatsapp_sessions").update({ is_active: false }).eq("id", session.id);
+      }
+
+      toast.success("Meta API connection removed");
+      setForm({ phoneNumberId: "", wabaId: "", accessToken: "" });
       await fetchSession();
     } catch (e: any) {
       toast.error(e?.message || "Failed to remove connection");
     } finally {
-      setRemoving(null);
+      setRemoving(false);
     }
   };
 
@@ -240,13 +188,9 @@ export default function WhatsAppConfig() {
                 <CardDescription>Connect your WhatsApp Business Account</CardDescription>
               </div>
             </div>
-            {activeGateway === "meta" ? (
+            {metaConnected ? (
               <Badge className="gap-1 bg-emerald-600 hover:bg-emerald-600 text-white">
                 <Wifi className="w-3 h-3" /> WhatsApp Meta API Connected
-              </Badge>
-            ) : activeGateway === "evolution" ? (
-              <Badge className="gap-1 bg-emerald-600 hover:bg-emerald-600 text-white">
-                <Wifi className="w-3 h-3" /> Evolution WhatsApp Api Connected
               </Badge>
             ) : (
               <Badge variant="secondary" className="gap-1">
@@ -324,8 +268,6 @@ export default function WhatsAppConfig() {
         </CardContent>
       </Card>
 
-
-
       {/* WhatsApp Gateway — Meta Cloud API */}
       <Card>
         <CardHeader className="pb-3">
@@ -335,12 +277,6 @@ export default function WhatsAppConfig() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {activeGateway === "evolution" && (
-            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
-              Your previous Evolution connection is being retired. Remove it below and enter your Meta credentials to continue.
-            </div>
-          )}
-
           <fieldset className="space-y-4">
             <p className="text-xs text-muted-foreground">
               Get these values from your{" "}
@@ -378,44 +314,36 @@ export default function WhatsAppConfig() {
             </div>
           </fieldset>
 
-
           <Button onClick={handleSave} disabled={saving} className="w-full">
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
             Save Configuration
           </Button>
 
-          {/* Remove Connection — only for the currently active gateway. Isolated
-              from user session logout: purges provider config + Evolution instance. */}
-          {activeGateway && (
+          {/* Remove Connection — Meta only. Isolated from user session logout. */}
+          {metaConnected && (
             <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 space-y-2 mt-2">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium text-destructive flex items-center gap-1.5">
                     <Unplug className="w-4 h-4" />
-                    {activeGateway === "meta" ? "Remove Meta API Connection" : "Disconnect Evolution Instance"}
+                    Remove Meta API Connection
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {activeGateway === "meta"
-                      ? "Clears stored phone number IDs, WABA IDs and access tokens from this dealership. The opposite gateway becomes selectable again."
-                      : "Logs the device out of WhatsApp, deletes the instance from the Evolution server, and frees the Meta API panel."}
+                    Clears stored phone number IDs, WABA IDs and access tokens from this dealership. Incoming Meta webhooks will stop routing here until you reconnect.
                   </p>
                 </div>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="destructive" size="sm" disabled={!!removing}>
-                      {removing === activeGateway ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unplug className="w-4 h-4 mr-1" />}
+                    <Button variant="destructive" size="sm" disabled={removing}>
+                      {removing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unplug className="w-4 h-4 mr-1" />}
                       Remove Connection
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>
-                        {activeGateway === "meta" ? "Remove Meta API connection?" : "Disconnect Evolution instance?"}
-                      </AlertDialogTitle>
+                      <AlertDialogTitle>Remove Meta API connection?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        {activeGateway === "meta"
-                          ? "All stored Meta credentials (phone number ID, WABA ID, access token) will be cleared for this dealership. Incoming Meta webhooks will stop routing here until you reconnect."
-                          : "The linked WhatsApp device will be logged out and the instance memory cleared from the Evolution server. You'll need to scan a new QR to reconnect."}
+                        All stored Meta credentials (phone number ID, WABA ID, access token) will be cleared for this dealership. Incoming Meta webhooks will stop routing here until you reconnect.
                         <br /><br />
                         This does not sign you out of DealerDoodle.
                       </AlertDialogDescription>
@@ -423,7 +351,7 @@ export default function WhatsAppConfig() {
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
                       <AlertDialogAction
-                        onClick={() => handleRemove(activeGateway)}
+                        onClick={handleRemove}
                         className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                       >
                         Yes, remove connection
@@ -436,10 +364,6 @@ export default function WhatsAppConfig() {
           )}
         </CardContent>
       </Card>
-
-
-      {/* Evolution "Scan & Go" retired — Meta Cloud API is now the sole gateway. */}
-
 
       {/* Last Activity */}
       {session?.last_webhook_at && (
